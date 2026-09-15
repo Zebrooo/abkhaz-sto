@@ -1248,6 +1248,103 @@ svg { display: block; }
   font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
 }
 
+/* Список выбора в шторке (мастер записи, кому передать): формы не участвуют
+   в раскладке, кнопка .pick тянется во всю ширину. Выходной — тусклее. */
+.pick-list { display: flex; flex-direction: column; gap: 8px; }
+.pick-list form { display: contents; }
+.pick-list .ava { width: 40px; height: 40px; font-size: 13px; }
+.pick-list .pick-t, .pick-list .pick-s { display: block; }
+.pick-off { opacity: .55; }
+
+/* ─── Доступы ─── */
+/* Строка сотрудника: на телефоне карточка с сегментом роли под именем,
+   на вебе — строка таблицы с сегментом в 200px перед переключателем. */
+.acc-list { display: flex; flex-direction: column; gap: 10px; }
+.acc-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  background: #fff; border-radius: 18px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 14px;
+}
+.acc-row.off { opacity: .55; }
+.acc-row .ava { width: 44px; height: 44px; font-size: 14px; }
+.acc-n { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.acc-s { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Сегмент — форма с кнопками: на телефоне уходит на свою строку во всю ширину. */
+.acc-seg { order: 1; flex: 0 0 100%; }
+.acc-sw { display: contents; }
+/* Приглашение: на телефоне красная кнопка под списком, на вебе — в заголовке. */
+.acc-invite { min-height: 52px; border-radius: 14px; box-shadow: var(--shadow-accent); }
+.acc-invite:active { box-shadow: none; }
+.acc-invite-web { display: none; }
+
+/* ─── Мастера ─── */
+.m-grid { display: flex; flex-direction: column; gap: 10px; }
+.m-card .person .ava { width: 48px; height: 48px; font-size: 16px; }
+.m-card .person form { display: contents; }
+/* Плашка «остались без мастера» — красная, как ошибка сохранения: записи
+   ждут исполнителя, и это надо решить, а не прочитать. */
+.m-orphan {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px;
+  border-radius: 12px; background: var(--danger-bg); border: 1px solid var(--danger-line);
+}
+.m-orphan > span { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.m-orphan .aui-btn { flex: none; min-height: 32px; }
+.m-add { min-height: 52px; border-radius: 14px; background: #fff; }
+
+/* ─── Мой пост ─── */
+/* Тёмная карточка мастера — как выручка у хозяина: белым по --ink. */
+.mw-hero { background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
+.mw-hero .ava { width: 42px; height: 42px; font-size: 14px; background: rgba(255, 255, 255, .14); color: #fff; }
+.mw-hero .person-n { font-size: 15.5px; letter-spacing: -.015em; }
+.mw-hero .person-s { color: var(--dark-text-2, #a3aab6); }
+.mw-shift { flex: none; padding: 5px 10px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .14); font-size: 12px; font-weight: 700; }
+.mw-hero .tiles { margin-top: 14px; }
+.mw-hero .tile { background: rgba(255, 255, 255, .08); }
+.mw-hero .tile-k { color: var(--dark-text-2, #a3aab6); }
+/* Заголовки секций на этом экране видны и на вебе: колонка в 1000px без
+   них — одна стопка карточек. */
+.mw-sect { display: flex; }
+.mw-now-head { display: flex; align-items: center; gap: 8px; }
+.mw-time { font-size: 14px; font-weight: 600; }
+.mw-left { margin-left: auto; font-size: 12px; color: var(--accent); }
+.mw-now-t { font-size: 16px; font-weight: 700; letter-spacing: -.015em; margin-top: 8px; }
+.mw-now-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.mw-now-actions { display: flex; gap: 8px; margin-top: 14px; }
+.mw-now-actions form { display: contents; }
+.mw-now-actions .aui-btn { min-height: 46px; }
+.mw-now-actions .aui-btn--primary { flex: 1; }
+.mw-now-actions .aui-btn--outline { background: #fff; }
+.mw-report-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.mw-report { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
+.mw-report-no { flex: none; font-size: 11.5px; color: var(--muted); }
+.mw-report-car { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mw-reports .card-t { font-size: 13.5px; }
+
+@media (min-width: 881px) {
+  /* Доступы — колонка в 760px, строки в одной рамке, как таблица. */
+  .page-access { max-width: 760px; }
+  .acc-note-top, .acc-invite { display: none; }
+  .acc-invite-web { display: inline-flex; box-shadow: var(--shadow-accent); }
+  .acc-list { gap: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .acc-row { flex-wrap: nowrap; gap: 14px; padding: 14px 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+  .acc-row:last-child { border-bottom: 0; }
+  .acc-row .ava { width: 40px; height: 40px; font-size: 13px; }
+  .acc-s { font-size: 12.5px; }
+  .acc-seg { order: 0; flex: 0 0 200px; }
+  /* Мастера — сетка в три колонки, плашка «без мастера» над плитками. */
+  .page-masters { max-width: 1000px; }
+  .m-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .m-card { display: flex; flex-direction: column; padding: 18px; }
+  .m-card .person .ava { width: 46px; height: 46px; font-size: 15px; }
+  .m-card > .tiles { order: 2; margin-top: 16px; }
+  .m-orphan { order: 1; margin-top: 14px; padding: 9px 12px; border-radius: var(--radius); }
+  .m-orphan > span { font-size: 12px; }
+  .m-orphan .aui-btn { min-height: 30px; }
+  .m-note, .m-add { display: none; }
+  .mw-sect { padding: 8px 0 0; }
+}
+
+
+
 /* @section:dengi-chat-zametki */
 /* «Деньги» хозяина, чат, заметки о клиентах. */
 

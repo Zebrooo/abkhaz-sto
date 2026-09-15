@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { transitionAction } from "@/app/(app)/actions";
 import { clientName, vehicleLine } from "@/components/BookingRow";
+import { MasterPick } from "@/components/MasterPick";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
@@ -163,6 +164,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             <div className="bd-time">{timeRange(b.starts_at, b.ends_at)}</div>
             <div className="bd-chips">
               <span className="rspec is-accent">пост {b.post_no}</span>
+              <MasterPick bookingId={b.id} postNo={b.post_no} day={day} open={act === "master"} selfHref={self()} />
               <span className="rspec">{minutesLabel(durationMin)}</span>
               <span className="rspec">{source}</span>
             </div>

@@ -30,21 +30,25 @@ export type StoMember = {
 };
 
 /**
- * Роль текущего человека в сервисе. Отдельный вызов, а не поиск по списку:
- * его делает каждый экран на каждом запросе, и таскать ради него весь штат
- * незачем. Сайт определяет роль по actorUserId и shopId; владелец витрины —
- * owner, даже если строки в штате нет.
+ * Сервисы, где этот человек работает, и его роль в каждом. Один вызов без
+ * shopId — сервис ещё не выбран, приложение только входит: владелец находит
+ * свою витрину по владению (lib/shop.ts), а мастер и админ витрины не имеют
+ * и без этого списка не прошли бы дальше «сервис не найден».
  *
- * GET /api/sto/members/me?shopId&actorUserId → { role, memberId, masterId, active }
+ * Владельца здесь нет — его роль не хранится строкой (см. выше).
+ *
+ * GET /api/sto/members/mine?actorUserId → MyShopMembership[]
  */
-export type MyMembership = {
+export type MyShopMembership = {
+  shopId: number;
   role: StoRole;
   masterId: number | null;
+  /** Выключенный сотрудник входит, но ничего не видит. */
   active: boolean;
 };
 
-export function fetchMyMembership(shopId: number, actorUserId: string): Promise<ApiResult<MyMembership>> {
-  return siteGet<MyMembership>("members/me", { shopId, actorUserId });
+export function fetchMyShops(actorUserId: string): Promise<ApiResult<MyShopMembership[]>> {
+  return siteGet<MyShopMembership[]>("members/mine", { actorUserId });
 }
 
 /** GET /api/sto/members?shopId&actorUserId → StoMember[]; владелец первой строкой. */

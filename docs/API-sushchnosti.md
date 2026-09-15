@@ -57,7 +57,7 @@ Europe/Moscow фиксированным `+03:00`, как везде в запи
 
 | Маршрут | Кому | Что |
 |---|---|---|
-| `GET /members/me?shopId&actorUserId` | любому своему | `{ role, masterId, active }` |
+| `GET /members/mine?actorUserId` | любому вошедшему | `{ shopId, role, masterId, active }[]` — сервисы, где он сотрудник |
 | `GET /members?shopId&actorUserId` | `owner` | `StoMember[]` |
 | `POST /members/invite` | `owner` | `{ shopId, actorUserId, phone, role, name? }` → `{ userId, pending }` |
 | `POST /members/role` | `owner` | `{ shopId, actorUserId, userId, role }` → `StoMember` |
@@ -71,9 +71,15 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 `pending: true`, и роль включается, когда человек войдёт этим номером.
 Номер нормализуется тем же `normalizePhone`, что и везде.
 
-**Пока маршрута `/members/me` нет**, приложение считает вошедшего `owner` —
-это ровно сегодняшнее поведение, и прав оно не расширяет: до этого места
-доходит только владелец подтверждённой витрины.
+`/members/mine` — единственный вызов **без `shopId`**: сервис ещё не выбран,
+приложение только входит. Владелец находит свою витрину по владению
+(`lib/shop.ts`, как `shop-owner.ts`), а мастер и админ витрины не имеют — без
+этого списка они упирались бы в «сервис не найден». Владельца в ответе нет:
+его роль не хранится строкой. Сайт обязан отдавать только витрины со
+`status = approved` и рубрикой `service`; приложение это перепроверяет.
+
+**Пока маршрута `/members/mine` нет**, в списке только свои витрины и роль у
+всех `owner` — ровно сегодняшнее поведение, прав оно не расширяет.
 
 ---
 

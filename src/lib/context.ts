@@ -2,16 +2,13 @@ import "server-only";
 // Кто сейчас в приложении: сервис, учётка и роль. Один раз на запрос,
 // сколько бы экранов и блоков ни спросили.
 //
-// ПАДАЕМ В OWNER, А НЕ В MASTER. Пока маршрута членства на сайте нет
-// (docs/API-sushchnosti.md), приложение обязано работать как раньше, а как
-// раньше — это владелец витрины со всеми правами. Дать в этот момент роль
-// поуже значило бы сломать работающий сервис ради ещё не существующего
-// разграничения. Прав это не расширяет: сюда доходит только тот, чью витрину
-// уже подтвердил currentServiceShop.
+// Роль читается с самой витрины (lib/shop.ts): своя — owner, чужая — из
+// строки сотрудника, которую отдал сайт. Пока маршрута /members/mine на
+// сайте нет, в списке только свои витрины, и роль у всех owner — ровно
+// сегодняшнее поведение, прав оно не расширяет.
 import { cache } from "react";
-import { fetchMyMembership } from "@/lib/api/members";
-import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
 import { redirect } from "next/navigation";
+import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
 import { currentServiceShop, type ServiceShop } from "@/lib/shop";
 import { getServerUser } from "@/lib/supabase/server";
 
@@ -24,23 +21,22 @@ export type ServiceContext = {
   masterId: number | null;
 };
 
+/** Роль человека в витрине: хозяин своей, сотрудник чужой. */
+export function roleIn(shop: ServiceShop): { role: StoRole; masterId: number | null } {
+  if (shop.owned || !shop.membership) return { role: "owner", masterId: null };
+  // Выключенный сотрудник — уволенный: он входит по общей куке сайта, но в
+  // приложении ему делать нечего. Сужаем до мастера без поста; сайт всё равно
+  // откажет в данных, а отдельного экрана «вас отключили» в дизайне нет.
+  if (!shop.membership.active) return { role: "master", masterId: null };
+  return { role: shop.membership.role, masterId: shop.membership.masterId };
+}
+
 /** null там же, где его отдаёт currentServiceShop: нет входа или нет витрины. */
 export const serviceContext = cache(async (): Promise<ServiceContext | null> => {
   const shop = await currentServiceShop();
   const user = await getServerUser();
   if (!shop || !user) return null;
-
-  const membership = await fetchMyMembership(shop.id, user.id);
-  if (!membership.ok) {
-    return { shop, userId: user.id, role: "owner", masterId: null };
-  }
-  // Выключенный сотрудник — уволенный: он входит по общей куке сайта, но в
-  // приложении ему делать нечего. Сужаем до мастера без поста; сайт всё равно
-  // откажет в данных, а отдельного экрана «вас отключили» в дизайне нет.
-  if (!membership.data.active) {
-    return { shop, userId: user.id, role: "master", masterId: null };
-  }
-  return { shop, userId: user.id, role: membership.data.role, masterId: membership.data.masterId };
+  return { shop, userId: user.id, ...roleIn(shop) };
 });
 
 /**

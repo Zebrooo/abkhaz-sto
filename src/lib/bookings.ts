@@ -1,6 +1,6 @@
 import "server-only";
 // Записи сервиса: чтение и переходы под сервисным ключом ПОСЛЕ проверки
-// владения (ownedServiceShop). Переходы — оптимистично по текущему статусу:
+// места в сервисе (accessibleServiceShop). Переходы — оптимистично по текущему статусу:
 // update ... where id and shop_id and status = <текущий>; две вкладки,
 // нажавшие разное одновременно, не затрут друг друга молча.
 import { createSupabaseAdmin } from "@/lib/supabase/server";

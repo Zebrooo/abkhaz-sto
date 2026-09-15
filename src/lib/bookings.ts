@@ -24,6 +24,28 @@ export async function listBookings(shopId: number, from: Date, to: Date): Promis
   return data ?? [];
 }
 
+/** Сколько записей ждёт подтверждения — цифра на колоколе и в меню. */
+export async function countPending(shopId: number): Promise<number> {
+  const { count, error } = await createSupabaseAdmin().from("sto_bookings")
+    .select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("status", "new");
+  if (error) {
+    console.error("[сто] счётчик новых записей не прочитался:", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+/** Все записи сервиса, новые сверху — для клиентов и ленты уведомлений. */
+export async function recentBookings(shopId: number, limit = 1000): Promise<StoBookingRow[]> {
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
+    .eq("shop_id", shopId).order("starts_at", { ascending: false }).limit(limit).returns<StoBookingRow[]>();
+  if (error) {
+    console.error("[сто] история записей не прочиталась:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
 export async function getBooking(shopId: number, id: number): Promise<StoBookingRow | null> {
   const { data } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
     .eq("shop_id", shopId).eq("id", id).maybeSingle<StoBookingRow>();
@@ -94,12 +116,17 @@ export async function rescheduleBooking(input: {
 export async function createManualBooking(input: {
   shopId: number; schedule: StoSchedule; day: string; hhmm: string; service: StoBookingService; listingId: number | null;
   client: { name: string; phone: string | null }; vehicle: string; comment: string; actorUserId: string;
+  /** Пост выбран человеком; без него — первый свободный. */
+  postNo?: number;
 }): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   const { shopId, schedule, day, hhmm, service, listingId, client, actorUserId } = input;
   const startsAt = localTime(day, hhmm);
   const busy = await busyIntervals(shopId, new Date(startsAt.getTime() - 24 * 3_600_000), new Date(startsAt.getTime() + 24 * 3_600_000));
-  const free = isSlotFree({ schedule, startsAt, durationMin: service.durationMin, busy });
-  if (!free.ok) return { ok: false, error: free.reason === "closed" ? "В это время сервис не работает" : "Окно уже занято" };
+  const free = isSlotFree({ schedule, startsAt, durationMin: service.durationMin, busy, postNo: input.postNo });
+  if (!free.ok) {
+    const why = { closed: "В это время сервис не работает", past: "Это время уже прошло", no_post: "Такого поста у сервиса нет", taken: "Окно уже занято" } as const;
+    return { ok: false, error: why[free.reason] };
+  }
   const endsAt = new Date(startsAt.getTime() + service.durationMin * 60_000);
   const data: StoBookingData = {
     client: { name: client.name, phone: client.phone },

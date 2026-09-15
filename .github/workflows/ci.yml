@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Одна джоба: линт, типы, тесты, сборка. Имя «checks» — контекст защиты
+  # ветки, переименовывать нельзя (как в abkhaz-auto).
+  checks:
+    runs-on: [self-hosted, ci]
+    timeout-minutes: 20
+    steps:
+      # ПОЛУЧЕНИЕ КОДА — обычным шагом, а не actions/checkout: с self-hosted
+      # раннеров нет сети Microsoft, и загрузка любого стороннего действия
+      # падает в «Set up job» (правило abkhaz-auto, AGENTS.md).
+      - name: код
+        env:
+          CI_GIT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Токен не в URL: аргументы команды видны в /proc любому процессу раннера.
+          AUTH_HEADER="Authorization: Basic $(printf 'x-access-token:%s' "$CI_GIT_TOKEN" | base64 | tr -d '\n')"
+          export AUTH_HEADER
+          url="https://github.com/${GITHUB_REPOSITORY}"
+          git_auth() { git --config-env=http.extraheader=AUTH_HEADER "$@"; }
+          git init -q .
+          git config --local gc.auto 0
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "$url"
+          for n in 1 2 3; do
+            git_auth fetch --no-tags --force --depth=1 "$url" "+${GITHUB_SHA}:refs/remotes/origin/ci-head" && break
+            echo "git fetch не удался (попытка ${n} из 3)" >&2; sleep $((n * 5))
+          done
+          git checkout -q --force refs/remotes/origin/ci-head
+          # Чужие артефакты соседнего прогона на том же раннере — не наши.
+          git clean -qffdx -e node_modules -e .next
+          [ -d .next ] && find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} +
+          true
+      - name: node и pnpm
+        run: |
+          set -euo pipefail
+          command -v node >/dev/null || { echo "На раннере нет системного Node" >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/usr/bin/env bash\nexec corepack pnpm "$@"\n' > "$RUNNER_TEMP/bin/pnpm"
+          chmod +x "$RUNNER_TEMP/bin/pnpm"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: зависимости
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+        run: corepack pnpm install --frozen-lockfile
+      - name: типы маршрутов
+        run: pnpm exec next typegen
+      - name: линт
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+      - name: типы
+        if: ${{ !cancelled() }}
+        run: pnpm exec tsc --noEmit
+      - name: тесты
+        if: ${{ !cancelled() }}
+        run: pnpm test:ci
+      - name: сборка
+        if: ${{ !cancelled() }}
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SUPABASE_URL: https://sb.abkhaz-auto.ru
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          NEXT_PUBLIC_COOKIE_DOMAIN: .abkhaz-auto.ru
+        run: pnpm exec next build

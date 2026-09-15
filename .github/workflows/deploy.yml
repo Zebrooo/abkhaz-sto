@@ -1,0 +1,80 @@
+name: Deploy
+
+# Выкат на сервер 170 руками владельца (Actions → Deploy). Образ собирается на
+# CI-раннере и пушится в ghcr, затем раннер деплоя на 170 подтягивает его и
+# перезапускает контейнер. Blue-green нет — см. docker-compose.yml.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: [self-hosted, ci]
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: код
+        env:
+          CI_GIT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          AUTH_HEADER="Authorization: Basic $(printf 'x-access-token:%s' "$CI_GIT_TOKEN" | base64 | tr -d '\n')"
+          export AUTH_HEADER
+          url="https://github.com/${GITHUB_REPOSITORY}"
+          git init -q . && git config --local gc.auto 0
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "$url"
+          git --config-env=http.extraheader=AUTH_HEADER fetch --no-tags --force --depth=1 "$url" "+${GITHUB_SHA}:refs/remotes/origin/ci-head"
+          git checkout -q --force refs/remotes/origin/ci-head
+          git clean -qffdx -e node_modules
+      - name: имя образа
+        id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/sto:prod-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - name: вход в ghcr
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: сборка и пуш образа
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_COOKIE_DOMAIN: ${{ vars.NEXT_PUBLIC_COOKIE_DOMAIN }}
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg NODE_AUTH_TOKEN --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY \
+            --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "${{ steps.meta.outputs.image }}" .
+          docker push "${{ steps.meta.outputs.image }}"
+      - name: выход из ghcr
+        if: ${{ always() }}
+        run: docker logout ghcr.io >/dev/null 2>&1 || true
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, deploy-prod]
+    timeout-minutes: 15
+    steps:
+      - name: выкат
+        env:
+          STO_IMAGE: ${{ needs.build.outputs.image }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          cd /data/abkhaz-sto
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker pull "$STO_IMAGE"
+          STO_IMAGE="$STO_IMAGE" docker compose up -d --no-build sto
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3200/api/health/live >/dev/null; then echo "живой"; exit 0; fi
+            sleep 3
+          done
+          echo "::error::контейнер не ответил на /api/health/live"; exit 1

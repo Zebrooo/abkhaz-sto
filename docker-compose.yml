@@ -1,0 +1,46 @@
+# Приложение СТО на сервере 170 — один контейнер за Traefik (sto.abkhaz-auto.ru),
+# в тех же сетях, что веб-стек сайта: web (Traefik) и supabase-aa (внутренний
+# адрес базы). Blue-green на первом этапе нет: релизы редкие, простой на
+# перезапуск — секунды, а сессии живут в куке сайта и не теряются.
+name: abkhaz-sto
+services:
+  sto:
+    container_name: abkhaz-sto
+    image: ${STO_IMAGE:-abkhaz-sto:local}
+    build:
+      context: .
+      args:
+        NODE_AUTH_TOKEN: ${NODE_AUTH_TOKEN:?NODE_AUTH_TOKEN для @zebrooo/service-ticket}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://abkhaz-auto.ru}
+        # Без домена куки приложение не увидит сессию сайта — сборка падает нарочно.
+        NEXT_PUBLIC_COOKIE_DOMAIN: ${NEXT_PUBLIC_COOKIE_DOMAIN:?NEXT_PUBLIC_COOKIE_DOMAIN — как у сайта, .abkhaz-auto.ru}
+        NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}
+    restart: always
+    env_file:
+      - /etc/abkhaz-sto/.env.production
+    ports:
+      - "127.0.0.1:3200:3000"
+    networks: [web, supabase-aa]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      retries: 6
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5", compress: "true" }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sto.rule=Host(`sto.abkhaz-auto.ru`)"
+      - "traefik.http.routers.sto.entrypoints=websecure"
+      - "traefik.http.routers.sto.tls.certresolver=le"
+      - "traefik.http.services.sto.loadbalancer.server.port=3000"
+networks:
+  web:
+    external: true
+  supabase-aa:
+    external: true
+    name: supabase-aa_default

@@ -87,7 +87,7 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 | `GET /masters?shopId&actorUserId` | `admin`, `owner` | `StoMaster[]` |
 | `GET /masters/load?shopId&actorUserId&from&to` | `admin`, `owner` | `MasterLoad[]` |
 | `POST /masters` | `owner` | создать |
-| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin` | частичный патч |
+| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin` | патч → `{ master, orphaned }` |
 | `GET /masters/bookings?shopId&actorUserId&from&to` | любому своему | `{ bookingId, masterId }[]` |
 | `POST /masters/assign` | `admin`, `owner` | `{ …, bookingId, masterId \| null }` |
 
@@ -100,8 +100,21 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 `sto_bookings`: запись принадлежит схеме записи на СТО, её форму согласуют
 сайт и виджет, и приложению там места нет.
 
-`onShift: false` — мастер сегодня не работает. Что при этом делать с окнами
-его поста, решает сайт; приложение только показывает переключатель.
+**Пост — физическое место, мастер — человек на записи.** Пост убрать нельзя:
+двойную запись на одно место в одно время не пропускает ограничение самой
+базы (`exclude using gist` по `shop_id, post_no, tstzrange`), и это
+единственная защита от гонки, когда два админа жмут «Записать» одновременно.
+Мастер такой гарантии не даёт — он уходит на другой пост, болеет, меняется в
+обед.
+
+Отсюда поведение при `onShift: false` или `active: false`: **записи мастера
+остаются на своих постах** и ждут нового исполнителя. Убрать вместе с ним
+занятые окна значило бы молча потерять пришедших клиентов. Ответ несёт
+`orphaned` — номера записей, оставшихся без мастера; экран показывает их
+сразу после переключателя.
+
+Автор отчёта — мастер **записи**, а не тот, кто сегодня стоит на посту: за
+день на посту могут смениться двое.
 
 ---
 
@@ -134,6 +147,14 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 | `GET /inspections/presets?shopId&actorUserId&nodeKey?` | `master`, `admin` | `DefectPreset[]` |
 | `GET /inspections/presets/frequent?shopId&actorUserId&limit` | те же | `DefectPreset[]` |
 | `POST /inspections/photo-upload` | `master`, `admin` | `{ photoId, uploadUrl, expiresAt }` |
+
+**Пробег обязателен и спрашивается в начале каждого осмотра.** Не тянется из
+прошлого отчёта: между визитами машина ездит, подставленный пробег сделал бы
+отчёт неправдивым — а его читает клиент, и по нему назначают следующее ТО.
+Сайт сверяет введённое с прошлым по этой машине и отвечает
+`validation_error`, если пробег уехал назад: это опечатка, принимать её молча
+нельзя. Повторный `start` отдаёт уже начатый осмотр и пробег не
+перезаписывает.
 
 ```ts
 Inspection = { id, bookingId, masterId, masterName, odometerKm,
@@ -177,22 +198,30 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 | `GET /reports?shopId&actorUserId&inspectionId` | `master`, `admin`, `owner` | `Report` |
 | `GET /reports/list?shopId&actorUserId&from&to&masterId?` | те же | `ReportBrief[]` |
 | `POST /reports/item` | `master`, `admin` | `{ …, defectId, included }` → **весь** `Report` |
+| `POST /reports/book-item` | `admin`, `owner` | `{ …, defectId, bookingId }` → `Report` |
 | `POST /reports/send` | `master` → админу, `admin` → клиенту | `Report` |
 | `GET /reports/pdf?shopId&actorUserId&inspectionId` | те же | `{ url, expiresAt }` |
 
 ```ts
 Report = { inspectionId, bookingId, no, status, car, plate, odometerKm, masterName,
-           inspectedAt, defects, okNodeKeys, estimate, total, hasNegotiable,
-           totalMin, sentToAdminAt, sentToClientAt }
-EstimateItem = { defectId, work, price, durationMin, included, approved }
+           inspectedAt, defects, okNodeKeys, estimate, bookedCount, total,
+           hasNegotiable, totalMin, sentToAdminAt, sentToClientAt }
+EstimateItem = { defectId, work, price, durationMin, included, nextBookingId }
 ```
+
+**«Клиент одобрил пункт» — это запись на следующий сеанс, а не галочка.**
+Клиент видит в отчёте, что надо исправить, и берёт время на эту работу;
+`nextBookingId` — та самая запись. Состояния два — предложено и записан;
+третьего («отказался») нет, потому что от молчания оно неотличимо.
+
+Связь ставит `POST /reports/book-item`. Клиент делает это у себя на сайте, но
+чаще — админ у стойки: «нашли колодки, запишем на четверг». Запись он создаёт
+обычным путём (приложение пишет в `sto_bookings` напрямую), а связь — этим
+вызовом после.
 
 `okNodeKeys` — узлы, до которых мастер не дотронулся. Считает сайт
 вычитанием из словаря узлов; приложение его не собирает, чтобы отчёт в PDF и
 отчёт на экране не разошлись.
-
-`approved` — ответ клиента по пункту, когда отчёт уже у него; `null` — ещё не
-отвечал. Из одобренных пунктов считается конверсия в разделе денег.
 
 `POST /reports/item` возвращает весь отчёт с пересчитанной суммой, а не одну
 строку: экран рисует сумму из ответа.
@@ -231,10 +260,15 @@ ClientNote = { clientKey, text, updatedAt, authorName }
 
 ```ts
 MoneySummary = { period, from, to, revenue, deltaPct, average, jobs, loadPct,
-                 reportsSent, reportsApproved, approvedRevenue,
+                 reportsSent, reportsBooked, bookedRevenue,
                  byMaster: { masterId, title, count, revenue }[],
                  byService: { title, count, revenue }[] }
 ```
+
+Конверсия считается **по записям, пришедшим из отчётов** (`nextBookingId`), а
+не по нажатым галочкам: галочка ничего не стоит, запись стоит.
+`bookedRevenue` — деньги этих будущих работ, то есть то, что осмотр принёс
+сверх текущей смены.
 
 `period` — слово `day | week | month`, а не пара дат: «неделя» на сайте и в
 приложении обязана начинаться с одного понедельника, и решать это должна одна

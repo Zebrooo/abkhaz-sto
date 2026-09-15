@@ -64,13 +64,24 @@ export function createMaster(input: {
  * Правка мастера: имя, специальность, пост, смена, увольнение. Патч
  * частичный — экран шлёт только то, что человек тронул.
  *
+ * ВЫКЛЮЧЕНИЕ МАСТЕРА НЕ ТРОГАЕТ ЕГО ЗАПИСИ. Мастер — человек на записи, а
+ * место держит пост: это он записан в sto_bookings, и это его защищает
+ * ограничение базы от двойной записи. Сняли мастера со смены — записи
+ * остались на своих постах и ждут нового исполнителя; убрать вместе с ним
+ * занятые окна значило бы молча потерять пришедших клиентов.
+ *
+ * Поэтому ответ несёт orphaned — записи, оставшиеся без мастера. Экран
+ * показывает их сразу после переключателя: «передайте эти работы».
+ *
  * POST /api/sto/masters/update { shopId, actorUserId, masterId, ...patch }
  */
+export type MasterUpdate = { master: StoMaster; orphaned: BookingMaster["bookingId"][] };
+
 export function updateMaster(input: {
   shopId: number; actorUserId: string; masterId: number;
   name?: string; speciality?: string; postNo?: number | null; onShift?: boolean; active?: boolean;
-}): Promise<ApiResult<StoMaster>> {
-  return sitePost<StoMaster>("masters/update", input);
+}): Promise<ApiResult<MasterUpdate>> {
+  return sitePost<MasterUpdate>("masters/update", input);
 }
 
 /**

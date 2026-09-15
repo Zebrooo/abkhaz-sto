@@ -54,8 +54,13 @@ export type Inspection = {
   /** Кто смотрит машину; null — осмотр начал админ. */
   masterId: number | null;
   masterName: string | null;
-  /** Пробег на момент осмотра, км. Спрашиваем один раз при первом дефекте. */
-  odometerKm: number | null;
+  /**
+   * Пробег на момент осмотра, км. Спрашивается в начале КАЖДОГО осмотра, а не
+   * тянется из прошлого отчёта: между визитами машина ездит, и подставленный
+   * пробег сделал бы отчёт неправдивым — а его читает клиент и по нему
+   * назначают следующее ТО.
+   */
+  odometerKm: number;
   /** draft — мастер ещё ходит вокруг машины; finished — собрал отчёт. */
   status: "draft" | "finished";
   defects: Defect[];
@@ -116,14 +121,18 @@ export function fetchInspectionSummaries(input: {
 }
 
 /**
- * Начать осмотр. Повторный вызов отдаёт уже начатый — мастер жмёт «Осмотр»
- * из карточки записи столько раз, сколько нужно, и второго осмотра не
- * появляется.
+ * Начать осмотр. Пробег обязателен — это первое, что спрашивает экран, и
+ * без него осмотра не бывает. Сайт сверяет его с прошлым по этой машине:
+ * пробег, уехавший назад, — опечатка, и принимать её молча нельзя.
  *
- * POST /api/sto/inspections/start { shopId, actorUserId, bookingId, masterId?, odometerKm? }
+ * Повторный вызов отдаёт уже начатый осмотр (пробег при этом не
+ * перезаписывается): мастер жмёт «Осмотр» из карточки записи столько раз,
+ * сколько нужно, и второго осмотра не появляется.
+ *
+ * POST /api/sto/inspections/start { shopId, actorUserId, bookingId, odometerKm, masterId? }
  */
 export function startInspection(input: {
-  shopId: number; actorUserId: string; bookingId: number; masterId?: number | null; odometerKm?: number | null;
+  shopId: number; actorUserId: string; bookingId: number; odometerKm: number; masterId?: number | null;
 }): Promise<ApiResult<Inspection>> {
   return sitePost<Inspection>("inspections/start", input);
 }

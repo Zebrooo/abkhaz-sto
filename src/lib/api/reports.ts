@@ -24,7 +24,14 @@ export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
   with_client: "у клиента",
 };
 
-/** Строка сметы: дефект, который сервис предлагает починить. */
+/**
+ * Строка сметы: дефект, который сервис предлагает починить.
+ *
+ * «Одобрение» пункта — это не галочка, а запись на следующий сеанс: клиент
+ * видит в отчёте, что надо исправить, и записывается на эту работу. Поэтому
+ * состояний два — предложено и записан, — а третьего («отказался») нет: от
+ * молчания оно неотличимо, и выдумывать его незачем.
+ */
 export type EstimateItem = {
   defectId: number;
   work: string;
@@ -33,8 +40,8 @@ export type EstimateItem = {
   durationMin: number;
   /** Пункт выключили галочкой — в сумму не идёт и клиенту не предлагается. */
   included: boolean;
-  /** Клиент уже ответил по этому пункту (отчёт у клиента). */
-  approved: boolean | null;
+  /** Запись, на которую клиент пришёл чинить этот пункт; null — ещё не записался. */
+  nextBookingId: number | null;
 };
 
 export type Report = {
@@ -52,6 +59,8 @@ export type Report = {
   /** Узлы, до которых мастер не дотронулся, — «проверено и в норме». */
   okNodeKeys: string[];
   estimate: EstimateItem[];
+  /** Сколько пунктов клиент уже забрал в работу — видно и мастеру, и хозяину. */
+  bookedCount: number;
   /** Сумма и время включённых пунктов — считает сайт. */
   total: number;
   /** Есть пункты с договорной ценой: в подписи суммы нужна оговорка. */
@@ -114,6 +123,23 @@ export function sendReport(input: {
   shopId: number; actorUserId: string; inspectionId: number;
 }): Promise<ApiResult<Report>> {
   return sitePost<Report>("reports/send", input);
+}
+
+/**
+ * Связать пункт сметы с записью, на которой его будут чинить. Так отчёт
+ * превращается в работу, и по этим связям считается конверсия в разделе
+ * денег.
+ *
+ * Клиент делает это у себя на сайте, но чаще — админ у стойки: «нашли
+ * колодки, запишем на четверг». Запись он создаёт обычным путём
+ * (createManualBooking пишет в общую базу), а связь — этим вызовом после.
+ *
+ * POST /api/sto/reports/book-item { shopId, actorUserId, inspectionId, defectId, bookingId }
+ */
+export function linkItemBooking(input: {
+  shopId: number; actorUserId: string; inspectionId: number; defectId: number; bookingId: number;
+}): Promise<ApiResult<Report>> {
+  return sitePost<Report>("reports/book-item", input);
 }
 
 /**

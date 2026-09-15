@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { countPending } from "@/lib/bookings";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -38,7 +38,9 @@ const HEAD_SUB = "Часы приёма, посты, шаг сетки и пре
  */
 export default async function SchedulePage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("schedule"))!;
+  const shop = ctx.shop;
   const pending = await countPending(shop.id);
   const s = shop.schedule;
   const p = shop.prepay;

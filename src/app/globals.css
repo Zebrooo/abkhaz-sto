@@ -1238,7 +1238,15 @@ svg { display: block; }
 /* @section:roli-dostupy-mastera */
 /* Роли в оболочке, «Доступы», «Мастера», «Мой пост». */
 
-
+/* Бейдж роли в шапке телефона — перед подзаголовком, warm-фон и красные
+   капители 10.5px, как в макете (role.chipStyle). Подзаголовок при этом
+   остаётся в одну строку с многоточием. */
+.t-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.role-chip {
+  flex: none; padding: 2px 7px; border-radius: var(--radius-pill);
+  background: var(--warm); color: var(--accent);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
 
 /* @section:dengi-chat-zametki */
 /* «Деньги» хозяина, чат, заметки о клиентах. */

@@ -1,5 +1,6 @@
-import { currentServiceShop } from "@/lib/shop";
+import { serviceContext } from "@/lib/context";
 import { countPending } from "@/lib/bookings";
+import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
 import { SideNav } from "@/components/SideNav";
 import { TopBar } from "@/components/TopBar";
@@ -10,9 +11,12 @@ import { siteUrl, shopStorefrontUrl } from "@/lib/site";
 // Все экраны — под одним сервисом текущего пользователя. Нет сервиса —
 // объяснение вместо экранов: приложение без витрины бесполезно, и человек
 // должен понять, что делать, а не смотреть на пустой календарь.
+//
+// Роль решает, какие вкладки и пункты меню рисовать (lib/nav.ts); что
+// разрешено на самом деле, проверяет сайт по actorUserId.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const shop = await currentServiceShop();
-  if (!shop) {
+  const ctx = await serviceContext();
+  if (!ctx) {
     return (
       <div className="app">
         <main className="main">
@@ -34,16 +38,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
     );
   }
+  const { shop, role } = ctx;
+  const day = todayLocal();
   const pending = await countPending(shop.id);
-  const newHref = `/kalendar/novaya?d=${todayLocal()}`;
+  const newHref = `/kalendar/novaya?d=${day}`;
+  // «Осмотр» ведёт на текущую запись — её ищем один раз здесь, а не в каждой вкладке.
+  const inspect = await inspectHref(ctx, day, new Date());
   return (
     <div className="app">
-      <TopBar shopName={shop.name} newHref={newHref} unread={pending} />
+      <TopBar shopName={shop.name} role={role} newHref={newHref} unread={pending} />
       <div className="app-body">
-        <SideNav siteUrl={shopStorefrontUrl(shop.id)} unread={pending} />
+        <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} inspectHref={inspect} />
         <main className="main">{children}</main>
       </div>
-      <TabBar newHref={newHref} />
+      <TabBar role={role} newHref={newHref} inspectHref={inspect} />
     </div>
   );
 }

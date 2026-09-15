@@ -6,7 +6,7 @@ import { Flash } from "@/components/Flash";
 import { addDays, dayLabel, dayShort, plural, todayLocal, weekStart } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { STO_DAY_LABEL, STO_DAYS } from "@/lib/sto/schedule";
-import { isStoBookingActive } from "@/lib/sto/types";
+import { canReschedule } from "@/lib/sto/transitions";
 import { rescheduleAction } from "@/app/(app)/actions";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -27,7 +27,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   const now = new Date();
 
   let moveSlots: { hhmm: string; postNo: number }[] = [];
-  if (moving && shop.schedule && isStoBookingActive(moving.status)) {
+  if (moving && shop.schedule && canReschedule(moving.status)) {
     const durationMin = Math.max(1, Math.round((new Date(moving.ends_at).getTime() - new Date(moving.starts_at).getTime()) / 60_000));
     const busy = await busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"), moving.id);
     moveSlots = freeSlots({ schedule: shop.schedule, day, durationMin, busy, now }).map(s => ({ hhmm: localHHMM(s.startsAt), postNo: s.postNo }));
@@ -42,7 +42,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
       </div>
       <div className="week">
         {days.map((d, i) => {
-          const n = weekRows.filter(r => isStoBookingActive(r.status) && localTime(d, "00:00") <= new Date(r.starts_at) && new Date(r.starts_at) < localTime(addDays(d, 1), "00:00")).length;
+          const n = weekRows.filter(r => canReschedule(r.status) && localTime(d, "00:00") <= new Date(r.starts_at) && new Date(r.starts_at) < localTime(addDays(d, 1), "00:00")).length;
           const off = !shop.schedule || shop.schedule.daysOff.includes(d) || shop.schedule.days[STO_DAYS[i]].length === 0;
           return (
             <Link key={d} href={`/kalendar?d=${d}${moving ? `&move=${moving.id}` : ""}`} aria-current={d === day ? "date" : undefined}>

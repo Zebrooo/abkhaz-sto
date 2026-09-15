@@ -16,11 +16,6 @@ export const STO_BOOKING_STATUS_LABEL: Record<StoBookingStatus, string> = {
   no_show: "Клиент не приехал",
 };
 
-/** Живая запись держит окно на посту; остальные — история. */
-export function isStoBookingActive(s: StoBookingStatus): boolean {
-  return s === "new" || s === "confirmed";
-}
-
 export type StoCancelledBy = "client" | "shop" | "system";
 export type StoBookingSource = "site" | "app";
 export type StoPrepayStatus = "none" | "held" | "released_to_shop" | "refunded";

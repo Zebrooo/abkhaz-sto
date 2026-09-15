@@ -6,7 +6,6 @@ import "server-only";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { notifySite } from "@/lib/site-events";
 import type { StoBookingRow, StoBookingService, StoBookingData } from "@/lib/sto/types";
-import { isStoBookingActive } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
 import type { StoSchedule } from "@/lib/sto/schedule";
@@ -35,7 +34,7 @@ export async function getBooking(shopId: number, id: number): Promise<StoBooking
 export async function busyIntervals(shopId: number, from: Date, to: Date, exceptId?: number): Promise<BusyInterval[]> {
   const rows = await listBookings(shopId, from, to);
   return rows
-    .filter(b => isStoBookingActive(b.status) && b.id !== exceptId)
+    .filter(b => canReschedule(b.status) && b.id !== exceptId)
     .map(b => ({ postNo: b.post_no, startsAt: new Date(b.starts_at), endsAt: new Date(b.ends_at) }));
 }
 

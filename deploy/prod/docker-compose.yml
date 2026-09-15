@@ -1,0 +1,53 @@
+# Приложение СТО в ПРОДЕ (сервер 170): один контейнер за боевым Traefik,
+# в его же сетях — web (certresolver letsencrypt) и сеть Supabase.
+# Хост sto.abkhaz-auto.ru — поддомен боевого сайта: кука сессии выдаётся
+# сайтом на .abkhaz-auto.ru и потому доходит сюда (deploy/prod/build.env).
+#
+# Веб-стек сайта поднимается ТОЛЬКО через bluegreen.sh; это отдельное
+# приложение со своим контейнером, оно к blue-green не относится и катится
+# самостоятельно:
+#
+#   docker compose -f deploy/prod/docker-compose.yml up -d
+#
+# Секреты — /data/abkhaz-sto/.env.production (сервисный ключ боевого Supabase,
+# SUPABASE_INTERNAL_URL, SITE_INTERNAL_URL, STO_TICKET_*,
+# NEXT_SERVER_ACTIONS_ENCRYPTION_KEY). В образ они не попадают.
+name: abkhaz-sto-prod
+services:
+  sto:
+    container_name: abkhaz-sto-prod
+    image: ${STO_IMAGE:-abkhaz-sto:prod}
+    restart: always
+    env_file:
+      - /data/abkhaz-sto/.env.production
+    networks: [web, supabase-aa]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      retries: 6
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3", compress: "true" }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sto-prod.rule=Host(`sto.abkhaz-auto.ru`)"
+      - "traefik.http.routers.sto-prod.entrypoints=websecure"
+      - "traefik.http.routers.sto-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sto-prod.loadbalancer.server.port=3000"
+      # Свой редирект с http, чтобы не зависеть от глобальных правил стенда;
+      # имена middleware отдельные — с роутерами сайта не пересекаются.
+      - "traefik.http.routers.sto-prod-http.rule=Host(`sto.abkhaz-auto.ru`)"
+      - "traefik.http.routers.sto-prod-http.entrypoints=web"
+      - "traefik.http.routers.sto-prod-http.middlewares=sto-prod-https"
+      - "traefik.http.middlewares.sto-prod-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.sto-prod-https.redirectscheme.permanent=true"
+networks:
+  web:
+    external: true
+  supabase-aa:
+    external: true
+    # Имя сети боевого стека Supabase. Сверить перед первым выкатом:
+    # docker network ls | grep supabase
+    name: supabase-aa_default

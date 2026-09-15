@@ -106,3 +106,46 @@ ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-sto/src && set -a && . deplo
 — из окружения сессии, тот же, что в `~/abkhaz-sto/.env.production`. Секреты приложения —
 `~/abkhaz-sto/.env.production`: сервисный ключ тест-Supabase,
 `SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`, `STO_TICKET_*`.
+
+## Прод (170) — sto.abkhaz-auto.ru
+
+Хост `sto.abkhaz-auto.ru` за боевым Traefik; DNS-запись на `170.168.8.16` уже
+есть. Кука сессии выдаётся сайтом на `.abkhaz-auto.ru` (`abkhaz-auto`,
+`deploy/prod/build.env`), поэтому на поддомене вход работает сам: отдельного
+экрана ввода кода здесь нет и не будет.
+
+**Порядок первого выката.**
+
+1. **Миграции.** Таблица `sto_bookings` и колонки `shops.sto_*` живут в
+   `abkhaz-auto` (`supabase/migrations/20260915*`). Приложение без них не
+   читает записи. Миграции применяет выкат сайта (Actions → Deploy → prod,
+   blue-green применяет их до переключения трафика) — катит владелец.
+   Руками в боевую базу не применять: это то же нарушение, что прямой пуш.
+2. **Секреты.** `/data/abkhaz-sto/.env.production` (права 600): сервисный ключ
+   боевого Supabase, `SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`,
+   `STO_TICKET_SRC`/`STO_TICKET_DST`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`.
+3. **Сеть Supabase.** Сверить имя (`docker network ls | grep supabase`) и при
+   расхождении поправить `name:` в `deploy/prod/docker-compose.yml`.
+4. **Сборка и запуск** (раннеров у репозитория нет — собираем на сервере):
+
+```bash
+git archive --format=tar HEAD | ssh <прод> 'mkdir -p /data/abkhaz-sto/src && tar -x -C /data/abkhaz-sto/src'
+ssh <прод> 'cd /data/abkhaz-sto/src && set -a && . deploy/prod/build.env && set +a \
+  && export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$(grep -m1 "^NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=" /data/abkhaz-sto/.env.production | cut -d= -f2-) \
+  && docker build --secret id=npmrc,src=/data/abkhaz-sto/npmrc \
+     --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY \
+     --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN \
+     --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY -t abkhaz-sto:prod . \
+  && docker compose -f deploy/prod/docker-compose.yml up -d \
+  && shred -u /data/abkhaz-sto/npmrc'
+```
+
+`/data/abkhaz-sto/npmrc` — одна строка
+`//npm.pkg.github.com/:_authToken=<токен GitHub Packages>`, права 600,
+монтируется секретом сборки, в образ не попадает, удаляется сразу после.
+
+**Что увидят люди.** Приложение открыто только владельцу одобренной витрины
+рубрики `service`: без сессии — экран «Войдите на сайте», с чужой сессией —
+он же. Виджет записи на самом сайте остаётся под флагом `sto_booking`, то есть
+клиенты записываться не начнут, пока флаг не включат; ручная запись из
+приложения работает сразу после миграций.

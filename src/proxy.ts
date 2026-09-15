@@ -2,8 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authCookieOptions } from "@/lib/auth-cookies";
 
-/** Страницы без входа: объяснение, как войти, и здоровье. */
-const PUBLIC_PATHS = ["/vhod", "/api/health"];
+/** Без входа: объяснение, как войти, здоровье и cookie-мост мобильной оболочки (он сессию и создаёт). */
+const PUBLIC_PATHS = ["/vhod", "/api/health", "/api/auth/mobile-bridge"];
 
 // Файл proxy.ts — в Next 16 так зовётся прежний middleware.
 // Стандартный приём @supabase/ssr: обновить сессию по куке и переложить

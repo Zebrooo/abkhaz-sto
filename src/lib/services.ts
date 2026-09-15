@@ -25,7 +25,7 @@ function durationFromAttrs(attrs: Record<string, unknown> | null): number {
 export async function listServices(shopId: number): Promise<ServiceItem[]> {
   const { data, error } = await createSupabaseAdmin().from("listings")
     .select("id, slug, title, price, currency, status, attrs")
-    .eq("shop_id", shopId).eq("category_slug", "uslugi").in("status", ["active", "hidden", "pending"])
+    .eq("shop_id", shopId).eq("category_slug", "uslugi").in("status", ["active", "archived", "pending"])
     .order("title").returns<Row[]>();
   if (error) {
     console.error("[сто] услуги не прочитались:", error.message);

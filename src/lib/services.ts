@@ -43,8 +43,13 @@ export function toBookingService(s: ServiceItem): StoBookingService {
   return { title: s.title, price: s.price, currency: s.currency, durationMin: s.durationMin };
 }
 
-/** Правка цены и длительности своей услуги; attrs сливаются, не затираются. */
-export async function updateService(shopId: number, listingId: number, patch: { price: number | null; durationMin: number }): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * Правка цены, длительности и показа своей услуги; attrs сливаются, не
+ * затираются. Показ — это статус объявления: скрытая услуга уезжает в
+ * archived и пропадает с витрины, но остаётся в приложении. Объявление на
+ * модерации не трогаем: решение принимает площадка, а не сервис.
+ */
+export async function updateService(shopId: number, listingId: number, patch: { price: number | null; durationMin: number; visible?: boolean }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!Number.isInteger(patch.durationMin) || patch.durationMin < MIN_STO_DURATION_MIN || patch.durationMin > MAX_STO_DURATION_MIN) {
     return { ok: false, error: `Длительность — от ${MIN_STO_DURATION_MIN} до ${MAX_STO_DURATION_MIN} минут` };
   }
@@ -52,10 +57,13 @@ export async function updateService(shopId: number, listingId: number, patch: { 
     return { ok: false, error: "Цена — число от 0 до 10 000 000" };
   }
   const admin = createSupabaseAdmin();
-  const { data: row } = await admin.from("listings").select("attrs").eq("id", listingId).eq("shop_id", shopId).maybeSingle<{ attrs: Record<string, unknown> | null }>();
+  const { data: row } = await admin.from("listings").select("attrs, status").eq("id", listingId).eq("shop_id", shopId).maybeSingle<{ attrs: Record<string, unknown> | null; status: string }>();
   if (!row) return { ok: false, error: "Услуга не найдена" };
+  const status = patch.visible === undefined || row.status === "pending"
+    ? undefined
+    : patch.visible ? "active" : "archived";
   const { error } = await admin.from("listings")
-    .update({ price: patch.price, attrs: { ...(row.attrs ?? {}), duration_min: patch.durationMin } })
+    .update({ price: patch.price, attrs: { ...(row.attrs ?? {}), duration_min: patch.durationMin }, ...(status ? { status } : {}) })
     .eq("id", listingId).eq("shop_id", shopId);
   if (error) return { ok: false, error: "Не удалось сохранить: " + error.message };
   return { ok: true };

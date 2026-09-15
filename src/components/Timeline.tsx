@@ -1,11 +1,17 @@
 import Link from "next/link";
 import type { StoBookingRow } from "@/lib/sto/types";
 import type { StoSchedule } from "@/lib/sto/schedule";
-import { toMinutes } from "@/lib/sto/schedule";
 import { dayOfWeek, localHHMM, localTime } from "@/lib/sto/slots";
-import { dayWindow, isLive } from "@/lib/stats";
+import { dayWindow, freeGaps, isLive } from "@/lib/stats";
 import { formatRub, minutesLabel } from "@/lib/format";
 import { Icon } from "@/components/Icon";
+
+/** В блоке сетки помещается только имя: фамилия и «с сайта» съедают ширину. */
+function firstName(b: StoBookingRow): string {
+  const name = b.data.client?.name?.trim();
+  if (name) return name.split(/\s+/)[0];
+  return b.client_id ? "с сайта" : "клиент";
+}
 
 /** Минуты дня по часам сервиса. */
 function minutesOf(at: string): number {
@@ -16,27 +22,6 @@ function minutesOf(at: string): number {
 const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 /** Позиция и высота в часах — пересчёт в пиксели делает CSS (--hour). */
 const at = (min: number) => `calc(${(min / 60).toFixed(4)} * var(--hour))`;
-
-/** Окно короче 45 минут на сетке не показываем: записать в него нечего. */
-const MIN_FREE_MIN = 45;
-
-type Free = { fromMin: number; toMin: number };
-
-/** Свободные куски поста внутри часов приёма (обед в свободное не попадает). */
-function freeGaps(intervals: { from: string; to: string }[], busy: { from: number; to: number }[]): Free[] {
-  const out: Free[] = [];
-  for (const iv of intervals) {
-    let cursor = toMinutes(iv.from);
-    const end = toMinutes(iv.to);
-    const inside = busy.filter(b => b.to > cursor && b.from < end).sort((a, b) => a.from - b.from);
-    for (const b of inside) {
-      if (b.from - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: b.from });
-      cursor = Math.max(cursor, b.to);
-    }
-    if (end - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: end });
-  }
-  return out;
-}
 
 /**
  * Сетка часов на все посты: занятое — цветными блоками по статусу,
@@ -110,7 +95,7 @@ export function Timeline({ rows, schedule, posts, day, now, newHref }: {
                       <span className="b-price">{formatRub(b.service.price)}</span>
                     </div>
                     <div className="b-title">{b.service.title}</div>
-                    <div className="b-client">{b.data.client?.name ?? (b.client_id ? "Клиент с сайта" : "Клиент")}</div>
+                    <div className="b-client">{firstName(b)}</div>
                   </Link>
                 );
               })}

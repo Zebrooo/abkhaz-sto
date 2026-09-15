@@ -1,56 +1,185 @@
 import Link from "next/link";
 import { currentServiceShop } from "@/lib/shop";
-import { listBookings } from "@/lib/bookings";
-import { BookingCard } from "@/components/BookingCard";
+import { countPending, listBookings } from "@/lib/bookings";
+import { BookingRow } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
-import { addDays, dayLabel, todayLocal } from "@/lib/format";
+import { Icon } from "@/components/Icon";
+import { ScreenHead } from "@/components/ScreenHead";
+import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
+import { Timeline } from "@/components/Timeline";
+import { addDays, count, dayLabel, dayOfWeekLabel, dayTitle, todayLocal } from "@/lib/format";
+import { dayStats, dayWindow, isLive } from "@/lib/stats";
 import { localTime } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
+/** Чипы дня: «Все» — живые записи, остальные — по статусу. */
+const FILTERS = [["all", "Все"], ["new", "Ждут"], ["confirmed", "Подтверждены"], ["done", "Выполнены"]] as const;
+type Filter = (typeof FILTERS)[number][0];
+const isFilter = (s: string): s is Filter => FILTERS.some(([k]) => k === s);
+
+const href = (day: string, filter: Filter) => `/segodnya?d=${day}${filter === "all" ? "" : `&f=${filter}`}`;
+
+/** Сегмент «День | Неделя»: на телефоне над стрелками, на вебе справа в шапке. */
+function ModeSeg({ day }: { day: string }) {
+  return (
+    <div className="seg">
+      <Link href={href(day, "all")} aria-current="page">День</Link>
+      <Link href={`/kalendar?d=${day}`}>Неделя</Link>
+    </div>
+  );
+}
+
+function StatusChips({ day, filter, counts }: { day: string; filter: Filter; counts: Record<Filter, number> }) {
+  return (
+    <div className="chips">
+      {FILTERS.map(([key, label]) => (
+        <Link key={key} className="chip" href={href(day, key)} aria-current={key === filter ? "page" : undefined}>
+          {label} {counts[key]}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * День таймлайном — главный экран за стойкой. На телефоне сетка часов и под
+ * ней список записей, на вебе список заменяет правая колонка со сводкой
+ * смены: одни и те же данные, разный порядок чтения.
+ */
 export default async function TodayPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const shop = (await currentServiceShop())!;
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
+  const f = pick(sp.f);
+  const filter: Filter = isFilter(f) ? f : "all";
+
   const rows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
-  const returnTo = `/segodnya?d=${day}`;
+  const live = rows.filter(isLive);
+  const counts: Record<Filter, number> = {
+    all: live.length,
+    new: live.filter(b => b.status === "new").length,
+    confirmed: live.filter(b => b.status === "confirmed").length,
+    done: live.filter(b => b.status === "done").length,
+  };
+  // Фильтр сужает список, но не сетку: в макете он прячет записи и там, а
+  // свободные окна считаются по видимым — пост с отфильтрованной записью
+  // выглядел бы пустым, и в занятое время предложили бы записать.
+  const visible = filter === "all" ? live : live.filter(b => b.status === filter);
+  const stats = dayStats({ rows, schedule: shop.schedule, day, posts });
+  const off = dayWindow(shop.schedule, day).off;
+  const now = new Date();
+  const returnTo = href(day, filter);
+
   return (
     <>
-      <div className="daynav">
-        <Link className="btn btn-sm" href={`/segodnya?d=${addDays(day, -1)}`} aria-label="Предыдущий день">←</Link>
-        <div style={{ textAlign: "center" }}>
-          <div className="title">{day === today ? "Сегодня" : dayLabel(day)}</div>
-          {day === today && <div className="muted small">{dayLabel(day)}</div>}
+      <ScreenHead title="Записи" sub={dayLabel(day)} unread={pending} />
+      <div className="page board stack">
+        <div className="head">
+          <div>
+            <div className="head-t">{dayLabel(day)}</div>
+            <div className="head-s">
+              {count(stats.count, "запись", "записи", "записей")} · {count(posts, "пост", "поста", "постов")} · загрузка {stats.loadPct}%
+            </div>
+          </div>
+          <div className="daynav">
+            <Link className="ico prev" href={href(addDays(day, -1), filter)} aria-label="Предыдущий день"><Icon name="chevron" size={16} /></Link>
+            <Link href={href(today, filter)}>Сегодня</Link>
+            <Link className="ico" href={href(addDays(day, 1), filter)} aria-label="Следующий день"><Icon name="chevron" size={16} /></Link>
+          </div>
+          <div className="head-tail">
+            <ModeSeg day={day} />
+            <StatusChips day={day} filter={filter} counts={counts} />
+          </div>
         </div>
-        <Link className="btn btn-sm" href={`/segodnya?d=${addDays(day, 1)}`} aria-label="Следующий день">→</Link>
-      </div>
-      <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
-      {!shop.schedule && (
-        <div className="card">
-          <b>Расписание не задано</b> — клиенты не видят свободных окон. <Link href="/raspisanie">Задать расписание</Link>
+
+        <div className="dayctl m-only">
+          <ModeSeg day={day} />
+          <div className="dnav">
+            <Link className="prev" href={href(addDays(day, -1), filter)} aria-label="Предыдущий день"><Icon name="chevron" size={17} /></Link>
+            <div>
+              <div className="dnav-t">{dayTitle(day)}</div>
+              <div className="dnav-s">{dayOfWeekLabel(day)} · {count(stats.count, "запись", "записи", "записей")} · {stats.loadPct}%</div>
+            </div>
+            <Link href={href(addDays(day, 1), filter)} aria-label="Следующий день"><Icon name="chevron" size={17} /></Link>
+          </div>
+          <StatusChips day={day} filter={filter} counts={counts} />
         </div>
-      )}
-      {rows.length === 0 ? (
-        <div className="card muted">Записей нет. <Link href={`/kalendar/novaya?d=${day}`}>Записать клиента</Link></div>
-      ) : (
-        Array.from({ length: posts }, (_, i) => i + 1).map(post => {
-          const list = rows.filter(r => r.post_no === post);
-          if (list.length === 0) return null;
-          return (
-            <section key={post}>
-              {posts > 1 && <h3 className="post-h">Пост {post}</h3>}
-              {list.map(b => <BookingCard key={b.id} b={b} returnTo={returnTo} />)}
-            </section>
-          );
-        })
-      )}
-      <div className="btn-row" style={{ marginTop: 12 }}>
-        <Link className="btn btn-primary" href={`/kalendar/novaya?d=${day}`}>Записать клиента</Link>
+
+        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
+
+        {!shop.schedule && (
+          <div className="card card-accent note">
+            <div className="note-t">Расписание не задано</div>
+            <div className="note-s">Клиенты не видят свободных окон и не могут записаться с сайта, а сетка ниже нарисована по запасным часам 09:00–18:00.</div>
+            <div className="note-b">
+              <Link className="aui-btn aui-btn--outline aui-btn--sm" href="/raspisanie">Задать часы работы</Link>
+            </div>
+          </div>
+        )}
+
+        <div className="card tl-wrap">
+          <Timeline
+            rows={live}
+            schedule={shop.schedule}
+            posts={posts}
+            day={day}
+            now={now}
+            newHref={(postNo, hhmm) => `/kalendar/novaya?d=${day}&post=${postNo}&hhmm=${hhmm}`}
+          />
+        </div>
+
+        <div className="tl-legend m-only">
+          <span><i className="l-new" />ждёт</span>
+          <span><i className="l-confirmed" />подтверждена</span>
+          <span><i className="l-done" />выполнена</span>
+        </div>
+
+        {/* На вебе день целиком виден в сетке, поэтому список прячем — но
+            когда выбран чип, он единственный показывает выбранное. */}
+        <div className={`daylist${filter === "all" ? " m-only" : ""}`}>
+          <div className="sect">Записи дня</div>
+          {visible.length === 0 ? (
+            <div className="card">
+              <div className="empty">
+                <span className="sq"><Icon name="calendar" size={26} /></span>
+                {filter === "all" ? (
+                  <>
+                    <div className="empty-t">{off ? "Выходной" : day === today ? "На сегодня записей нет" : "В этот день записей нет"}</div>
+                    <div className="empty-s">
+                      {off
+                        ? "Сервис не работает: окон нет и записаться с сайта нельзя. Разовый выходной снимается в расписании."
+                        : `Свободны все ${count(posts, "пост", "поста", "постов")}. Клиента с улицы записывайте кнопкой ниже — окна считаются по расписанию.`}
+                    </div>
+                    {off
+                      ? <Link className="aui-btn aui-btn--outline aui-btn--md" href="/raspisanie">Открыть расписание</Link>
+                      : <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${day}`}>Записать клиента</Link>}
+                  </>
+                ) : (
+                  <>
+                    <div className="empty-t">С таким статусом записей нет</div>
+                    <div className="empty-s">В этом дне {counts.all === 0 ? "записей нет вовсе" : `есть другие: всего ${counts.all}`}.</div>
+                    <Link className="aui-btn aui-btn--outline aui-btn--md" href={href(day, "all")}>Показать все</Link>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            visible.map(b => <BookingRow key={b.id} b={b} returnTo={returnTo} day={day} />)
+          )}
+        </div>
       </div>
+
+      <aside className="rail">
+        <ShiftSummary rows={rows} schedule={shop.schedule} day={day} posts={posts} />
+        <PendingBlock rows={rows} day={day} returnTo={returnTo} />
+        <PostsNowBlock rows={rows} schedule={shop.schedule} day={day} posts={posts} now={now} />
+      </aside>
     </>
   );
 }

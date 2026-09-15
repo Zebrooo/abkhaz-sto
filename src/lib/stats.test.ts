@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayStats, dayWindow, isLive, postsNow } from "@/lib/stats";
+import { dayStats, dayWindow, freeGaps, isLive, postsNow } from "@/lib/stats";
 import type { StoBookingRow } from "@/lib/sto/types";
 import type { StoSchedule } from "@/lib/sto/schedule";
 import { localHHMM, localTime } from "@/lib/sto/slots";
@@ -127,5 +127,38 @@ describe("что сейчас на постах", () => {
   it("пост без записей свободен до конца смены", () => {
     const list = postsNow({ rows: [], posts: 1, now, dayEnd, hhmm: localHHMM });
     expect(list[0].line).toBe("окно 6 ч 30 мин до 18:00");
+  });
+});
+
+describe("свободные куски поста на сетке", () => {
+  const work = [{ from: "09:00", to: "13:00" }, { from: "14:00", to: "18:00" }];
+
+  it("обед не становится свободным окном", () => {
+    const gaps = freeGaps(work, [{ from: 9 * 60, to: 13 * 60 }, { from: 14 * 60, to: 18 * 60 }]);
+    expect(gaps).toEqual([]);
+  });
+
+  it("делит интервал по записям и не предлагает куски короче 45 минут", () => {
+    const gaps = freeGaps([{ from: "09:00", to: "13:00" }], [
+      { from: 9 * 60 + 30, to: 10 * 60 },      // до неё всего 30 минут — не окно
+      { from: 11 * 60, to: 12 * 60 },          // между 10:00 и 11:00 — час, окно
+    ]);
+    expect(gaps).toEqual([{ fromMin: 10 * 60, toMin: 11 * 60 }, { fromMin: 12 * 60, toMin: 13 * 60 }]);
+  });
+
+  it("пустой день — по окну на каждый интервал приёма", () => {
+    expect(freeGaps(work, [])).toEqual([
+      { fromMin: 9 * 60, toMin: 13 * 60 },
+      { fromMin: 14 * 60, toMin: 18 * 60 },
+    ]);
+  });
+
+  it("запись, вылезшая за часы приёма, не рвёт расчёт", () => {
+    expect(freeGaps([{ from: "09:00", to: "13:00" }], [{ from: 8 * 60, to: 12 * 60 }]))
+      .toEqual([{ fromMin: 12 * 60, toMin: 13 * 60 }]);
+  });
+
+  it("выходной — окон нет", () => {
+    expect(freeGaps([], [])).toEqual([]);
   });
 });

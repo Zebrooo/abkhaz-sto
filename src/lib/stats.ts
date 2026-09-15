@@ -70,6 +70,34 @@ export function dayStats(input: { rows: readonly StoBookingRow[]; schedule: StoS
   };
 }
 
+/** Окно короче 45 минут на сетке не показываем: записать в него нечего. */
+export const MIN_FREE_MIN = 45;
+
+export type FreeGap = { fromMin: number; toMin: number };
+
+/**
+ * Свободные куски поста внутри часов приёма. Считаем по интервалам дня, а не
+ * от первого до последнего часа: обед — не свободное окно, предлагать запись
+ * в него нельзя.
+ */
+export function freeGaps(
+  intervals: readonly { from: string; to: string }[],
+  busy: readonly { from: number; to: number }[],
+): FreeGap[] {
+  const out: FreeGap[] = [];
+  for (const iv of intervals) {
+    let cursor = toMinutes(iv.from);
+    const end = toMinutes(iv.to);
+    const inside = busy.filter(b => b.to > cursor && b.from < end).sort((a, b) => a.from - b.from);
+    for (const b of inside) {
+      if (b.from - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: b.from });
+      cursor = Math.max(cursor, b.to);
+    }
+    if (end - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: end });
+  }
+  return out;
+}
+
 export type PostNow = {
   no: number;
   busy: boolean;

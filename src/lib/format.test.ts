@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays, agoLabel, count, dayLabel, dayNumber, dayOfWeekLabel, dayOfWeekShort,
-  dayEyebrow, dayShort, dayTitle, initials, minutesLabel, rangeLabel, relativeAt, rub, shortName, timeRange, weekStart,
+  dayEyebrow, dayShort, dayTitle, formatPhone, initials, minutesLabel, rangeLabel, relativeAt, rub, shortName, timeRange, weekStart,
 } from "@/lib/format";
 import { localTime } from "@/lib/sto/slots";
 
@@ -65,6 +65,14 @@ describe("числа и слова", () => {
     expect(shortName("Гурам Броцман")).toBe("Гурам Б.");
     expect(shortName("Нана")).toBe("Нана");
     expect(shortName("Клиент с сайта")).toBe("Клиент с сайта");
+  });
+
+  it("телефон читается вслух", () => {
+    expect(formatPhone("+79409211408")).toBe("+7 940 921-14-08");
+    // Сюда приходит уже нормализованный номер (normalizePhone), сырой не трогаем.
+    expect(formatPhone("89409211408")).toBe("89409211408");
+    expect(formatPhone("+995 555 123456")).toBe("+995 555 123456");
+    expect(formatPhone(null)).toBe("");
   });
 
   it("инициалы", () => {

@@ -308,12 +308,12 @@ svg { display: block; }
 }
 .tl-free:active { background: var(--warm); border-color: var(--accent); color: var(--accent); }
 .tl-block {
-  position: absolute; left: 0; right: 0; border-radius: 10px; padding: 5px 6px; overflow: hidden;
+  position: absolute; left: 0; right: 0; border-radius: 10px; padding: 5px 6px; overflow: hidden; line-height: 1.25;
   display: flex; flex-direction: column; transition: transform .12s var(--ease-out), box-shadow .15s;
 }
 .tl-block:active { transform: scale(.98); }
 .tl-block .b-time { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; opacity: .75; }
-.tl-block .b-title { font-size: 12px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; margin-top: 1px; overflow: hidden; }
+.tl-block .b-title { font-size: 12px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; margin-top: 1px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tl-block .b-client { font-size: 11px; opacity: .7; margin-top: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); border-radius: var(--radius-pill); z-index: 2; pointer-events: none; }
 .tl-now i, .tl-now b { position: absolute; left: -4px; top: -3.5px; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--accent); }
@@ -654,7 +654,7 @@ svg { display: block; }
   .head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .head-t { font-size: 22px; font-weight: 800; letter-spacing: -.025em; }
   .head-s { font-size: 13px; color: var(--muted); margin-top: 2px; max-width: 620px; text-wrap: pretty; }
-  .head-tail { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .head-tail { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
   .sect { display: none; }
   .hint { padding: 0; }
 
@@ -747,7 +747,7 @@ svg { display: block; }
   .tl-grid { gap: 10px; }
   .tl-block { padding: 8px 10px; }
   .tl-block .b-time { font-size: 11.5px; }
-  .tl-block .b-title { font-size: 13.5px; margin-top: 3px; }
+  .tl-block .b-title { font-size: 13.5px; margin-top: 3px; white-space: normal; }
   .tl-block .b-client { font-size: 12px; margin-top: 2px; }
   .tl-block:hover { box-shadow: var(--shadow-card-hover); }
   .tl-block:active { transform: translateY(1px); }
@@ -888,7 +888,341 @@ svg { display: block; }
 .note-s { font-size: 13px; color: var(--muted); margin-top: 4px; text-wrap: pretty; }
 .note-s + .aui-btn { min-height: 40px; margin-top: 12px; }
 /* @section:zapisi */
+/* Экраны «Записи» (день таймлайном) и «Неделя». На телефоне это колонка с
+   шагом 10px, на вебе — доска: сетка часов слева, сводка смены справа. */
+.dayctl, .daylist { display: flex; flex-direction: column; gap: 10px; }
+
+/* Шаг по дню на телефоне: дата по центру, круглые кнопки по краям. */
+.dnav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dnav > a {
+  flex: none; width: 40px; height: 40px; border-radius: var(--radius-pill);
+  background: #fff; border: .75px solid var(--m-hair);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .12s, background .12s;
+}
+.dnav > a:active { transform: scale(.9); background: var(--bg-2); }
+.dnav > .prev { transform: rotate(180deg); }
+.dnav > .prev:active { transform: rotate(180deg) scale(.9); }
+.dnav-t { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
+.dnav-s { font-size: 11.5px; color: var(--muted); }
+
+/* Квадратики легенды — цвета блоков таймлайна, но без левой полоски. */
+.tl-legend .l-new { background: var(--warm); border: 1px solid var(--danger-line); }
+.tl-legend .l-confirmed { background: var(--ok-bg); border: 1px solid var(--ok-line); }
+.tl-legend .l-done { background: var(--bg-2); border: 1px solid var(--line-2); }
+
+/* Столбик недели: доля самого загруженного дня приходит из разметки (--k). */
+.week-bars i { height: max(6px, calc(var(--k, 0) * 62px)); }
+.week-bars .n-web { display: none; }
+
+/* Карточка-пояснение: «расписание не задано», «перенос записи». */
+.note-t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.note-s { font-size: 13px; color: var(--muted); margin-top: 4px; text-wrap: pretty; }
+.note .slots { margin-top: 12px; }
+.note-b { display: flex; gap: 8px; margin-top: 12px; }
+.note-b .aui-btn { min-height: 40px; }
+.empty > .aui-btn { min-height: 44px; margin-top: 4px; }
+
+@media (max-width: 880px) {
+  .card.tl-wrap { padding: 12px 12px 8px; }
+  .week-card { padding: 14px 10px 10px; }
+  .week-days .cnt { display: none; }
+  .grid-2 { display: flex; flex-direction: column; gap: 10px; }
+}
+
+@media (min-width: 881px) {
+  /* Шаг между блоками задают сами блоки: 18px до сетки часов и до недели,
+     14px между карточками — иначе общий gap колонки их не различает. */
+  .page.board { gap: 0; }
+  .page.board > .card, .page.board > .grid-2, .page.board > .daylist { margin-top: 14px; }
+  .page.board > .tl-wrap, .page.board > .week-card { margin-top: 18px; }
+  .head .daynav { margin-left: 8px; }
+  .week-card { padding: 18px; }
+  .week-bars i { height: max(8px, calc(var(--k, 0) * 110px)); }
+  .week-bars .n-day { display: none; }
+  .week-bars .n-web { display: inline; }
+  /* Сегмент со стрелками, легенда и список дня — только на телефоне:
+     на вебе день целиком виден в сетке часов. */
+  .m-only { display: none; }
+}
 /* @section:zapis */
+/* Карточка записи. Экран телефона и ящик веба — одна разметка: .detail на
+   телефоне просто колонка, а .sticky-actions на вебе — подвал ящика. */
+/* Кнопку в форме флекс не видит: без display:contents она теряет ширину. */
+.sticky-actions form, .act-list form { display: contents; }
+/* Квадратная кнопка «ещё» — ширина по высоте соседней главной. */
+.sticky-actions .btn-sq { width: 52px; padding: 0; }
+.cmt { font-size: 14px; margin-top: 6px; text-wrap: pretty; }
+/* Подпись в шторке — во всю ширину, в отличие от .hint с полями по 4px. */
+.sheet-note { font-size: 13px; color: var(--muted); text-wrap: pretty; }
+/* Своя причина отмены: поле без подписи — она уже в плейсхолдере. */
+.reason-other {
+  width: 100%; min-height: 70px; margin-top: 4px; padding: 10px 14px;
+  border: 1px solid var(--line-2); border-radius: 14px; background: #fff; font-size: 15px; resize: none;
+}
+.reason-other:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+@media (max-width: 880px) {
+  /* Без растяжки .page внутри не занимает экран и липкие кнопки всплывают. */
+  .detail { flex: 1; display: flex; flex-direction: column; }
+}
+@media (min-width: 881px) {
+  .sticky-actions .btn-sq { width: 48px; }
+  /* Крестик ящика: 36px и радиус 10 — .sheet-close круглый и мельче. */
+  .detail-close {
+    flex: none; width: 36px; height: 36px; border-radius: var(--radius); background: var(--bg-2); color: var(--ink-2);
+    display: inline-flex; align-items: center; justify-content: center; transition: background .15s, color .15s;
+  }
+  .detail-close > span { display: inline-flex; transform: rotate(45deg); }
+  .detail-close:hover { background: var(--warm); color: var(--accent); }
+  /* Подвал ящика — тот же блок кнопок; .sticky-actions объявлен позже
+     .detail-foot, поэтому поля, фон и прижатие к низу возвращаем здесь. */
+  .detail-foot.sticky-actions { position: sticky; bottom: 0; margin: auto -22px 0; padding: 14px 22px 18px; background: #fff; }
+  /* Ящик — во весь экран под верхней полосой: прокручивается только тело,
+     шапка с крестиком и кнопки внизу всегда на виду. Нижнее поле тела
+     отдано подвалу, иначе под ним остаётся полоска фона. */
+  .detail { height: calc(100dvh - var(--topbar-h)); }
+  .detail-body { min-height: 0; overflow-y: auto; padding-bottom: 0; }
+}
 /* @section:novaya */
+/* Новая запись в три шага. Разметка одна на оба размера: на телефоне лишний
+   шаг прячется по data-step, на вебе окно макета видно целиком — услуги
+   слева, день и клиент справа, итог с ценой в подвале. */
+.nb-lab, .nb-w, .nb-total, .nb-total-p, .nb-cancel { display: none; }
+.nb-l { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+.nb-l-slots { display: flex; align-items: baseline; gap: 8px; }
+.nb-l-s { color: var(--muted-2); }
+.nb-svc { display: flex; flex-direction: column; gap: 8px; }
+.nb-fields { display: flex; flex-direction: column; gap: 12px; }
+/* Точки шага стоят справа от названия шага — как в шапке шторки. */
+.sect .sheet-dots { margin-left: auto; }
+/* «Назад» — та же стрелка, что и «вперёд», просто развёрнутая. */
+.nb-back { transform: rotate(180deg); }
+.nb-back:active { transform: rotate(180deg) scale(.97); }
+
+@media (max-width: 880px) {
+  /* Форма тянется на весь экран: иначе липкий подвал всплывает под контент. */
+  .nb-box { flex: 1; display: flex; flex-direction: column; }
+  .nb-cols, .nb-right { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .nb-when { display: flex; flex-direction: column; gap: 14px; }
+  .nb-who { display: flex; flex-direction: column; gap: 12px; }
+  /* Полоса дней уходит под края экрана, а поля .page здесь 12px, не 18px. */
+  .nb .daypick { margin: 0 -12px; padding: 0 12px 2px; }
+  .nb-l-post { margin-top: 14px; }
+  /* Виден только текущий шаг — остальные остаются в форме и отправятся с ней. */
+  .nb[data-step="0"] .nb-right,
+  .nb[data-step="1"] .nb-svc, .nb[data-step="1"] .nb-who,
+  .nb[data-step="2"] .nb-svc, .nb[data-step="2"] .nb-when,
+  .nb[data-step="2"] .nb-next,
+  .nb:not([data-step="2"]) .nb-submit { display: none; }
+}
+
+@media (min-width: 881px) {
+  /* Шаги на вебе не нужны: всё окно на виду, записывать можно сразу, а день
+     и пост стоят под одной подписью «День и пост». */
+  .nb-p, .nb-next, .nb-back, .nb-l-post, .nb .summary { display: none; }
+  .nb-w { display: inline; }
+  .nb-box { max-width: 840px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .nb-cols { display: flex; align-items: stretch; }
+  .nb-svc { flex: none; width: 330px; border-right: 1px solid var(--line); padding: 16px; gap: 6px; }
+  .nb-right { flex: 1; min-width: 0; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .nb-when { display: flex; flex-direction: column; gap: 16px; }
+  .nb-lab {
+    display: block; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); padding: 0 4px 8px;
+  }
+  /* Услуга в колонке площе и тише, чем в шторке телефона. */
+  .nb-svc .pick { min-height: 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-3); }
+  .nb-svc .pick:hover { background: var(--bg-2); }
+  .nb-svc .pick[aria-pressed="true"]:hover { background: var(--warm); }
+  .nb-svc .pick-t { font-size: 14px; }
+  .nb-svc .pick-on { width: 24px; height: 24px; }
+  /* День — чипом в строку, «Ср, 16»: запятую ставит псевдоэлемент, чтобы
+     полоса дней осталась одной разметкой на телефон и веб. */
+  .nb .daypick { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; gap: 8px; }
+  .nb .daypick > * {
+    width: auto; min-height: 36px; padding: 0 16px; flex-direction: row; gap: 5px;
+    border-radius: var(--radius-pill); background: #fff; border: 1px solid var(--line-2);
+  }
+  .nb .daypick > *:hover { background: var(--bg-2); }
+  .nb .daypick > [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .nb .daypick > [aria-pressed="true"]:hover { background: var(--accent-dark); }
+  .nb .daypick .dow { font-size: 13px; font-weight: 600; text-transform: capitalize; letter-spacing: 0; opacity: 1; }
+  .nb .daypick .dow::after { content: ","; }
+  .nb .daypick .num { font-size: 13px; font-weight: 600; letter-spacing: 0; }
+  .nb .seg { margin-top: 10px; max-width: 360px; }
+  .nb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* Комментарий стоит в сетке рядом с «Машиной» — и высотой равен ей:
+     min-height мало, две строки textarea задают высоту сами. */
+  .nb-fields textarea { min-height: 44px; height: 44px; }
+  /* Подвал окна: слева итог, справа цена и кнопки. */
+  .nb-foot {
+    margin: 0; padding: 16px 24px; border-top: 1px solid var(--line);
+    background: var(--bg-3); align-items: center; gap: 14px;
+  }
+  .nb-foot .aui-btn { min-height: 44px; border-radius: var(--radius); }
+  .nb-foot .aui-btn--primary { flex: none; padding: 0 22px; }
+  .nb-total { display: block; flex: 1; min-width: 0; }
+  .nb-total-t { font-size: 13.5px; font-weight: 700; }
+  .nb-total-s { font-size: 12.5px; color: var(--muted); }
+  .nb-total-p { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+  .nb-cancel { display: inline-flex; }
+}
 /* @section:uslugi-raspisanie */
+/* Экраны «Услуги и цены» и «Расписание». Шаг цены и число постов меняются
+   ссылками (?price=, ?posts=) — без них пришлось бы заводить клиентский
+   компонент; .money и .stepper описаны для button, поэтому вид повторяем. */
+.money a, .stepper a { flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; transition: transform .12s, background .15s; }
+.money a { width: 40px; height: 40px; border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); font-size: 20px; }
+.money a:active { transform: scale(.9); }
+.stepper a { width: 34px; height: 34px; border-radius: var(--radius-pill); background: #fff; box-shadow: var(--shadow-sm); font-size: 18px; }
+.stepper a:active { transform: scale(.88); }
+
+/* Заголовок карточки настройки и пояснение под ним. */
+.card-t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.card-s { font-size: 11.5px; color: var(--muted); margin-top: 4px; text-wrap: pretty; }
+/* Подпись над блоком управления внутри карточки: шаг сверху — от неё. */
+.set-lab { font-size: 13.5px; font-weight: 600; margin-top: 16px; }
+.set-lab + * { margin-top: 8px; }
+.card-t + .split { margin-top: 14px; }
+.card-s + .seg { margin-top: 12px; }
+/* Поля предоплаты — в строку: они короткие и читаются парой. */
+.flds { display: flex; gap: 8px; margin-top: 12px; }
+.flds > .fld { flex: 1; min-width: 0; }
+
+/* Разовые выходные: чип с крестиком — форма, поэтому она не участвует
+   в раскладке, а поле даты остаётся строкой с кнопкой. */
+.days-off { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.off-day { display: contents; }
+.days-off button span { opacity: .6; }
+.day-add { display: inline-flex; align-items: center; gap: 6px; }
+.day-add input { min-height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--radius-pill); background: #fff; font-size: 12px; }
+
+/* Подпись под списком дней — внутри карточки, без полей .hint. */
+.sched-note { font-size: 11.5px; color: var(--muted); padding: 10px 0; text-wrap: pretty; }
+/* День недели: буква в тесной строке телефона, полное название на вебе. */
+.d-web { display: none; }
+
+/* Тело шторки правки: шаг между блоками крупнее общего .stack. */
+.sheet-stack { display: flex; flex-direction: column; gap: 14px; }
+/* Чипы длительности стоят в шторке: там не прокрутка, а перенос по строкам. */
+.chips-wrap { margin: 0; padding: 0; overflow: visible; flex-wrap: wrap; }
+/* Строка с переключателем — плашкой, чтобы отделиться от чипов над ней. */
+.sw-row { background: var(--bg-2); border-radius: 14px; padding: 12px 14px; }
+/* Колёса «начало» и «конец» — рядом, подписи берём у .fld. */
+.wheels { display: flex; gap: 10px; }
+.wheels > .fld { flex: 1; min-width: 0; }
+
+/* Кнопка витрины под списком услуг — во всю ширину и белая. */
+.svc-open { width: 100%; min-height: 48px; border-radius: 14px; background: #fff; }
+
+@media (max-width: 880px) {
+  /* Сетка услуг на телефоне — обычная колонка с общим шагом. */
+  .svc-grid { display: flex; flex-direction: column; gap: 10px; }
+}
+
+@media (min-width: 881px) {
+  .stepper a { border-radius: var(--radius); border: 1px solid var(--line-2); box-shadow: none; font-size: 17px; }
+  .stepper a:hover { background: var(--bg-2); }
+  .card-t { font-size: 16px; letter-spacing: -.015em; }
+  .card-s { font-size: 12.5px; }
+  .set-lab { margin-top: 18px; }
+  .card-t + .split { margin-top: 16px; }
+  .card-s + .seg { margin-top: 14px; }
+  .flds { gap: 10px; margin-top: 14px; }
+  .days-off { gap: 8px; }
+  .sched-note { font-size: 12.5px; padding: 12px 0; }
+  .d-touch { display: none; }
+  .d-web { display: inline; }
+  /* Подпись и кнопка витрины — только на телефоне: на вебе то же самое
+     стоит в заголовке раздела и в подвале боковой навигации. */
+  .svc-note, .svc-open { display: none; }
+  /* .svc-grid несёт свои 16px сверху, а .stack добавляет ещё 12 — гасим
+     разницу, иначе заголовок отрывается от карточек. */
+  .stack > .svc-grid { margin-top: 4px; }
+  /* Сохранение расписания на вебе — обычная кнопка под карточками, а не
+     красная полоса во всю доску, как на телефоне. */
+  .sched-save .aui-btn--primary { flex: none; }
+}
 /* @section:klienty */
+/* Клиенты, карточка клиента, лента уведомлений и «Ещё» — четыре экрана из
+   одних и тех же строк списка; ниже только то, чего в общих классах нет. */
+
+/* Поиск и чипы на телефоне стоят над списком; на вебе поиск живёт в верхней
+   полосе, а чипы — справа в заголовке раздела. */
+.cli-ctl { display: flex; flex-direction: column; gap: 10px; }
+/* Строка клиента крупнее обычной: имя — то, по чему её ищут глазами. */
+.cli .ava { width: 42px; height: 42px; font-size: 14px; }
+.cli .row-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.cli-tail { flex: none; text-align: right; }
+.cli-n { font-size: 12px; color: var(--muted); }
+.cli-at { font-size: 11.5px; color: var(--muted-2); }
+/* Отменённая запись в истории — вместо суммы статус: денег по ней не было. */
+.hist .s-off { color: var(--muted-2); font-weight: 600; }
+
+/* Группа ленты: заголовок дня и карточки под ним теснее общего шага. */
+.feed-g { display: flex; flex-direction: column; gap: 8px; }
+.feed-g .eyebrow { padding: 8px 4px 0; }
+.notif-actions { display: flex; gap: 8px; }
+/* Кнопка внутри формы: без display:contents флекс не видит её шириной. */
+.notif-actions form { display: contents; }
+.notif-actions .aui-btn { min-height: 40px; }
+
+/* «Ещё»: строка меню с квадратом-иконкой и шевроном справа. */
+.mrow { padding: 14px; }
+.mrow .sq { width: 36px; height: 36px; border-radius: 11px; }
+.mrow .row-t { font-size: 14.5px; }
+.mrow .chev { flex: none; display: inline-flex; color: var(--muted-2); }
+
+/* Вход — страница без каркаса приложения: карточка по центру экрана. */
+.gate { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.gate .card { width: 100%; max-width: 420px; }
+.gate .hint { margin-top: 4px; }
+
+@media (max-width: 880px) {
+  /* Таблица — только веб: на телефоне тот же список рисуют строки .row. */
+  .table { display: none; }
+  /* Время и кнопки уходят под текст: время — по его левому краю (квадрат 36
+     плюс отступ 12), кнопки во всю ширину карточки. */
+  .notif { flex-wrap: wrap; row-gap: 0; }
+  .notif-at { width: 100%; padding-left: 48px; }
+  .notif-actions { width: 100%; margin-top: 12px; }
+  .notif-actions .aui-btn { flex: 1; }
+}
+
+@media (min-width: 881px) {
+  .cli-ctl, .cli-list { display: none; }
+  /* Лента — колонка в 780px: строка во весь экран уже не читается. */
+  .page-feed { max-width: 780px; }
+  .notif-actions { flex: none; }
+  .notif-actions .aui-btn { min-height: 34px; }
+  .mrow { padding: 14px 16px; }
+  /* Карточки клиента в макете веба нет: колонку сужаем, а заголовки секций
+     возвращаем — без них машины и история сливаются в одну стопку. */
+  .page-card { max-width: 720px; }
+  .page-card .sect { display: flex; padding: 6px 0 0; }
+}
+
+/* ─────────── Сведение экранов ─────────── */
+@media (max-width: 880px) {
+  /* Сетка дня за ящиком записи — только веб: на телефоне запись открывается
+     своим экраном, показывать под ним ещё и таймлайн незачем. */
+  .behind, .behind-scrim { display: none; }
+}
+
+@media (min-width: 881px) {
+  /* Ящик записи стоит над сеткой дня, как в макете: сетку видно, соседнюю
+     запись можно открыть, не возвращаясь назад. */
+  .behind-scrim { top: var(--topbar-h); }
+  .detail {
+    position: fixed; right: 0; top: var(--topbar-h); bottom: 0; z-index: 21;
+    margin: 0; min-height: 0;
+  }
+  /* Сводка смены и «Ещё» — не доска: во всю ширину они рассыпаются. */
+  .page:not(.board) { max-width: 1000px; }
+  /* На широком экране главная кнопка карточки не растягивается на всю строку:
+     кнопка в половину экрана читается как ошибка вёрстки. В правой колонке
+     места мало — там растяжка остаётся. */
+  .bk-actions { justify-content: flex-start; }
+  .bk-actions .aui-btn--primary { flex: 0 0 auto; }
+  .rail .bk-actions .aui-btn--primary { flex: 1; }
+}

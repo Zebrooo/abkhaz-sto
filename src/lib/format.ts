@@ -99,6 +99,20 @@ export function shortName(name: string): string {
   return `${parts[0]} ${surname[0]}.`;
 }
 
+/**
+ * «+7 940 921-14-08» — телефон, каким его читают вслух. В базе он лежит в
+ * E.164 (normalizePhone), а сплошные одиннадцать цифр глазом не разобрать.
+ * Чужой формат не ломаем: отдаём как есть.
+ */
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const d = phone.replace(/\D+/g, "");
+  if (d.length === 11 && d.startsWith("7")) {
+    return `+7 ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9, 11)}`;
+  }
+  return phone;
+}
+
 /** Дата YYYY-MM-DD, сдвинутая на n дней. */
 export function addDays(day: string, n: number): string {
   const d = noon(day);

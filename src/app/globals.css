@@ -1243,6 +1243,199 @@ svg { display: block; }
 /* @section:dengi-chat-zametki */
 /* «Деньги» хозяина, чат, заметки о клиентах. */
 
+/* ── Деньги ── */
+/* Сегмент периода на телефоне стоит первым в колонке; на вебе он же —
+   в хвосте заголовка раздела, и колоночная копия прячется. */
+.dash-seg-touch { display: block; }
+/* Тёмная карточка выручки. Цвета текста на тёмном — те же, что в макете
+   (dark-text-2/3 сайта); в общих токенах их нет, поэтому живут здесь, на
+   единственной тёмной карточке приложения. */
+.dark-card {
+  --dark-text-2: #a3aab6; --dark-text-3: #9a9fa8;
+  background: var(--ink); color: #fff; border-radius: 18px; padding: 18px;
+}
+.dk-eyebrow { color: var(--dark-text-3); }
+.dk-row { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.dk-big { font-size: 32px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dk-delta { font-size: 13px; font-weight: 700; color: var(--green); }
+/* Падение — красным: зелёный минус читается как рост. */
+.dk-delta.is-down { color: var(--accent); }
+.dk-tiles { margin-top: 16px; }
+.dark-card .tile { background: rgba(255, 255, 255, .08); }
+.dark-card .tile-k { color: var(--dark-text-2); }
+/* Плитка «Записей» — только на вебе: на телефоне три плитки не влезают. */
+.tile-web { display: none; }
+
+.conv-head { display: flex; align-items: center; gap: 8px; }
+.conv-t { font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+.conv-n { margin-left: auto; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.conv-s { font-size: 12.5px; color: var(--muted); margin-top: 4px; text-wrap: pretty; }
+.conv-bar { height: 8px; margin-top: 12px; }
+/* Полоса конверсии и полосы долей: ширина из --k (0…1), как столбики недели. */
+.conv-bar > i { width: calc(var(--k, 0) * 100%); }
+
+/* Списки мастеров и услуг: строки внутри карточки с тесным вертикальным
+   отступом, как в макете (6px 16px). */
+.dash-list { padding: 6px 16px; }
+.dash-none { padding: 12px 0; font-size: 13px; color: var(--muted); text-wrap: pretty; }
+.mline, .sline { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.mline:last-child, .sline:last-child { border-bottom: 0; }
+.mline .ava { width: 36px; height: 36px; font-size: 12.5px; }
+.mline-n { font-size: 14px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mbar { height: 5px; border-radius: var(--radius-pill); background: var(--bg-2); margin-top: 6px; overflow: hidden; }
+.mbar > i {
+  display: block; height: 100%; border-radius: var(--radius-pill); background: var(--warm);
+  width: calc(var(--k, 0) * 100%); transform-origin: left; animation: barGrow .5s var(--ease-out);
+}
+/* Лидер — акцентом, остальные тёплым: видно, кто сделал кассу. */
+.mline.is-top .mbar > i { background: var(--accent); }
+.mline-tail { flex: none; text-align: right; }
+.mline-m, .sline-m { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mline-j, .sline-c { font-size: 11.5px; color: var(--muted); }
+.sline-t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-top, .dash-cols { display: contents; }
+
+/* ── Чат ── */
+/* Список диалогов: строка крупнее обычной — имя и последняя фраза. */
+.chat-row { padding: 13px 14px; }
+.chat-row .ava { width: 46px; height: 46px; font-size: 15px; }
+.chat-top { display: flex; align-items: center; gap: 6px; }
+.chat-n { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-at { margin-left: auto; flex: none; font-size: 11.5px; color: var(--muted-2); }
+.chat-bot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.chat-last { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-unread {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* Правая панель, шапка треда и колонка диалогов рядом с перепиской — веб. */
+.chat-pane-empty, .thread-head, .thread-page .chat-list { display: none; }
+.thread-body { display: flex; flex-direction: column; gap: 10px; }
+.thread-bk { display: flex; align-items: center; gap: 10px; padding: 12px 14px; transition: transform .12s; }
+.thread-bk:active { transform: scale(.99); }
+.thread-bk-t { font-size: 13px; font-weight: 600; }
+.thread-bk-s { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msgs { display: flex; flex-direction: column; gap: 8px; }
+.msg { display: flex; justify-content: flex-start; animation: fadeSlide .28s var(--ease-out) both; }
+.msg.mine { justify-content: flex-end; }
+.bubble {
+  max-width: 80%; padding: 9px 13px 7px; border-radius: 16px 16px 16px 5px;
+  background: #fff; border: .75px solid var(--m-hair); box-shadow: var(--shadow-sm);
+}
+.msg.mine .bubble { border-radius: 16px 16px 5px 16px; background: var(--warm); border: 1px solid #f6dfd8; }
+.bubble-t { font-size: 14px; line-height: 1.35; text-wrap: pretty; overflow-wrap: anywhere; }
+.bubble-at { font-size: 10.5px; color: var(--muted-2); text-align: right; margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* Подвал треда липнет к низу над вкладками — та же геометрия, что у
+   .sticky-actions; градиент прячет пузыри, уходящие под него. */
+.thread-foot {
+  position: sticky; bottom: 0; z-index: 2;
+  margin: 6px -12px calc(-1 * (var(--tabbar-h) + 30px)); padding: 10px 12px calc(var(--tabbar-h) + 14px);
+  background: linear-gradient(to bottom, rgba(243, 242, 239, 0), var(--m-bg) 22%);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.thread-foot .quick { margin: 0; padding: 0 0 2px; }
+.chat-form { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input {
+  flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; font-size: 14px;
+  background: #fff; border: .75px solid var(--m-hair); border-radius: 22px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.chat-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.chat-input::placeholder { color: var(--muted-2); }
+.chat-send {
+  flex: none; width: 46px; height: 46px; border-radius: var(--radius-pill);
+  background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-accent); transition: transform .12s, background .15s;
+}
+.chat-send:active { transform: scale(.9); }
+.chat-send-t { display: none; }
+.nosend { display: flex; flex-direction: column; gap: 10px; background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 14px; }
+.nosend .note-s { margin: 0; }
+.nosend-q { font-size: 13.5px; color: var(--ink-2); text-wrap: pretty; }
+.nosend .aui-btn { min-height: 44px; }
+
+/* ── Заметка о клиенте ── */
+.note-card { display: block; transition: transform .12s; }
+.note-card:active { transform: scale(.99); }
+.note-txt { font-size: 14px; margin-top: 6px; text-wrap: pretty; white-space: pre-line; }
+.note-empty { color: var(--muted); }
+.note-by { font-size: 11.5px; color: var(--muted-2); margin-top: 6px; }
+
+@media (min-width: 881px) {
+  /* Деньги: сегмент в заголовке, сверху тёмная карточка и конверсия рядом,
+     ниже мастера и услуги двумя колонками. Заголовки секций — внутри
+     карточек, как в макете: снаружи на вебе их прячет общий .sect. */
+  .dash-seg-touch { display: none; }
+  .dash-seg > * { flex: none; }
+  .dash-top { display: flex; gap: 12px; align-items: stretch; }
+  .dash-top .dark-card { flex: 1; min-width: 0; border-radius: var(--radius-lg); padding: 22px 24px; }
+  .dash-top .conv { flex: none; width: 340px; }
+  .dk-row { gap: 12px; margin-top: 10px; }
+  .dk-big { font-size: 38px; letter-spacing: -.035em; }
+  .dk-delta { font-size: 14px; }
+  .dk-tiles { margin-top: 18px; gap: 10px; }
+  .dark-card .tile { padding: 12px 14px; }
+  .dark-card .tile-v { font-size: 17px; }
+  .tile-web { display: block; }
+  .conv-n { font-size: 14px; }
+  .conv-bar { margin-top: 14px; }
+  .dash-cols { display: flex; gap: 12px; align-items: flex-start; }
+  .dash-block {
+    flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-lg); padding: 8px 20px; box-shadow: var(--shadow-sm);
+  }
+  .dash-block .sect { display: flex; font-size: 15px; font-weight: 700; letter-spacing: -.015em; padding: 14px 0 8px; }
+  .dash-block .card { border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+  .mline, .sline { gap: 14px; padding: 13px 0; border-bottom: 0; border-top: 1px solid var(--line); }
+  .mline .ava { width: 38px; height: 38px; font-size: 13px; }
+  .mbar { margin-top: 7px; }
+  .mline-m, .sline-m { font-size: 15px; }
+
+  /* Чат: две панели во весь рабочий экран — колонка диалогов слева,
+     переписка справа. Подсказка под списком на вебе не нужна. */
+  .chat-page { padding: 0; max-width: none; display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h)); }
+  .chat-hint { display: none; }
+  .chat-wrap { display: flex; flex: 1; min-height: 0; }
+  .chat-list, .thread-page .chat-list {
+    display: block; flex: none; width: 300px; border: 0; border-right: 1px solid var(--line);
+    border-radius: 0; box-shadow: none; background: #fff; overflow-y: auto;
+  }
+  .chat-row { padding: 14px 16px; }
+  .chat-row:hover { background: var(--bg-2); }
+  .chat-row[aria-current="page"] { background: var(--warm); }
+  .chat-row .ava { width: 40px; height: 40px; font-size: 13px; }
+  .chat-n { font-size: 14px; }
+  .chat-last { font-size: 12.5px; }
+  .chat-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-3); }
+  .chat-pane-empty { display: flex; align-items: center; justify-content: center; }
+  .thread-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--line); }
+  .thread-n { font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+  .thread-s { font-size: 12px; color: var(--muted); }
+  /* Карточка записи над пузырями — телефон: на вебе её заменяет шапка. */
+  .thread-bk { display: none; }
+  .thread-body { flex: 1; overflow-y: auto; padding: 20px 24px; gap: 10px; }
+  .bubble { max-width: 62%; padding: 10px 14px 8px; border: 1px solid var(--line); }
+  .bubble-t { line-height: 1.4; }
+  .bubble-at { font-size: 11px; }
+  .thread-foot {
+    position: static; margin: 0; padding: 14px 24px 18px; background: #fff; border-top: 1px solid var(--line); gap: 10px;
+  }
+  .thread-foot .quick { flex-wrap: wrap; padding: 0; }
+  .thread-foot .chip { min-height: 32px; padding: 0 12px; font-size: 12.5px; background: var(--bg-2); border: 0; }
+  .thread-foot .chip:hover { background: var(--warm); color: var(--accent); }
+  .chat-form { gap: 10px; align-items: center; }
+  .chat-input { padding: 10px 16px; border: 1px solid var(--line-2); border-radius: var(--radius-pill); }
+  .chat-send { width: auto; min-height: 46px; height: auto; padding: 0 22px; box-shadow: none; font-weight: 700; font-size: 14px; }
+  .chat-send:hover { background: var(--accent-dark); }
+  .chat-send:active { transform: translateY(1px); }
+  .chat-send-i { display: none; }
+  .chat-send-t { display: inline; }
+  .nosend { flex-direction: row; align-items: center; border: 0; box-shadow: none; padding: 0; }
+  .nosend .note-s { flex: 1; }
+  .nosend .aui-btn { flex: none; }
+}
+
 
 
 /* @section:bufer */

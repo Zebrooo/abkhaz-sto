@@ -73,6 +73,17 @@ describe("freeSlots", () => {
     expect(freeSlots({ schedule, day: "2026-09-21", durationMin: 0, busy: [], now: early })).toEqual([]);
     expect(freeSlots({ schedule, day: "2026-09-21", durationMin: 2.5, busy: [], now: early })).toEqual([]);
   });
+
+  it("шаг 0 или постов 0 в расписании — окон нет, а не вечный цикл", () => {
+    expect(freeSlots({ schedule: { ...schedule, stepMin: 0 }, day: "2026-09-21", durationMin: 60, busy: [], now: early })).toEqual([]);
+    expect(freeSlots({ schedule: { ...schedule, posts: 0 }, day: "2026-09-21", durationMin: 60, busy: [], now: early })).toEqual([]);
+  });
+
+  it("пересекающиеся и неупорядоченные интервалы — окна по времени и без повторов", () => {
+    const messy: StoSchedule = { ...schedule, days: { ...schedule.days, mon: [{ from: "11:00", to: "13:00" }, { from: "09:00", to: "12:00" }] } };
+    const starts = freeSlots({ schedule: messy, day: "2026-09-21", durationMin: 60, busy: [], now: early }).map(hhmm);
+    expect(starts).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"]);
+  });
 });
 
 describe("isSlotFree", () => {
@@ -82,5 +93,18 @@ describe("isSlotFree", () => {
     expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "09:00"), durationMin: 60, busy, postNo: 1 })).toEqual({ ok: false, reason: "taken" });
     expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "12:30"), durationMin: 60, busy })).toEqual({ ok: false, reason: "closed" });
     expect(isSlotFree({ schedule, startsAt: localTime("2026-09-22", "10:00"), durationMin: 60, busy })).toEqual({ ok: false, reason: "closed" });
+  });
+
+  it("пост, которого у сервиса нет, — no_post; с «сейчас» прошедшее и ближайший час — past", () => {
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy: [], postNo: 99 })).toEqual({ ok: false, reason: "no_post" });
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy: [], postNo: 0 })).toEqual({ ok: false, reason: "no_post" });
+    // Постов в расписании нет — «постов нет», а не «занято» (как freeSlots: пусто).
+    expect(isSlotFree({ schedule: { ...schedule, posts: 0 }, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy: [] })).toEqual({ ok: false, reason: "no_post" });
+    const now = new Date("2026-09-21T09:30:00+03:00");
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy: [], now })).toEqual({ ok: false, reason: "past" });
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:30"), durationMin: 60, busy: [], now })).toEqual({ ok: true, postNo: 1 });
+    // Без «сейчас» прошедшее не отсекается — так переносит задним числом приложение.
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy: [] })).toEqual({ ok: true, postNo: 1 });
+    expect(isSlotFree({ schedule, startsAt: localTime("2026-09-21", "10:00"), durationMin: 0, busy: [] })).toEqual({ ok: false, reason: "closed" });
   });
 });

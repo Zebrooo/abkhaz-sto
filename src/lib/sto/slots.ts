@@ -1,10 +1,13 @@
-// Свободные окна записи: расписание × посты × длительность × занятые записи.
+// Свободные окна записи: расписание × посты × длительность × занятые записи (#1267).
 //
-// Одна чистая функция без базы — её же (тем же текстом) должен получить сайт
-// для виджета записи (#1267), чтобы календарь сервиса и виджет показывали
-// одни и те же окна. Пояс один на всю Абхазию — Europe/Moscow (UTC+3, без
-// перевода часов), поэтому «09:00 в расписании» превращается в момент
-// времени простым смещением, без библиотек зон.
+// Одна чистая функция без базы. Это КОПИЯ файла сайта (djonua/abkhaz-auto,
+// src/lib/sto/slots.ts): виджет записи на сайте и календарь сервиса обязаны
+// показывать одни и те же окна, поэтому правки делаются на сайте и
+// переносятся сюда тем же текстом (кроме этой шапки).
+//
+// Пояс один на всю Абхазию — Europe/Moscow (UTC+3, без перевода часов),
+// поэтому «09:00 в расписании» превращается в момент времени простым
+// смещением, без библиотек зон.
 import type { StoSchedule, StoDay } from "./schedule";
 import { STO_DAYS, toMinutes } from "./schedule";
 
@@ -63,6 +66,11 @@ export function freeSlots(input: {
   const { schedule, day, durationMin, busy, now } = input;
   const leadMin = input.leadMin ?? DEFAULT_LEAD_MIN;
   if (!Number.isInteger(durationMin) || durationMin <= 0) return [];
+  // Расписание из базы проходит normalizeStoSchedule (шаг из STO_STEPS_MIN,
+  // посты 1…20), но цикл по сетке с шагом 0 — вечный, и вешает он весь
+  // процесс, а не одну вкладку; одна строка страхует и копию в приложении.
+  if (!Number.isInteger(schedule.stepMin) || schedule.stepMin <= 0) return [];
+  if (!Number.isInteger(schedule.posts) || schedule.posts <= 0) return [];
   if (schedule.daysOff.includes(day)) return [];
   const intervals = schedule.days[dayOfWeek(day)] ?? [];
   const earliest = new Date(now.getTime() + leadMin * 60_000);
@@ -78,7 +86,10 @@ export function freeSlots(input: {
       if (postNo !== null) out.push({ startsAt, endsAt, postNo });
     }
   }
-  return out;
+  // По времени и без повторов: нормализованные интервалы дня не пересекаются,
+  // но функция чистая и расписание может прийти откуда угодно.
+  out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return out.filter((s, i) => i === 0 || s.startsAt.getTime() !== out[i - 1].startsAt.getTime());
 }
 
 /** Первый пост без пересечений с занятыми интервалами; null — все заняты. */
@@ -90,15 +101,32 @@ export function firstFreePost(posts: number, busy: readonly BusyInterval[], star
   return null;
 }
 
-/** Окно ещё свободно? Для повторной проверки перед записью и для переноса. */
+export type SlotCheck =
+  | { ok: true; postNo: number }
+  /** closed — вне часов работы или выходной; past — раньше «сейчас» + leadMin; no_post — такого поста у сервиса нет; taken — занято. */
+  | { ok: false; reason: "closed" | "past" | "no_post" | "taken" };
+
+/**
+ * Окно ещё свободно? Последний рубеж перед записью и переносом, поэтому
+ * проверяет всё то же, что freeSlots: часы работы и выходные, прошедшее и
+ * ближайшее время (если передан now), существование поста, пересечения.
+ */
 export function isSlotFree(input: {
   schedule: StoSchedule;
   startsAt: Date;
   durationMin: number;
   busy: readonly BusyInterval[];
   postNo?: number;
-}): { ok: true; postNo: number } | { ok: false; reason: "closed" | "taken" } {
+  /** «Сейчас» — без него прошедшее время не отсекается (перенос задним числом из приложения). */
+  now?: Date;
+  leadMin?: number;
+}): SlotCheck {
   const { schedule, startsAt, durationMin, busy } = input;
+  if (!Number.isInteger(durationMin) || durationMin <= 0) return { ok: false, reason: "closed" };
+  if (input.now && startsAt < new Date(input.now.getTime() + (input.leadMin ?? DEFAULT_LEAD_MIN) * 60_000)) {
+    return { ok: false, reason: "past" };
+  }
+  if (!Number.isInteger(schedule.posts) || schedule.posts <= 0) return { ok: false, reason: "no_post" };
   const day = localDay(startsAt);
   if (schedule.daysOff.includes(day)) return { ok: false, reason: "closed" };
   const startMin = toMinutes(localHHMM(startsAt));
@@ -106,6 +134,7 @@ export function isSlotFree(input: {
   if (!inside) return { ok: false, reason: "closed" };
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   if (input.postNo != null) {
+    if (!Number.isInteger(input.postNo) || input.postNo < 1 || input.postNo > schedule.posts) return { ok: false, reason: "no_post" };
     const taken = busy.some(b => b.postNo === input.postNo && overlaps(startsAt, endsAt, b.startsAt, b.endsAt));
     return taken ? { ok: false, reason: "taken" } : { ok: true, postNo: input.postNo };
   }

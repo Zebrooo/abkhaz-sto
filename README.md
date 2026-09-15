@@ -1,4 +1,4 @@
-# Абхаз Авто · Сервис
+# Абхаз-Работа
 
 Приложение для автосервисов площадки [Абхаз Авто](https://abkhaz-auto.ru):
 записи клиентов, календарь по постам, расписание и предоплата, прайс.
@@ -68,48 +68,56 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ## Переменные окружения
 
 См. `.env.example`. `NEXT_PUBLIC_*` запекаются в бандл при сборке — прокинуты
-через `Dockerfile`, `docker-compose.yml` и `deploy.yml`; домен куки без
+через `Dockerfile`, `deploy/<контур>/docker-compose.yml` и `deploy.yml`; домен куки без
 значения валит сборку нарочно.
 
 ## Деплой
 
-Actions → Deploy (владелец). Секреты и переменные репозитория:
-`NODE_AUTH_TOKEN`, `GHCR_TOKEN` (при необходимости),
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`; `vars`: `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`,
-`NEXT_PUBLIC_COOKIE_DOMAIN`. На сервере 170: `/data/abkhaz-sto` с
-`docker-compose.yml` и `/etc/abkhaz-sto/.env.production` (сервисный ключ,
-`SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`, `STO_TICKET_*`), раннер с
-меткой `deploy-prod`, запись `sto.abkhaz-auto.ru` в DNS.
+Actions → Deploy → Run workflow, выбрать контур (`test` или `prod`). Один и тот
+же workflow катит оба: образ собирается на раннере с меткой `ci`, пушится в
+ghcr, затем раннер с меткой `deploy-test` (185) или `deploy-prod` (170) его
+подтягивает и перезапускает контейнер. Очередь — своя на контур, выкаты в
+разные контуры друг друга не ждут.
+
+Публичные build-аргументы лежат в `deploy/<контур>/build.env` в репозитории и
+в `vars` не дублируются: они и так уезжают в браузер, а в git видны вместе с
+кодом. Секреты — в Environment-секретах контуров `test` и `prod`:
+`NODE_AUTH_TOKEN` (GitHub Packages), `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`,
+при необходимости `GHCR_TOKEN`.
+
+Здоровье после выката снимается с самого контейнера
+(`docker inspect … .State.Health.Status`), а не запросом с хоста: наружу портов
+нет, приложение доступно только через сеть Traefik.
 
 ## Тест-стенд (185)
 
-Хост `sto.abkhaz-auto.apsoftgroup.ru` за Traefik тест-сайта; куки общие с
+Хост `rabota.abkhaz-auto.apsoftgroup.ru` за Traefik тест-сайта; куки общие с
 `abkhaz-auto.apsoftgroup.ru` (домен `.abkhaz-auto.apsoftgroup.ru`, см.
-`deploy/test/build.env` сайта). Раннеров у репозитория пока нет, поэтому образ собирается на самом
+`deploy/test/build.env` сайта). Штатный путь — Actions → Deploy с контуром
+`test`. Запасной путь, если конвейер недоступен, — собрать образ прямо на
 сервере из архива исходников:
 
 ```bash
 git archive --format=tar HEAD | ssh -p 22222 abkhaz-dev@185.228.132.60 \
-  'mkdir -p ~/abkhaz-sto/src && tar -x -C ~/abkhaz-sto/src'
-ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-sto/src && set -a && . deploy/test/build.env && set +a \
-  && docker build --secret id=npmrc,src=$HOME/abkhaz-sto/npmrc \
+  'mkdir -p ~/abkhaz-rabota/src && tar -x -C ~/abkhaz-rabota/src'
+ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-rabota/src && set -a && . deploy/test/build.env && set +a \
+  && docker build --secret id=npmrc,src=$HOME/abkhaz-rabota/npmrc \
      --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY \
      --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN \
-     --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY -t abkhaz-sto:test . \
+     --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY -t abkhaz-rabota:test . \
   && docker compose -f deploy/test/docker-compose.yml up -d'
 ```
 
-`~/abkhaz-sto/npmrc` (права 600) — одна строка
+`~/abkhaz-rabota/npmrc` (права 600) — одна строка
 `//npm.pkg.github.com/:_authToken=<токен GitHub Packages>`, монтируется
 секретом сборки и в образ не попадает; `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`
-— из окружения сессии, тот же, что в `~/abkhaz-sto/.env.production`. Секреты приложения —
-`~/abkhaz-sto/.env.production`: сервисный ключ тест-Supabase,
+— из окружения сессии, тот же, что в `~/abkhaz-rabota/.env.production`. Секреты приложения —
+`~/abkhaz-rabota/.env.production`: сервисный ключ тест-Supabase,
 `SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`, `STO_TICKET_*`.
 
-## Прод (170) — sto.abkhaz-auto.ru
+## Прод (170) — rabota.abkhaz-auto.ru
 
-Хост `sto.abkhaz-auto.ru` за боевым Traefik; DNS-запись на `170.168.8.16` уже
+Хост `rabota.abkhaz-auto.ru` за боевым Traefik; DNS-запись на `170.168.8.16` уже
 есть. Кука сессии выдаётся сайтом на `.abkhaz-auto.ru` (`abkhaz-auto`,
 `deploy/prod/build.env`), поэтому на поддомене вход работает сам: отдельного
 экрана ввода кода здесь нет и не будет.
@@ -121,7 +129,7 @@ ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-sto/src && set -a && . deplo
    читает записи. Миграции применяет выкат сайта (Actions → Deploy → prod,
    blue-green применяет их до переключения трафика) — катит владелец.
    Руками в боевую базу не применять: это то же нарушение, что прямой пуш.
-2. **Секреты.** `/data/abkhaz-sto/.env.production` (права 600): сервисный ключ
+2. **Секреты.** `/data/abkhaz-rabota/.env.production` (права 600): сервисный ключ
    боевого Supabase, `SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`,
    `STO_TICKET_SRC`/`STO_TICKET_DST`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`.
 3. **Сеть Supabase.** Сверить имя (`docker network ls | grep supabase`) и при
@@ -129,18 +137,18 @@ ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-sto/src && set -a && . deplo
 4. **Сборка и запуск** (раннеров у репозитория нет — собираем на сервере):
 
 ```bash
-git archive --format=tar HEAD | ssh <прод> 'mkdir -p /data/abkhaz-sto/src && tar -x -C /data/abkhaz-sto/src'
-ssh <прод> 'cd /data/abkhaz-sto/src && set -a && . deploy/prod/build.env && set +a \
-  && export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$(grep -m1 "^NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=" /data/abkhaz-sto/.env.production | cut -d= -f2-) \
-  && docker build --secret id=npmrc,src=/data/abkhaz-sto/npmrc \
+git archive --format=tar HEAD | ssh <прод> 'mkdir -p /data/abkhaz-rabota/src && tar -x -C /data/abkhaz-rabota/src'
+ssh <прод> 'cd /data/abkhaz-rabota/src && set -a && . deploy/prod/build.env && set +a \
+  && export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$(grep -m1 "^NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=" /data/abkhaz-rabota/.env.production | cut -d= -f2-) \
+  && docker build --secret id=npmrc,src=/data/abkhaz-rabota/npmrc \
      --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY \
      --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN \
-     --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY -t abkhaz-sto:prod . \
+     --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY -t abkhaz-rabota:prod . \
   && docker compose -f deploy/prod/docker-compose.yml up -d \
-  && shred -u /data/abkhaz-sto/npmrc'
+  && shred -u /data/abkhaz-rabota/npmrc'
 ```
 
-`/data/abkhaz-sto/npmrc` — одна строка
+`/data/abkhaz-rabota/npmrc` — одна строка
 `//npm.pkg.github.com/:_authToken=<токен GitHub Packages>`, права 600,
 монтируется секретом сборки, в образ не попадает, удаляется сразу после.
 

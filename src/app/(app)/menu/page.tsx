@@ -78,7 +78,7 @@ export default async function MorePage() {
             sub="abkhaz-auto.ru · рубрика «Автосервис»" external />
         </div>
 
-        <div className="foot-note">Абхаз Авто · Сервис · 1.0 · sto.abkhaz-auto.ru</div>
+        <div className="foot-note">Абхаз-Работа · 1.0 · rabota.abkhaz-auto.ru</div>
       </div>
     </>
   );

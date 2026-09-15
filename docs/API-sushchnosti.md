@@ -165,6 +165,8 @@ DefectPreset = { id, nodeKey, title, severity, work, price, durationMin, own, us
 InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, total }
 ```
 
+`POST /inspections/defects/update` принимает `photoIds` **полным списком**, а не добавкой: приложение читает текущие фото, дописывает новый id и шлёт все. Убрать кадр — тот же вызов без него.
+
 `POST /inspections/defects` принимает либо `presetId` (работа и цена приезжают
 из прайса), либо свою формулировку — `title`, `severity`, `work`, при
 необходимости `listingId`. Свою формулировку сайт **сохраняет в каталог узла**:

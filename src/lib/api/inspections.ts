@@ -161,7 +161,13 @@ export function addDefect(input: {
   return sitePost<Defect>("inspections/defects", input);
 }
 
-/** POST /api/sto/inspections/defects/update { …, defectId, severity?, note?, photoIds? } */
+/**
+ * POST /api/sto/inspections/defects/update { …, defectId, severity?, note?, photoIds? }
+ *
+ * photoIds — ПОЛНЫЙ список фото дефекта, а не добавка: приложение читает
+ * текущие, дописывает новый id и шлёт все. Так убрать кадр — тот же вызов
+ * без него, и второго маршрута не нужно.
+ */
 export function updateDefect(input: {
   shopId: number; actorUserId: string; defectId: number;
   severity?: Severity; note?: string | null; photoIds?: string[];

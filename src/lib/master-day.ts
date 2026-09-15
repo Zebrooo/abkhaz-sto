@@ -7,7 +7,7 @@ import "server-only";
 // Отказ сайта — не ошибка экрана: без привязок записи считаются по посту,
 // без справочника мастер остаётся без имени и поста, а не без экрана.
 import { cache } from "react";
-import { listBookings } from "@/lib/bookings";
+import { dayBookings } from "@/lib/bookings";
 import { fetchBookingMasters, fetchMasters, type BookingMaster, type StoMaster } from "@/lib/api/masters";
 import { listOr } from "@/lib/api/site-api";
 import type { ServiceContext } from "@/lib/context";
@@ -34,7 +34,7 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
   const to = localTime(addDays(day, 1), "00:00");
   const q = { shopId: ctx.shop.id, actorUserId: ctx.userId, from: from.toISOString(), to: to.toISOString() };
   const [rows, links, masters] = await Promise.all([
-    listBookings(ctx.shop.id, from, to),
+    dayBookings(ctx.shop.id, day),
     fetchBookingMasters(q),
     fetchMasters(ctx.shop.id, ctx.userId),
   ]);
@@ -56,7 +56,7 @@ export async function inspectHref(ctx: ServiceContext, day: string, now: Date): 
     const target = inspectTarget(mine, now);
     return target ? `/zapis/${target.id}/osmotr` : "/moi-raboty";
   }
-  const rows = await listBookings(ctx.shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const rows = await dayBookings(ctx.shop.id, day);
   const target = inspectTarget(rows.filter(isLive), now);
   return target ? `/zapis/${target.id}/osmotr` : "/segodnya";
 }

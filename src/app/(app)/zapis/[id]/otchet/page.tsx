@@ -123,10 +123,11 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   );
   // Ссылка «Записать на эту работу» ведёт в ручную запись с услугой прайса:
   // работа дефекта — название строки прайса, по нему её и находим. Связь
-  // пункта с записью (book-item) поставит сама ручная запись.
+  // пункта с записью (book-item) ставит createManualAction по этим параметрам
+  // и возвращает сюда — «Записан: …» появится у пункта.
   const services = await listServices(shop.id);
   const bookHref = (defectId: number, work: string) => {
-    const q = new URLSearchParams({ d: todayLocal(), fromInspection: String(r.inspectionId), defect: String(defectId) });
+    const q = new URLSearchParams({ d: todayLocal(), fromInspection: String(r.inspectionId), defect: String(defectId), fromBooking: String(b.id) });
     const svc = services.find(s => s.title === work);
     if (svc) q.set("s", String(svc.listingId));
     return `/kalendar/novaya?${q.toString()}`;

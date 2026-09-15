@@ -35,6 +35,9 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
   const { shop } = ctx;
   const pending = await countPending(shop.id);
   const res = await fetchMembers(shop.id, ctx.userId);
+  // not_found — сотрудников ещё не заводили, пусто честно. Любой другой отказ
+  // — сайт молчит, и пустой список выглядел бы как «всех уволили».
+  const siteErr = !res.ok && res.code !== "not_found" ? `Сайт пока не отдаёт сотрудников: ${res.error}` : "";
   let members = res.ok ? res.data : [];
   if (members.length === 0) {
     const user = await getServerUser();
@@ -63,7 +66,7 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
 
-        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
+        <Flash ok={pick(sp.ok)} err={pick(sp.err) || siteErr} />
 
         <p className="hint acc-note-top">Роль решает, что человек видит: мастер — свой пост и осмотры, админ — записи и клиентов, хозяин — деньги и настройки. Вход — по номеру телефона, как на сайте.</p>
 

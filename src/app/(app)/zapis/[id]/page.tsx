@@ -8,7 +8,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { StatusBadge } from "@/components/Status";
-import { countPending, getBooking, listBookings, recentBookings } from "@/lib/bookings";
+import { countPending, dayBookings, getBooking, recentBookings } from "@/lib/bookings";
 import { Timeline } from "@/components/Timeline";
 import { clientKey } from "@/lib/clients";
 import { count, formatPhone, formatRub, initials, minutesLabel, relativeAt, rub, timeRange } from "@/lib/format";
@@ -17,8 +17,7 @@ import { can } from "@/lib/access";
 import { fetchInspection } from "@/lib/api/inspections";
 import { requireSection } from "@/lib/context";
 import { countBySeverity, inspectionState, untouchedNodeKeys } from "@/lib/inspection";
-import { addDays } from "@/lib/format";
-import { localDay, localTime } from "@/lib/sto/slots";
+import { localDay } from "@/lib/sto/slots";
 import { canReschedule, shopTransitions, type StoTransition } from "@/lib/sto/transitions";
 import type { StoBookingRow, StoBookingStatus, StoPrepayStatus } from "@/lib/sto/types";
 
@@ -112,7 +111,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
   // За ящиком на вебе — сетка того же дня: запись видно в контексте смены,
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
-  const dayRows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const dayRows = await dayBookings(shop.id, day);
   const posts = shop.schedule?.posts ?? Math.max(1, ...dayRows.map(r => r.post_no));
 
   const act = pick(sp.do);

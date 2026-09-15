@@ -25,9 +25,12 @@ import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } fr
 import { isNodeKey } from "@/lib/inspection-nodes";
 import { listServices } from "@/lib/services";
 
-function back(path: string, q: Record<string, string | undefined>): never {
+function back(path: string, q: Record<string, string | string[] | undefined>): never {
   const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(q)) if (v) sp.set(k, v);
+  for (const [k, v] of Object.entries(q)) {
+    if (Array.isArray(v)) for (const x of v) sp.append(k, x);
+    else if (v) sp.set(k, v);
+  }
   const s = sp.toString();
   redirect(s ? `${path}?${s}` : path);
 }
@@ -104,6 +107,9 @@ export async function addDefectAction(fd: FormData) {
   if (!isNodeKey(nodeKey)) back(bare(ret), { d: dayOf(ret), err: "Неизвестный узел" });
   const photoIds = photoIdsFrom(fd.getAll("photo"));
   const base = { shopId: c.shop.id, actorUserId: c.userId, inspectionId, nodeKey, photoIds };
+  // Куда возвращаться при отказе: в ту же шторку, с тем же узлом и уже
+  // ушедшими кадрами — иначе три снимка из ямы пропали бы из-за опечатки.
+  const keep = { d: dayOf(ret), do: "preset", node: nodeKey, photo: photoIds };
 
   const presetId = int(fd, "presetId");
   let title: string;
@@ -115,7 +121,6 @@ export async function addDefectAction(fd: FormData) {
     title = str(fd, "title").slice(0, 200);
     const severity = str(fd, "severity");
     const work = str(fd, "work").slice(0, 200);
-    const keep = { d: dayOf(ret), do: "preset", node: nodeKey };
     if (!title) back(bare(ret), { ...keep, err: "Опишите дефект своими словами" });
     if (!isSeverity(severity)) back(bare(ret), { ...keep, err: "Выберите: внимание или критично" });
     if (!work) back(bare(ret), { ...keep, err: "Выберите работу" });
@@ -132,7 +137,7 @@ export async function addDefectAction(fd: FormData) {
     res = await addDefect({ ...base, title, severity, work, listingId: listing?.listingId ?? null });
   }
   revalidateInspection(bookingId);
-  if (!res.ok) back(bare(ret), { d: dayOf(ret), err: res.error });
+  if (!res.ok) back(bare(ret), { ...keep, err: res.error });
   back(bare(ret), { d: dayOf(ret), ok: `${res.data.title || title} — в отчёте` });
 }
 

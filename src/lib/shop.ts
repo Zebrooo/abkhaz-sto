@@ -78,8 +78,11 @@ export const myServiceShops = cache(async (): Promise<ServiceShop[]> => {
   const owned = ownedRows.map(r => toShop(r, true, null));
 
   // Сотрудник — только в чужих витринах: своя и так первая, и хозяином.
+  // Выключенный (уволенный) не получает витрину вовсе: записи приложение
+  // читает из общей базы напрямую, мимо сайта, и роль «мастер без поста»
+  // оставила бы ему все записи с телефонами клиентов. Для него сервиса нет.
   const ownedIds = new Set(owned.map(s => s.id));
-  const foreign = memberships.filter(m => !ownedIds.has(m.shopId));
+  const foreign = memberships.filter(m => m.active && !ownedIds.has(m.shopId));
   if (foreign.length === 0) return owned;
 
   // Витрина обязана быть одобренной и рубрики service — как и для владельца:

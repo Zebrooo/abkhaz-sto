@@ -16,6 +16,7 @@ import {
 } from "@/lib/sto/schedule";
 import type { StoTransition } from "@/lib/sto/transitions";
 import { normalizePhone } from "@/lib/phone";
+import { linkItemBooking } from "@/lib/api/reports";
 
 function back(path: string, q: Record<string, string | undefined>): never {
   const sp = new URLSearchParams();
@@ -95,7 +96,14 @@ export async function createManualAction(fd: FormData) {
   const postRaw = Number(str(fd, "postNo"));
   const postNo = Number.isInteger(postRaw) && postRaw > 0 ? postRaw : undefined;
   const hhmm = str(fd, "hhmm");
-  const keep = { d: day, s: String(listingId), post: postNo ? String(postNo) : undefined, t: hhmm || undefined };
+  // Пришли из отчёта — пункт сметы и запись-источник тянем через все ошибки,
+  // иначе повторная попытка потеряет связь.
+  const fromInspection = Number(str(fd, "fromInspection")), fromDefect = Number(str(fd, "defect")), fromBooking = Number(str(fd, "fromBooking"));
+  const fromReport = [fromInspection, fromDefect, fromBooking].every(n => Number.isInteger(n) && n > 0);
+  const keep = {
+    d: day, s: String(listingId), post: postNo ? String(postNo) : undefined, t: hhmm || undefined,
+    ...(fromReport ? { fromInspection: String(fromInspection), defect: String(fromDefect), fromBooking: String(fromBooking) } : {}),
+  };
   const ret = "/kalendar/novaya";
   if (!shop.schedule) back(ret, { ...keep, err: "Сначала задайте расписание" });
   const services = await listServices(shop.id);
@@ -113,6 +121,15 @@ export async function createManualAction(fd: FormData) {
   });
   revalidateBookings();
   if (!res.ok) back(ret, { ...keep, step: "1", err: res.error });
+  if (fromReport) {
+    // Запись уже есть; связь с пунктом сметы — на сайте. Не связалось — запись
+    // всё равно создана, и об этом честно в отчёте.
+    const link = await linkItemBooking({ shopId: shop.id, actorUserId: user.id, inspectionId: fromInspection, defectId: fromDefect, bookingId: res.id });
+    revalidatePath(`/zapis/${fromBooking}/otchet`);
+    back(`/zapis/${fromBooking}/otchet`, link.ok
+      ? { d: day, ok: `Записан: ${svc.title}, ${hhmm}` }
+      : { d: day, err: `Запись создана, но к пункту отчёта не привязалась: ${link.error}` });
+  }
   back("/segodnya", { d: day, ok: `Записан: ${svc.title}, ${hhmm}` });
 }
 

@@ -45,6 +45,19 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
     fetchMessages({ shopId: shop.id, actorUserId: ctx.userId, threadId: id, limit: LIMIT }),
     countPending(shop.id),
   ]);
+  // Сайт не ответил — это не «треда нет», а «сайт молчит»: 404 здесь соврал
+  // бы. Список на /chat в том же случае говорит словами — и мы говорим.
+  if (!threadsRes.ok && threadsRes.code !== "not_found") {
+    return (
+      <>
+        <ScreenHead title="Чат" back="/chat" unread={pending} />
+        <div className="page stack">
+          <Flash err={`Сайт пока не отдаёт чат: ${threadsRes.error}`} />
+          <Link className="aui-btn aui-btn--outline aui-btn--md" href="/chat">К диалогам</Link>
+        </div>
+      </>
+    );
+  }
   const threads = threadsRes.ok ? threadsRes.data : [];
   const thread = threads.find(t => t.id === id);
   if (!thread) notFound();

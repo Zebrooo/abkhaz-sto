@@ -5,12 +5,11 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { fetchMoney, isMoneyPeriod, MONEY_PERIOD_LABEL, MONEY_PERIODS, type MoneyPeriod, type MoneySummary } from "@/lib/api/money";
 import { fetchMasters } from "@/lib/api/masters";
 import { listOr } from "@/lib/api/site-api";
-import { countPending, listBookings } from "@/lib/bookings";
+import { countPending, dayBookings } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
-import { addDays, count, initials, rub, todayLocal } from "@/lib/format";
+import { count, initials, rub, todayLocal } from "@/lib/format";
 import { conversion, deltaLabel, jobsLabel, localDaySummary, periodLabel, shares } from "@/lib/money";
 import { dayStats } from "@/lib/stats";
-import { localTime } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -44,7 +43,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: SP }) 
   let local = false;
   if (!summary && period === "day") {
     const day = todayLocal();
-    const rows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+    const rows = await dayBookings(shop.id, day);
     const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
     summary = localDaySummary({ day, stats: dayStats({ rows, schedule: shop.schedule, day, posts }), rows });
     local = true;

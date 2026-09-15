@@ -40,7 +40,7 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 async function ctx(section: Section, ret: string): Promise<ServiceContext> {
   const c = await serviceContext();
   if (!c) redirect("/");
-  if (!can(c.role, section)) back(bare(ret), { err: "Это может только хозяин сервиса" });
+  if (!can(c.role, section)) back(bare(ret), { err: section === "access" ? "Это может только хозяин сервиса" : "Это может админ или хозяин сервиса" });
   return c;
 }
 

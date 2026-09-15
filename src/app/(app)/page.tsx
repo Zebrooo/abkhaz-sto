@@ -2,16 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { HOME_PATH } from "@/lib/access";
 import { requireSection } from "@/lib/context";
-import { countPending, listBookings } from "@/lib/bookings";
+import { countPending, dayBookings } from "@/lib/bookings";
 import { clientName } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { StatusBadge } from "@/components/Status";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
-import { addDays, count, dayLabel, shortName, todayLocal } from "@/lib/format";
+import { count, dayLabel, shortName, todayLocal } from "@/lib/format";
 import { dayWindow, isLive } from "@/lib/stats";
-import { localHHMM, localTime } from "@/lib/sto/slots";
+import { localHHMM } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -33,7 +33,7 @@ export default async function ShiftPage({ searchParams }: { searchParams: SP }) 
   const shop = ctx.shop;
   const day = todayLocal();
   const now = new Date();
-  const rows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const rows = await dayBookings(shop.id, day);
   const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const win = dayWindow(shop.schedule, day);

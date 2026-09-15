@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { STO_ROLE_LABEL } from "@/lib/access";
+import { can, STO_ROLE_LABEL } from "@/lib/access";
 import { serviceContext } from "@/lib/context";
 
 /**
@@ -30,10 +30,14 @@ export async function ScreenHead({ title, sub, back, unread = 0 }: { title: stri
           {sub && <div className="t-sub">{sub}</div>}
         </div>
       </div>
-      <Link className="bell" href="/uvedomleniya" aria-label={unread > 0 ? `Уведомления, новых: ${unread}` : "Уведомления"}>
-        <Icon name="bell" size={19} />
-        {unread > 0 && <span className="dot" />}
-      </Link>
+      {/* Лента уведомлений — раздел смены; мастеру она закрыта, и колокол
+          вёл бы его в редирект на свой пост. */}
+      {ctx && can(ctx.role, "shift") && (
+        <Link className="bell" href="/uvedomleniya" aria-label={unread > 0 ? `Уведомления, новых: ${unread}` : "Уведомления"}>
+          <Icon name="bell" size={19} />
+          {unread > 0 && <span className="dot" />}
+        </Link>
+      )}
     </header>
   );
 }

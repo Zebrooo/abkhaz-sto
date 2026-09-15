@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { StoRole } from "@/lib/access";
+import { can, type StoRole } from "@/lib/access";
 import { Icon } from "@/components/Icon";
 import { initials } from "@/lib/format";
 
@@ -27,10 +27,12 @@ export function TopBar({ shopName, role, newHref, unread }: { shopName: string; 
         </form>
       )}
       <div className="topbar-right">
-        <Link className="bell" href="/uvedomleniya" aria-label={unread > 0 ? `Уведомления, новых: ${unread}` : "Уведомления"}>
-          <Icon name="bell" size={19} />
-          {unread > 0 && <span className="dot" />}
-        </Link>
+        {can(role, "shift") && (
+          <Link className="bell" href="/uvedomleniya" aria-label={unread > 0 ? `Уведомления, новых: ${unread}` : "Уведомления"}>
+            <Icon name="bell" size={19} />
+            {unread > 0 && <span className="dot" />}
+          </Link>
+        )}
         {canBook && (
           <Link className="aui-btn aui-btn--primary aui-btn--md" href={newHref}>
             <Icon name="plus" size={17} />Записать клиента

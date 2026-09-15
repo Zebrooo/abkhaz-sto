@@ -3,7 +3,8 @@ import "server-only";
 // сколько бы экранов и блоков ни спросили.
 //
 // Роль читается с самой витрины (lib/shop.ts): своя — owner, чужая — из
-// строки сотрудника, которую отдал сайт. Пока маршрута /members/mine на
+// строки сотрудника, которую отдал сайт (/members/mine). Уволенного в
+// списке витрин нет — он не входит вовсе, см. shop.ts. Пока маршрута на
 // сайте нет, в списке только свои витрины, и роль у всех owner — ровно
 // сегодняшнее поведение, прав оно не расширяет.
 import { cache } from "react";
@@ -24,9 +25,8 @@ export type ServiceContext = {
 /** Роль человека в витрине: хозяин своей, сотрудник чужой. */
 export function roleIn(shop: ServiceShop): { role: StoRole; masterId: number | null } {
   if (shop.owned || !shop.membership) return { role: "owner", masterId: null };
-  // Выключенный сотрудник — уволенный: он входит по общей куке сайта, но в
-  // приложении ему делать нечего. Сужаем до мастера без поста; сайт всё равно
-  // откажет в данных, а отдельного экрана «вас отключили» в дизайне нет.
+  // Выключенного сюда не пускает shop.ts; страховка на случай, если он всё
+  // же просочился: мастер без поста, а не хозяин.
   if (!shop.membership.active) return { role: "master", masterId: null };
   return { role: shop.membership.role, masterId: shop.membership.masterId };
 }

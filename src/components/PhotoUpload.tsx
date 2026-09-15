@@ -88,9 +88,14 @@ export function PhotoUpload({ bookingId, defectId, photos = [], variant }: Props
         const att = await attachPhotoAction({ bookingId, defectId, photoId: up.data.photoId });
         if (!att.ok) throw new Error(att.error);
       }
+      if (defectId) {
+        // Кадр уже у дефекта на сайте: убираем свою копию и просим свежую
+        // карточку — иначе он считался бы дважды, и лимит срабатывал бы рано.
+        setShots(list => list.filter(s => s.key !== shot.key));
+        router.refresh();
+        return;
+      }
       patch(shot.key, { status: "done", photoId: up.data.photoId });
-      // Кадр уже у дефекта на сайте — просим свежую карточку, а не рисуем сами.
-      if (defectId) router.refresh();
     } catch (e) {
       patch(shot.key, { status: "failed", error: e instanceof Error ? e.message : "не ушло" });
     }

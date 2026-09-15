@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { Sheet } from "@/components/Sheet";
+import { can } from "@/lib/access";
 import { serviceContext } from "@/lib/context";
 import { initials } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
@@ -35,11 +36,17 @@ export async function MasterPick({ bookingId, postNo, day, open, selfHref }: {
   const link = links.find(l => l.bookingId === bookingId);
   const current = link ? (active.find(m => m.id === link.masterId) ?? null) : (active.find(m => m.postNo === postNo) ?? null);
   const openHref = `${selfHref}${selfHref.includes("?") ? "&" : "?"}do=master`;
+  const label = current ? current.name.trim().split(/\s+/)[0] : "без мастера";
+  // Назначает мастера админ или хозяин; мастеру показываем, кто делает, но
+  // не предлагаем действие, которое действие потом отвергнет.
+  if (!can(ctx.role, "masters")) {
+    return <span className="rspec"><Icon name="user" size={12} />{label}</span>;
+  }
 
   return (
     <>
       <Link className="rspec" href={openHref} aria-label="Мастер записи">
-        <Icon name="user" size={12} />{current ? current.name.trim().split(/\s+/)[0] : "без мастера"}
+        <Icon name="user" size={12} />{label}
       </Link>
       {open && (
         <Sheet

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 // Записи сервиса: чтение и переходы под сервисным ключом ПОСЛЕ проверки
 // места в сервисе (accessibleServiceShop). Переходы — оптимистично по текущему статусу:
 // update ... where id and shop_id and status = <текущий>; две вкладки,
@@ -8,6 +9,7 @@ import { notifySite } from "@/lib/site-events";
 import type { StoBookingRow, StoBookingService, StoBookingData } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
+import { addDays } from "@/lib/format";
 import type { StoSchedule } from "@/lib/sto/schedule";
 
 const COLUMNS = "id, shop_id, client_id, vehicle_id, listing_id, service, starts_at, ends_at, post_no, status, cancelled_by, source, prepay_amount, prepay_status, data, created_at, updated_at";
@@ -23,6 +25,15 @@ export async function listBookings(shopId: number, from: Date, to: Date): Promis
   }
   return data ?? [];
 }
+
+/**
+ * Записи одного дня — то, что спрашивают и оболочка (вкладка «Осмотр»), и
+ * экран, и карточка записи. cache() склеивает их в один запрос на рендер:
+ * listBookings с Date-аргументами так не склеить — у каждого вызова свои
+ * объекты.
+ */
+export const dayBookings = cache((shopId: number, day: string): Promise<StoBookingRow[]> =>
+  listBookings(shopId, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00")));
 
 /** Сколько записей ждёт подтверждения — цифра на колоколе и в меню. */
 export async function countPending(shopId: number): Promise<number> {

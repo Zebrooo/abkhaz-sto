@@ -12,7 +12,10 @@ import { Timeline } from "@/components/Timeline";
 import { clientKey } from "@/lib/clients";
 import { count, formatPhone, formatRub, initials, minutesLabel, relativeAt, rub, timeRange } from "@/lib/format";
 import { normalizePhone } from "@/lib/phone";
-import { currentServiceShop } from "@/lib/shop";
+import { can } from "@/lib/access";
+import { fetchInspection } from "@/lib/api/inspections";
+import { requireSection } from "@/lib/context";
+import { countBySeverity, inspectionState, untouchedNodeKeys } from "@/lib/inspection";
 import { addDays } from "@/lib/format";
 import { localDay, localTime } from "@/lib/sto/slots";
 import { canReschedule, shopTransitions, type StoTransition } from "@/lib/sto/transitions";
@@ -60,7 +63,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const sp = await searchParams;
   const bookingId = Number(id);
   if (!Number.isInteger(bookingId)) notFound();
-  const shop = (await currentServiceShop())!;
+  const ctx = await requireSection("bookings");
+  if (!ctx) return null;
+  const shop = ctx.shop;
   const b = await getBooking(shop.id, bookingId);
   if (!b) notFound();
 
@@ -111,6 +116,14 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
   const act = pick(sp.do);
   const reason = /^[0-3]$/.test(pick(sp.r)) ? Number(pick(sp.r)) : -1;
+
+  // Осмотр при приёмке: счётчики из осмотра, если он есть. not_found — осмотр
+  // ещё не начат, это обычное состояние, а не ошибка.
+  const showInspect = can(ctx.role, "inspect");
+  const insp = showInspect ? await fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: b.id }) : null;
+  const inspection = insp?.ok ? insp.data : null;
+  const inspErr = insp && !insp.ok && insp.code !== "not_found" ? insp.error : "";
+  const sev = countBySeverity(inspection?.defects ?? []);
 
   return (
     <>
@@ -205,6 +218,30 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <div className="row-main">
                 <div className="thing-n">{car}</div>
                 {plate && <div className="thing-s">{plate}</div>}
+              </div>
+            </div>
+          )}
+
+          {showInspect && (
+            <div className="card">
+              <div className="bd-head">
+                <div className="card-t">Осмотр при приёмке</div>
+                <span className="bd-no">{inspection ? inspectionState(inspection.defects.length).title : "не начат"}</span>
+              </div>
+              {inspection ? (
+                <div className="rp-badges">
+                  <span className="aui-badge">{sev.bad} критично</span>
+                  <span className="aui-badge is-tag-urgent">{sev.warn} внимание</span>
+                  <span className="aui-badge is-tag-free">{untouchedNodeKeys(inspection.defects).length} норма</span>
+                </div>
+              ) : (
+                <div className="card-s">{inspErr || "Пробег, найденные дефекты с фото — и отчёт клиенту соберётся сам."}</div>
+              )}
+              <div className="ins-bk-b">
+                <Link className="aui-btn aui-btn--secondary aui-btn--md" href={`/zapis/${b.id}/osmotr?d=${day}`}>
+                  {inspection ? "Продолжить осмотр" : "Начать осмотр"}
+                </Link>
+                {inspection && <Link className="aui-btn aui-btn--outline aui-btn--md" href={`/zapis/${b.id}/otchet?d=${day}`}>Отчёт</Link>}
               </div>
             </div>
           )}

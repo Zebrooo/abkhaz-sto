@@ -2,7 +2,7 @@
 # в его же сетях — web (Traefik, certresolver letsencrypt) и supabase-aa_default.
 # Образ собирается на самом сервере из архива исходников (см. README,
 # «Тест-стенд»); публичные build-аргументы — build.env рядом, секреты —
-# /srv/abkhaz-sto/.env.production (sudo на стенде нет, поэтому не /etc).
+# ${HOME}/abkhaz-sto/.env.production (sudo на стенде нет: ни /etc, ни /srv не пишутся).
 #
 #   docker compose -f deploy/test/docker-compose.yml up -d
 name: abkhaz-sto-test
@@ -12,7 +12,7 @@ services:
     image: ${STO_IMAGE:-abkhaz-sto:test}
     restart: always
     env_file:
-      - /srv/abkhaz-sto/.env.production
+      - ${HOME}/abkhaz-sto/.env.production
     networks: [web, supabase-aa]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

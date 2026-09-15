@@ -57,3 +57,27 @@ Actions → Deploy (владелец). Секреты и переменные р
 `docker-compose.yml` и `/etc/abkhaz-sto/.env.production` (сервисный ключ,
 `SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`, `STO_TICKET_*`), раннер с
 меткой `deploy-prod`, запись `sto.abkhaz-auto.ru` в DNS.
+
+## Тест-стенд (185)
+
+Хост `sto-aa.apsoftgroup.ru` за Traefik тест-сайта; куки общие с
+`abkhaz-auto.apsoftgroup.ru` (домен `.apsoftgroup.ru`, см. `deploy/test/build.env`
+сайта). Раннеров у репозитория пока нет, поэтому образ собирается на самом
+сервере из архива исходников:
+
+```bash
+git archive --format=tar HEAD | ssh -p 22222 abkhaz-dev@185.228.132.60 \
+  'mkdir -p ~/abkhaz-sto/src && tar -x -C ~/abkhaz-sto/src'
+ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-sto/src && set -a && . deploy/test/build.env && set +a \
+  && docker build --build-arg NODE_AUTH_TOKEN --build-arg NEXT_PUBLIC_SUPABASE_URL \
+     --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY --build-arg NEXT_PUBLIC_SITE_URL \
+     --build-arg NEXT_PUBLIC_COOKIE_DOMAIN --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
+     -t abkhaz-sto:test . \
+  && docker compose -f deploy/test/docker-compose.yml up -d'
+```
+
+`NODE_AUTH_TOKEN` и `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` — из окружения
+сессии на сервере (первый — токен GitHub Packages, второй — тот же, что в
+`~/abkhaz-sto/.env.production`). Секреты приложения —
+`~/abkhaz-sto/.env.production`: сервисный ключ тест-Supabase,
+`SUPABASE_INTERNAL_URL`, `SITE_INTERNAL_URL`, `STO_TICKET_*`.

@@ -1,0 +1,37 @@
+# Приложение СТО на ТЕСТ-стенде (185): один контейнер за Traefik тест-сайта,
+# в его же сетях — web (Traefik, certresolver letsencrypt) и supabase-aa_default.
+# Образ собирается на самом сервере из архива исходников (см. README,
+# «Тест-стенд»); публичные build-аргументы — build.env рядом, секреты —
+# ${HOME}/abkhaz-sto/.env.production (sudo на стенде нет: ни /etc, ни /srv не пишутся).
+#
+#   docker compose -f deploy/test/docker-compose.yml up -d
+name: abkhaz-sto-test
+services:
+  sto:
+    container_name: abkhaz-sto-test
+    image: ${STO_IMAGE:-abkhaz-sto:test}
+    restart: always
+    env_file:
+      - ${HOME}/abkhaz-sto/.env.production
+    networks: [web, supabase-aa]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      retries: 6
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3", compress: "true" }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sto-test.rule=Host(`sto-aa.apsoftgroup.ru`)"
+      - "traefik.http.routers.sto-test.entrypoints=websecure"
+      - "traefik.http.routers.sto-test.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sto-test.loadbalancer.server.port=3000"
+networks:
+  web:
+    external: true
+  supabase-aa:
+    external: true
+    name: supabase-aa_default

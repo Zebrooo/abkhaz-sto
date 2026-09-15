@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { countPending } from "@/lib/bookings";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { listServices } from "@/lib/services";
+import { fetchUnread } from "@/lib/api/chat";
+import { fetchReports } from "@/lib/api/reports";
+import { listOr } from "@/lib/api/site-api";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
-import { count } from "@/lib/format";
+import { addDays, count, todayLocal } from "@/lib/format";
+import { inspectHref, masterDay } from "@/lib/master-day";
+import { MENU, type MenuKey } from "@/lib/nav";
 import { shopStorefrontUrl } from "@/lib/site";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
+import { localTime } from "@/lib/sto/slots";
 
 const dayLab = (d: StoDay) => STO_DAY_LABEL[d].toLowerCase();
 
@@ -46,16 +52,54 @@ function Row({ href, icon, title, sub, external }: { href: string; icon: IconNam
     : <Link className="row mrow" href={href}>{body}</Link>;
 }
 
+type Item = { key: MenuKey; href: string; icon: IconName; title: string; sub: string; external?: boolean };
+
 /**
- * «Ещё» — то, что не попало во вкладки: прайс, расписание, лента и витрина
- * на сайте. Подписи с живыми цифрами: по ним видно состояние сервиса, не
+ * «Ещё» — то, что не попало во вкладки роли (lib/nav.ts, MENU): мастеру
+ * осмотр, отчёты, чат и прайс; админу ещё расписание и мастера; хозяину —
+ * доступы. Подписи с живыми цифрами: по ним видно состояние сервиса, не
  * заходя внутрь. На вебе эти разделы стоят в левом меню, экран нужен
  * телефону, но выглядит одинаково.
  */
 export default async function MorePage() {
-  const shop = (await currentServiceShop())!;
-  const services = await listServices(shop.id);
+  const ctx = (await requireSection("bookings"))!;
+  const { shop, role } = ctx;
+  const keys = MENU[role];
+  const day = todayLocal();
   const pending = await countPending(shop.id);
+  const services = keys.includes("services") ? await listServices(shop.id) : [];
+  // Цифры с сайта — только для строк, которые эта роль увидит: незачем
+  // спрашивать непрочитанные у хозяина, у которого чата нет.
+  const unread = keys.includes("chats") ? await fetchUnread(shop.id, ctx.userId) : null;
+  const masters = keys.includes("masters") ? (await masterDay(ctx, day)).masters : [];
+  const reports = keys.includes("report") && ctx.masterId !== null
+    ? listOr(await fetchReports({
+      shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId,
+      from: localTime(day, "00:00").toISOString(), to: localTime(addDays(day, 1), "00:00").toISOString(),
+    }))
+    : [];
+  const inspect = keys.includes("inspect") ? await inspectHref(ctx, day, new Date()) : "";
+
+  const unreadLine = !unread?.ok || unread.data.unread === 0
+    ? "нет непрочитанных"
+    : count(unread.data.unread, "непрочитанное", "непрочитанных", "непрочитанных");
+  const mastersLine = masters.length === 0
+    ? "мастеров пока нет"
+    : `${masters.filter(m => m.active && m.onShift).length} на смене из ${masters.filter(m => m.active).length}`;
+
+  const ITEMS: Record<MenuKey, Item> = {
+    inspect: { key: "inspect", href: inspect, icon: "camera", title: "Осмотр и отчёты", sub: "фото дефекта, узел — и он в отчёте" },
+    report: { key: "report", href: "/moi-raboty", icon: "list", title: "Мои отчёты", sub: `${reports.length} за смену` },
+    services: role === "master"
+      ? { key: "services", href: "/uslugi", icon: "wrench", title: "Прайс", sub: `${count(services.length, "услуга", "услуги", "услуг")} · только просмотр` }
+      : { key: "services", href: "/uslugi", icon: "wrench", title: "Услуги и цены", sub: `${count(services.length, "услуга", "услуги", "услуг")} · окна считаются от длительности` },
+    schedule: { key: "schedule", href: "/raspisanie", icon: "clock", title: "Расписание", sub: scheduleLine(shop.schedule) },
+    masters: { key: "masters", href: "/mastera", icon: "users", title: "Мастера", sub: mastersLine },
+    chats: { key: "chats", href: "/chat", icon: "comment", title: "Чат с клиентами", sub: unreadLine },
+    notifs: { key: "notifs", href: "/uvedomleniya", icon: "bell", title: "Уведомления", sub: count(pending, "новая запись", "новые записи", "новых записей") },
+    access: { key: "access", href: "/dostupy", icon: "cog", title: "Доступы", sub: "мастер · админ · хозяин" },
+    shop: { key: "shop", href: shopStorefrontUrl(shop.id), icon: "shop", title: "Витрина на сайте", sub: "abkhaz-auto.ru · рубрика «Автосервис»", external: true },
+  };
 
   return (
     <>
@@ -69,13 +113,10 @@ export default async function MorePage() {
         </div>
 
         <div className="card card-flat">
-          <Row href="/uslugi" icon="wrench" title="Услуги и цены"
-            sub={`${count(services.length, "услуга", "услуги", "услуг")} · окна считаются от длительности`} />
-          <Row href="/raspisanie" icon="clock" title="Расписание" sub={scheduleLine(shop.schedule)} />
-          <Row href="/uvedomleniya" icon="bell" title="Уведомления"
-            sub={count(pending, "новая запись", "новые записи", "новых записей")} />
-          <Row href={shopStorefrontUrl(shop.id)} icon="shop" title="Витрина на сайте"
-            sub="abkhaz-auto.ru · рубрика «Автосервис»" external />
+          {keys.map(k => {
+            const it = ITEMS[k];
+            return <Row key={k} href={it.href} icon={it.icon} title={it.title} sub={it.sub} external={it.external} />;
+          })}
         </div>
 
         <div className="foot-note">АбхазАвто Бизнес · 1.0 · business.abkhaz-auto.ru</div>

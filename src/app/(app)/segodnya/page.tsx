@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { countPending, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
@@ -51,7 +51,9 @@ function StatusChips({ day, filter, counts }: { day: string; filter: Filter; cou
  */
 export default async function TodayPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("bookings"))!;
+  const shop = ctx.shop;
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
   const f = pick(sp.f);

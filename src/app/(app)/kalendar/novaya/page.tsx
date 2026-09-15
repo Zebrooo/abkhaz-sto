@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { busyIntervals, countPending } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
@@ -32,7 +32,9 @@ const HEAD_SUB = "клиент с улицы или по телефону · о�
  */
 export default async function NewBookingPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("bookings"))!;
+  const shop = ctx.shop;
   const pending = await countPending(shop.id);
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { busyIntervals, countPending, getBooking, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
@@ -42,7 +42,9 @@ function ModeSeg({ day }: { day: string }) {
  */
 export default async function CalendarPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("bookings"))!;
+  const shop = ctx.shop;
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
   const f = pick(sp.f);

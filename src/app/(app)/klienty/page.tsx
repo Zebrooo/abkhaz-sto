@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { countPending, recentBookings } from "@/lib/bookings";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { matchClient, summarizeClients, type ClientSummary } from "@/lib/clients";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
@@ -43,7 +43,9 @@ function Chips({ q, filter, counts }: { q: string; filter: Filter; counts: Recor
  */
 export default async function ClientsPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("clients"))!;
+  const shop = ctx.shop;
   const rows = await recentBookings(shop.id);
   const pending = await countPending(shop.id);
 

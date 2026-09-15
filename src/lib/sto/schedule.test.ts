@@ -52,6 +52,21 @@ describe("validateStoSchedule", () => {
     expect(validateStoSchedule({ ...week(), daysOff: ["2026-02-31"] })).toEqual({ ok: false, error: expect.stringMatching(/Выходной 1/) });
   });
 
+  it("буфер между записями: без поля — 0, из списка — как есть, чужое значение — отказ", () => {
+    // Расписания, сохранённые до появления буфера, лежат в базе без поля —
+    // они обязаны читаться как «нет буфера», а не закрывать запись.
+    const v = validateStoSchedule(week());
+    expect(v.ok && v.schedule.bufferMin).toBe(0);
+    expect(normalizeStoSchedule(week())?.bufferMin).toBe(0);
+    const w = validateStoSchedule({ ...week(), bufferMin: 15 });
+    expect(w.ok && w.schedule.bufferMin).toBe(15);
+    expect(validateStoSchedule({ ...week(), bufferMin: 5 })).toEqual({ ok: false, error: expect.stringMatching(/Буфер.*10, 15, 20/) });
+    expect(validateStoSchedule({ ...week(), bufferMin: -10 }).ok).toBe(false);
+    expect(validateStoSchedule({ ...week(), bufferMin: "четверть часа" }).ok).toBe(false);
+    // В базе кривой буфер — расписание целиком «не задано», как и с кривым шагом.
+    expect(normalizeStoSchedule({ ...week(), bufferMin: 5 })).toBeNull();
+  });
+
   it("смена до полуночи: конец «24:00» допустим, начало — нет, «24:01» — нет", () => {
     expect(validateStoSchedule(week({ sat: [{ from: "20:00", to: "24:00" }] })).ok).toBe(true);
     expect(validateStoSchedule(week({ sat: [{ from: "24:00", to: "24:00" }] })).ok).toBe(false);

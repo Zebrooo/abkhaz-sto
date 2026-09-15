@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoSchedule } from "./schedule";
-import { dayOfWeek, freeSlots, isSlotFree, localDay, localHHMM, localTime } from "./slots";
+import { dayOfWeek, freeSlots, isSlotFree, localDay, localHHMM, localTime, type FreeSlot } from "./slots";
 
 const schedule: StoSchedule = {
   days: {
@@ -9,6 +9,7 @@ const schedule: StoSchedule = {
   },
   posts: 2,
   stepMin: 30,
+  bufferMin: 0,
   daysOff: ["2026-09-22"],
 };
 // 2026-09-21 — понедельник, 2026-09-22 — вторник, 2026-09-26 — суббота.
@@ -83,6 +84,52 @@ describe("freeSlots", () => {
     const messy: StoSchedule = { ...schedule, days: { ...schedule.days, mon: [{ from: "11:00", to: "13:00" }, { from: "09:00", to: "12:00" }] } };
     const starts = freeSlots({ schedule: messy, day: "2026-09-21", durationMin: 60, busy: [], now: early }).map(hhmm);
     expect(starts).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"]);
+  });
+});
+
+describe("буфер между записями", () => {
+  // Один пост, буфер 15: запись 09:00–10:00 держит пост до 10:15.
+  const buffered: StoSchedule = { ...schedule, posts: 1, bufferMin: 15 };
+  const at = (slots: FreeSlot[], t: string) => slots.find(s => hhmm(s) === t);
+
+  it("окно после записи сдвигается: 10:00 занято буфером, 10:30 свободно", () => {
+    const busy = [{ postNo: 1, startsAt: localTime("2026-09-21", "09:00"), endsAt: localTime("2026-09-21", "10:00") }];
+    const slots = freeSlots({ schedule: buffered, day: "2026-09-21", durationMin: 60, busy, now: early });
+    expect(at(slots, "10:00")).toBeUndefined();
+    expect(at(slots, "10:30")?.postNo).toBe(1);
+    // Само окно — без буфера: в базу ляжет 10:30–11:30, а не до 11:45.
+    expect(localHHMM(at(slots, "10:30")!.endsAt)).toBe("11:30");
+  });
+
+  it("окно перед записью тоже получает буфер: впритык до чужой записи не ставится", () => {
+    const busy = [{ postNo: 1, startsAt: localTime("2026-09-21", "12:00"), endsAt: localTime("2026-09-21", "13:00") }];
+    const slots = freeSlots({ schedule: buffered, day: "2026-09-21", durationMin: 60, busy, now: early });
+    // 11:00–12:00 держало бы пост до 12:15 — поверх записи в 12:00.
+    expect(at(slots, "11:00")).toBeUndefined();
+    expect(at(slots, "10:30")?.postNo).toBe(1);
+  });
+
+  it("буфер — после записи, а не до: первое окно смены и окно впритык к её концу остаются", () => {
+    const starts = freeSlots({ schedule: buffered, day: "2026-09-21", durationMin: 60, busy: [], now: early }).map(hhmm);
+    expect(starts[0]).toBe("09:00");
+    // Перед обедом и в конце смены готовить пост к следующей машине не для кого.
+    expect(starts).toContain("12:00");
+    expect(starts.at(-1)).toBe("17:00");
+  });
+
+  it("без буфера — как раньше: окно встаёт стык в стык", () => {
+    const busy = [{ postNo: 1, startsAt: localTime("2026-09-21", "09:00"), endsAt: localTime("2026-09-21", "10:00") }];
+    const slots = freeSlots({ schedule: { ...buffered, bufferMin: 0 }, day: "2026-09-21", durationMin: 60, busy, now: early });
+    expect(at(slots, "10:00")?.postNo).toBe(1);
+  });
+
+  it("isSlotFree считает тем же правилом: 10:00 — taken, стык «с 10:15» — свободно", () => {
+    const busy = [{ postNo: 1, startsAt: localTime("2026-09-21", "09:00"), endsAt: localTime("2026-09-21", "10:00") }];
+    expect(isSlotFree({ schedule: buffered, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy })).toEqual({ ok: false, reason: "taken" });
+    expect(isSlotFree({ schedule: buffered, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy, postNo: 1 })).toEqual({ ok: false, reason: "taken" });
+    expect(isSlotFree({ schedule: buffered, startsAt: localTime("2026-09-21", "10:15"), durationMin: 60, busy })).toEqual({ ok: true, postNo: 1 });
+    // Второй пост буфер первого не держит.
+    expect(isSlotFree({ schedule: { ...buffered, posts: 2 }, startsAt: localTime("2026-09-21", "10:00"), durationMin: 60, busy })).toEqual({ ok: true, postNo: 2 });
   });
 });
 

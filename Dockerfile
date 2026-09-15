@@ -4,12 +4,15 @@ RUN corepack enable
 
 # ---------- deps ----------
 FROM base AS deps
-# .npmrc привязывает @zebrooo к GitHub Packages; NODE_AUTH_TOKEN — только в этом
-# промежуточном слое, в итоговый образ он не попадает.
+# .npmrc привязывает @zebrooo к GitHub Packages. Токен — СЕКРЕТОМ СБОРКИ, а не
+# ARG/ENV: pnpm 10 не подставляет ${NODE_AUTH_TOKEN} в учётные данные проектного
+# .npmrc (ERR_PNPM_FETCH_401 на тест-стенде 15.09.2026), а секрет не попадает в
+# слои образа. Файл секрета — одна строка:
+#   //npm.pkg.github.com/:_authToken=<токен>
+# и монтируется как пользовательский npmrc:
+#   docker build --secret id=npmrc,src=<путь к файлу> …
 COPY package.json pnpm-lock.yaml .npmrc ./
-ARG NODE_AUTH_TOKEN
-ENV NODE_AUTH_TOKEN=$NODE_AUTH_TOKEN
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=true pnpm install --frozen-lockfile
 
 # ---------- builder ----------
 FROM base AS builder

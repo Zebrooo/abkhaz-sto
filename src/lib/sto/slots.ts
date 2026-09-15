@@ -1,5 +1,10 @@
 // Свободные окна записи: расписание × посты × длительность × занятые записи (#1267).
 //
+// Буфер между записями (schedule.bufferMin) живёт только здесь: запись
+// [starts, ends) держит пост до ends + bufferMin, и следующее окно на этом
+// посту ставится не раньше. В базе запись остаётся без буфера — ends_at
+// это конец работы, от него считаются деньги и «до 12:30» на постах.
+//
 // Одна чистая функция без базы. Это КОПИЯ файла сайта (djonua/abkhaz-auto,
 // src/lib/sto/slots.ts): виджет записи на сайте и календарь сервиса обязаны
 // показывать одни и те же окна, поэтому правки делаются на сайте и
@@ -47,13 +52,30 @@ export function localHHMM(at: Date): string {
   return new Date(at.getTime() + STO_TZ_OFFSET_MIN * 60_000).toISOString().slice(11, 16);
 }
 
-const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => aStart < bEnd && bStart < aEnd;
+/**
+ * Пост занят под окно [startsAt, endsAt)? Одно правило для freeSlots и
+ * isSlotFree — сайт и приложение обязаны сходиться. Буфер стоит ПОСЛЕ записи,
+ * не до: мастер закрывает работу и готовит пост к следующей машине, а перед
+ * первой машиной смены и перед обедом готовить нечего — поэтому первое окно
+ * дня остаётся в 09:00, а последнее упирается в конец смены без буфера.
+ * Буфер получает и новое окно, и уже стоящие записи: иначе запись, поставленная
+ * впритык ПЕРЕД чужой, вышла бы без буфера — а между двумя записями на посту
+ * он нужен с любой стороны. Стык «до 10:15» / «с 10:15» — не пересечение.
+ */
+function postTaken(busy: readonly BusyInterval[], postNo: number, startsAt: Date, endsAt: Date, bufferMin: number): boolean {
+  const pad = (Number.isFinite(bufferMin) && bufferMin > 0 ? bufferMin : 0) * 60_000;
+  const held = endsAt.getTime() + pad;
+  return busy.some(b => b.postNo === postNo && startsAt.getTime() < b.endsAt.getTime() + pad && b.startsAt.getTime() < held);
+}
 
 /**
  * Окна дня, на которые хватает свободного поста на всю длительность.
  * Пост — первый свободный (сервис может переставить при подтверждении).
  * Окно должно целиком лежать внутри интервала работы: услуга «через обед»
  * не предлагается. Прошедшее и ближайшее (leadMin) время не предлагается.
+ * Занятость — с буфером сервиса после каждой записи (postTaken): окно на
+ * 60 минут при буфере 15 держит пост 75, но само окно [startsAt, endsAt)
+ * возвращается без буфера — таким оно и ляжет в базу.
  */
 export function freeSlots(input: {
   schedule: StoSchedule;
@@ -82,7 +104,7 @@ export function freeSlots(input: {
       const startsAt = localTime(day, `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
       if (startsAt < earliest) continue;
       const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
-      const postNo = firstFreePost(schedule.posts, busy, startsAt, endsAt);
+      const postNo = firstFreePost(schedule.posts, busy, startsAt, endsAt, schedule.bufferMin);
       if (postNo !== null) out.push({ startsAt, endsAt, postNo });
     }
   }
@@ -92,11 +114,10 @@ export function freeSlots(input: {
   return out.filter((s, i) => i === 0 || s.startsAt.getTime() !== out[i - 1].startsAt.getTime());
 }
 
-/** Первый пост без пересечений с занятыми интервалами; null — все заняты. */
-export function firstFreePost(posts: number, busy: readonly BusyInterval[], startsAt: Date, endsAt: Date): number | null {
+/** Первый пост без пересечений с занятыми интервалами (с буфером после записей); null — все заняты. */
+export function firstFreePost(posts: number, busy: readonly BusyInterval[], startsAt: Date, endsAt: Date, bufferMin = 0): number | null {
   for (let p = 1; p <= posts; p++) {
-    const taken = busy.some(b => b.postNo === p && overlaps(startsAt, endsAt, b.startsAt, b.endsAt));
-    if (!taken) return p;
+    if (!postTaken(busy, p, startsAt, endsAt, bufferMin)) return p;
   }
   return null;
 }
@@ -109,7 +130,8 @@ export type SlotCheck =
 /**
  * Окно ещё свободно? Последний рубеж перед записью и переносом, поэтому
  * проверяет всё то же, что freeSlots: часы работы и выходные, прошедшее и
- * ближайшее время (если передан now), существование поста, пересечения.
+ * ближайшее время (если передан now), существование поста, пересечения —
+ * с тем же буфером между записями (postTaken).
  */
 export function isSlotFree(input: {
   schedule: StoSchedule;
@@ -135,9 +157,9 @@ export function isSlotFree(input: {
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   if (input.postNo != null) {
     if (!Number.isInteger(input.postNo) || input.postNo < 1 || input.postNo > schedule.posts) return { ok: false, reason: "no_post" };
-    const taken = busy.some(b => b.postNo === input.postNo && overlaps(startsAt, endsAt, b.startsAt, b.endsAt));
+    const taken = postTaken(busy, input.postNo, startsAt, endsAt, schedule.bufferMin);
     return taken ? { ok: false, reason: "taken" } : { ok: true, postNo: input.postNo };
   }
-  const postNo = firstFreePost(schedule.posts, busy, startsAt, endsAt);
+  const postNo = firstFreePost(schedule.posts, busy, startsAt, endsAt, schedule.bufferMin);
   return postNo === null ? { ok: false, reason: "taken" } : { ok: true, postNo };
 }

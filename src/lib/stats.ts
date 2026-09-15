@@ -54,6 +54,12 @@ export function dayStats(input: { rows: readonly StoBookingRow[]; schedule: StoS
   const win = dayWindow(schedule, day);
   const step = schedule?.stepMin ?? 30;
   const totalSlots = Math.floor(win.workMin / step) * posts;
+  // Буфер между записями (schedule.bufferMin) сюда не входит: загрузка — доля
+  // смены, которую мастер работает, а буфер — не работа и не деньги. С «занято
+  // N окон из M» это не расходится: окна здесь считаются по ends_at, как
+  // записи лежат в базе; буфер живёт только в расчёте свободных окон
+  // (slots.ts), и день с буфером просто не доберёт 100% — между машинами
+  // мастер не работает, и так и должно быть видно.
   const busySlots = live.reduce((s, b) => {
     const min = Math.max(0, Math.round((new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60_000));
     return s + Math.ceil(min / step);

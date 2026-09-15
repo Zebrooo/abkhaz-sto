@@ -1439,6 +1439,11 @@ svg { display: block; }
 
 
 /* @section:bufer */
-/* Буфер между записями в расписании. */
+/* Буфер между записями в расписании. Подпись под сегментом: .card-s даёт
+   4px сверху и 12.5px на вебе, макет — 6px и 12px, поэтому свой класс. */
+.buf-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; text-wrap: pretty; }
+@media (min-width: 881px) {
+  .buf-note { font-size: 12px; }
+}
 
 

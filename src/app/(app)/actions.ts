@@ -129,6 +129,7 @@ export async function saveIntervalAction(fd: FormData) {
     days,
     posts: shop.schedule?.posts ?? 1,
     stepMin: shop.schedule?.stepMin ?? 30,
+    bufferMin: shop.schedule?.bufferMin,
     daysOff: shop.schedule?.daysOff ?? [],
   });
   if (!v.ok) back("/raspisanie", { err: v.error });
@@ -138,13 +139,15 @@ export async function saveIntervalAction(fd: FormData) {
   back("/raspisanie", { ok: remove ? "Интервал убран" : "Часы приёма сохранены" });
 }
 
-/** Посты, шаг сетки, разовые выходные и предоплата — одной кнопкой снизу. */
+/** Посты, шаг сетки, буфер, разовые выходные и предоплата — одной кнопкой снизу. */
 export async function saveScheduleAction(fd: FormData) {
   const { shop } = await ctx(fd);
   const days: Record<string, StoInterval[]> = {};
   for (const d of STO_DAYS) days[d] = [...(shop.schedule?.days[d] ?? [])];
   const daysOff = str(fd, "daysOff").split(/[\s,;]+/).filter(Boolean);
-  const v = validateStoSchedule({ days, posts: Number(str(fd, "posts")), stepMin: Number(str(fd, "stepMin")), daysOff });
+  // Буфер не передан (старая форма в открытой вкладке) — остаётся текущий, а не «Нет».
+  const bufferMin = str(fd, "bufferMin") === "" ? shop.schedule?.bufferMin : Number(str(fd, "bufferMin"));
+  const v = validateStoSchedule({ days, posts: Number(str(fd, "posts")), stepMin: Number(str(fd, "stepMin")), bufferMin, daysOff });
   if (!v.ok) back("/raspisanie", { err: v.error });
   const p = validateStoPrepay({
     mode: str(fd, "prepayMode"), amount: Number(str(fd, "prepayAmount")), percent: Number(str(fd, "prepayPercent")),
@@ -166,7 +169,7 @@ export async function toggleDayOffAction(fd: FormData) {
   const daysOff = current.includes(date) ? current.filter(d => d !== date) : [...current, date];
   const days: Record<string, StoInterval[]> = {};
   for (const d of STO_DAYS) days[d] = [...(shop.schedule?.days[d] ?? [])];
-  const v = validateStoSchedule({ days, posts: shop.schedule?.posts ?? 1, stepMin: shop.schedule?.stepMin ?? 30, daysOff });
+  const v = validateStoSchedule({ days, posts: shop.schedule?.posts ?? 1, stepMin: shop.schedule?.stepMin ?? 30, bufferMin: shop.schedule?.bufferMin, daysOff });
   if (!v.ok) back("/raspisanie", { err: v.error });
   const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });

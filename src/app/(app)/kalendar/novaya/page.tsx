@@ -182,6 +182,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     <span className="nb-l-s">
                       {postNo ? `пост ${postNo}` : "по всем постам"}
                       <span className="nb-w"> · шаг {schedule.stepMin} мин</span>
+                      {schedule.bufferMin > 0 && ` · с буфером ${schedule.bufferMin} мин`}
                     </span>
                   </div>
                   {slots.length === 0 ? (

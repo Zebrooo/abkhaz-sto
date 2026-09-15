@@ -1,18 +1,40 @@
 name: Deploy
 
-# Выкат на сервер 170 руками владельца (Actions → Deploy). Образ собирается на
-# CI-раннере и пушится в ghcr, затем раннер деплоя на 170 подтягивает его и
-# перезапускает контейнер. Blue-green нет — см. docker-compose.yml.
+# Выкат «Абхаз-Работы» на выбранный контур (Actions → Deploy → Run workflow).
+# Образ собирается на CI-раннере и пушится в ghcr, затем раннер нужного контура
+# подтягивает его и перезапускает контейнер. Blue-green здесь нет: это отдельное
+# приложение с одним контейнером, сайт оно не трогает.
+#
+#   test → 185, rabota.abkhaz-auto.apsoftgroup.ru, контейнер abkhaz-rabota-test
+#   prod → 170, rabota.abkhaz-auto.ru,             контейнер abkhaz-rabota-prod
+#
+# Публичные build-аргументы берутся из deploy/<контур>/build.env в репозитории,
+# а не из vars: они и так публичны (уезжают в браузер), и в git их видно вместе
+# с кодом. Секретами остаются только NODE_AUTH_TOKEN и ключ шифрования
+# серверных действий — они лежат в Environment-секретах соответствующего контура.
+#
+# Сторонних GitHub Actions здесь нет и не будет: с self-hosted раннеров
+# недоступна сеть Microsoft, checkout сделан шагом run (см. AGENTS.md).
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Контур выката
+        type: choice
+        options: [test, prod]
+        default: test
+        required: true
 
+# Очередь на контур: два выката в один и тот же контейнер одновременно
+# перезапишут друг друга, а выкаты в разные контуры независимы.
 concurrency:
-  group: deploy-prod
+  group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: [self-hosted, ci]
+    environment: ${{ inputs.environment }}
     timeout-minutes: 30
     outputs:
       image: ${{ steps.meta.outputs.image }}
@@ -33,27 +55,28 @@ jobs:
           git clean -qffdx -e node_modules
       - name: имя образа
         id: meta
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/sto:prod-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/app:${{ inputs.environment }}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       - name: вход в ghcr
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: сборка и пуш образа
         env:
+          ENVIRONMENT: ${{ inputs.environment }}
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
-          NEXT_PUBLIC_COOKIE_DOMAIN: ${{ vars.NEXT_PUBLIC_COOKIE_DOMAIN }}
           NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
-          # Токен GitHub Packages — файлом-секретом сборки (см. Dockerfile), только в ${{ runner.temp }}: /tmp общий на раннере.
+          # Публичные аргументы — из файла контура, чтобы конфигурация жила в git.
+          set -a; . "deploy/${ENVIRONMENT}/build.env"; set +a
+          # Токен GitHub Packages — файлом-секретом сборки (см. Dockerfile), только
+          # в ${{ runner.temp }}: /tmp общий на все параллельные задания раннера.
           printf '//npm.pkg.github.com/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "${RUNNER_TEMP}/npmrc"
           docker build \
             --secret id=npmrc,src="${RUNNER_TEMP}/npmrc" \
             --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY \
-            --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
+            --build-arg NEXT_PUBLIC_SITE_URL --build-arg NEXT_PUBLIC_COOKIE_DOMAIN \
+            --build-arg NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             -t "${{ steps.meta.outputs.image }}" .
           docker push "${{ steps.meta.outputs.image }}"
@@ -64,21 +87,47 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: [self-hosted, deploy-prod]
+    runs-on: [self-hosted, "deploy-${{ inputs.environment }}"]
+    environment: ${{ inputs.environment }}
     timeout-minutes: 15
     steps:
+      - name: код
+        env:
+          CI_GIT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          AUTH_HEADER="Authorization: Basic $(printf 'x-access-token:%s' "$CI_GIT_TOKEN" | base64 | tr -d '\n')"
+          export AUTH_HEADER
+          url="https://github.com/${GITHUB_REPOSITORY}"
+          git init -q . && git config --local gc.auto 0
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "$url"
+          git --config-env=http.extraheader=AUTH_HEADER fetch --no-tags --force --depth=1 "$url" "+${GITHUB_SHA}:refs/remotes/origin/ci-head"
+          git checkout -q --force refs/remotes/origin/ci-head
       - name: выкат
         env:
-          STO_IMAGE: ${{ needs.build.outputs.image }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          RABOTA_IMAGE: ${{ needs.build.outputs.image }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          cd /data/abkhaz-sto
+          container="abkhaz-rabota-${ENVIRONMENT}"
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker pull "$STO_IMAGE"
-          STO_IMAGE="$STO_IMAGE" docker compose up -d --no-build sto
-          for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:3200/api/health/live >/dev/null; then echo "живой"; exit 0; fi
-            sleep 3
+          docker pull "$RABOTA_IMAGE"
+          RABOTA_IMAGE="$RABOTA_IMAGE" docker compose -f "deploy/${ENVIRONMENT}/docker-compose.yml" up -d --no-build rabota
+          # Здоровье берём у самого контейнера: портов наружу он не публикует
+          # (ходит только через сеть Traefik), поэтому curl с хоста не подходит.
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "нет контейнера")
+            case "$status" in
+              healthy) echo "контейнер здоров"; exit 0 ;;
+              unhealthy) echo "::error::контейнер поднялся нездоровым"; docker logs --tail 50 "$container"; exit 1 ;;
+            esac
+            sleep 5
           done
-          echo "::error::контейнер не ответил на /api/health/live"; exit 1
+          echo "::error::контейнер не стал здоровым за 150 секунд (последний статус: ${status})"
+          docker logs --tail 50 "$container" || true
+          exit 1
+      - name: выход из ghcr
+        if: ${{ always() }}
+        run: docker logout ghcr.io >/dev/null 2>&1 || true

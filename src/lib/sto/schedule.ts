@@ -30,6 +30,14 @@ export type StoSchedule = {
   posts: number;
   /** Шаг сетки окон, минут. */
   stepMin: number;
+  /**
+   * Буфер между записями, минут: столько пост остаётся занят ПОСЛЕ конца
+   * записи — мастер закрывает работу и принимает следующую машину. Живёт
+   * только в расчёте окон (slots.ts): в базе запись по-прежнему
+   * [starts_at, ends_at) без буфера. 0 — окна идут минута в минуту; записи
+   * в базе без поля (до появления буфера) читаются как 0.
+   */
+  bufferMin: number;
   /** Разовые выходные и праздники, ISO-даты YYYY-MM-DD. */
   daysOff: string[];
 };
@@ -40,6 +48,9 @@ export const MAX_STO_INTERVALS_PER_DAY = 4;
 export const MAX_STO_DAYS_OFF = 366;
 export const STO_STEPS_MIN = [15, 20, 30, 60] as const;
 export const DEFAULT_STO_STEP_MIN = 30;
+/** Буфер — из короткого списка, как шаг: сегмент в расписании, а не поле ввода. */
+export const STO_BUFFERS_MIN = [0, 10, 15, 20] as const;
+export const DEFAULT_STO_BUFFER_MIN = 0;
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** Конец интервала может быть «24:00» — смена до полуночи; начало — нет. */
@@ -63,8 +74,8 @@ export type StoScheduleValidation =
  * Разбор расписания из формы: формат ЧЧ:ММ, начало раньше конца, интервалы
  * дня не пересекаются (стык «до 13:00» / «с 13:00» — не пересечение), не
  * больше MAX_STO_INTERVALS_PER_DAY, хотя бы один рабочий день, посты 1…20,
- * шаг из STO_STEPS_MIN, выходные — уникальные ISO-даты. Интервалы дня
- * возвращаются по порядку начала.
+ * шаг из STO_STEPS_MIN, буфер из STO_BUFFERS_MIN (нет поля — 0), выходные —
+ * уникальные ISO-даты. Интервалы дня возвращаются по порядку начала.
  */
 export function validateStoSchedule(raw: unknown): StoScheduleValidation {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Расписание не заполнено" };
@@ -109,6 +120,12 @@ export function validateStoSchedule(raw: unknown): StoScheduleValidation {
   if (!(STO_STEPS_MIN as readonly number[]).includes(stepMin)) {
     return { ok: false, error: `Шаг сетки — ${STO_STEPS_MIN.join(", ")} минут` };
   }
+  // Нет поля — 0, а не отказ: расписания, сохранённые до появления буфера,
+  // обязаны читаться из базы как прежде (normalize иначе закрыл бы запись).
+  const bufferMin = r.bufferMin == null ? DEFAULT_STO_BUFFER_MIN : Number(r.bufferMin);
+  if (!(STO_BUFFERS_MIN as readonly number[]).includes(bufferMin)) {
+    return { ok: false, error: `Буфер между записями — нет, ${STO_BUFFERS_MIN.slice(1).join(", ")} минут` };
+  }
   const daysOffRaw = r.daysOff == null ? [] : r.daysOff;
   if (!Array.isArray(daysOffRaw)) return { ok: false, error: "Выходные — список дат" };
   if (daysOffRaw.length > MAX_STO_DAYS_OFF) return { ok: false, error: `Выходных — не больше ${MAX_STO_DAYS_OFF}` };
@@ -119,7 +136,7 @@ export function validateStoSchedule(raw: unknown): StoScheduleValidation {
     if (!daysOff.includes(s)) daysOff.push(s);
   }
   daysOff.sort();
-  return { ok: true, schedule: { days, posts, stepMin, daysOff } };
+  return { ok: true, schedule: { days, posts, stepMin, bufferMin, daysOff } };
 }
 
 /**

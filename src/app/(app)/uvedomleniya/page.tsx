@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { countPending, recentBookings } from "@/lib/bookings";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { buildFeed, groupFeed } from "@/lib/notifications";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -21,7 +21,9 @@ const HEAD_SUB = "Новые записи с сайта, отмены клиен
  */
 export default async function NotificationsPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("shift"))!;
+  const shop = ctx.shop;
   const rows = await recentBookings(shop.id);
   const pending = await countPending(shop.id);
   const groups = groupFeed(buildFeed(rows, timeRange), todayLocal(), localDay);

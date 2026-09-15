@@ -1,33 +1,26 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { StoRole } from "@/lib/access";
+import { activeTab, hrefOf, TABS } from "@/lib/nav";
 import { Icon, type IconName } from "@/components/Icon";
 
-const ITEMS: { href: string; label: string; icon: IconName; key: string }[] = [
-  { href: "/", label: "Смена", icon: "chart", key: "smena" },
-  { href: "/segodnya", label: "Записи", icon: "list", key: "zapisi" },
-  { href: "/klienty", label: "Клиенты", icon: "users", key: "klienty" },
-  { href: "/menu", label: "Ещё", icon: "menu", key: "menu" },
-];
-
-/** Какой вкладке принадлежит адрес: запись и календарь живут под «Записями». */
-function activeKey(path: string): string {
-  if (path === "/") return "smena";
-  if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "zapisi";
-  if (path.startsWith("/klienty")) return "klienty";
-  return "menu";
-}
-
-export function TabBar({ newHref }: { newHref: string }) {
-  const active = activeKey(usePathname() ?? "/");
-  const [left, right] = [ITEMS.slice(0, 2), ITEMS.slice(2)];
+/**
+ * Вкладки снизу на телефоне — по роли (lib/nav.ts): мастеру пост и осмотр,
+ * админу смена с кнопкой «+», хозяину деньги и мастера. Клиентский код
+ * здесь только ради подсветки текущей вкладки по адресу.
+ */
+export function TabBar({ role, newHref, inspectHref }: { role: StoRole; newHref: string; inspectHref: string }) {
+  const active = activeTab(role, usePathname() ?? "/");
   return (
     <nav className="tabbar" aria-label="Разделы">
-      {left.map(it => <Tab key={it.key} href={it.href} label={it.label} icon={it.icon} on={active === it.key} />)}
-      <Link href={newHref} aria-label="Записать клиента">
-        <span className="fab"><Icon name="plus" size={26} /></span>
-      </Link>
-      {right.map(it => <Tab key={it.key} href={it.href} label={it.label} icon={it.icon} on={active === it.key} />)}
+      {TABS[role].map(t => t.key === "fab" ? (
+        <Link key="fab" href={newHref} aria-label="Записать клиента">
+          <span className="fab"><Icon name="plus" size={26} /></span>
+        </Link>
+      ) : (
+        <Tab key={t.key} href={hrefOf(t.key, inspectHref)} label={t.label} icon={t.icon} on={active === t.key} />
+      ))}
     </nav>
   );
 }

@@ -1,15 +1,17 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
-import { countPending, listBookings } from "@/lib/bookings";
+import { redirect } from "next/navigation";
+import { HOME_PATH } from "@/lib/access";
+import { requireSection } from "@/lib/context";
+import { countPending, dayBookings } from "@/lib/bookings";
 import { clientName } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { StatusBadge } from "@/components/Status";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
-import { addDays, count, dayLabel, shortName, todayLocal } from "@/lib/format";
+import { count, dayLabel, shortName, todayLocal } from "@/lib/format";
 import { dayWindow, isLive } from "@/lib/stats";
-import { localHHMM, localTime } from "@/lib/sto/slots";
+import { localHHMM } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -23,10 +25,15 @@ const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:
  */
 export default async function ShiftPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("shift"))!;
+  // Корень — первый экран роли. Хозяину «Смена» открыта, но входит он в
+  // «Деньги»: логотип и адрес без пути ведут туда, куда ведёт его вкладка.
+  if (HOME_PATH[ctx.role] !== "/") redirect(HOME_PATH[ctx.role]);
+  const shop = ctx.shop;
   const day = todayLocal();
   const now = new Date();
-  const rows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const rows = await dayBookings(shop.id, day);
   const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const win = dayWindow(shop.schedule, day);

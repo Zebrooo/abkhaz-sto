@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { countPending } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
@@ -29,7 +29,9 @@ const HEAD_SUB = "Услуги — объявления витрины на са
  */
 export default async function ServicesPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("services"))!;
+  const shop = ctx.shop;
   const services = await listServices(shop.id);
   const pending = await countPending(shop.id);
 

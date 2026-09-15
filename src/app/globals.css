@@ -1226,3 +1226,549 @@ svg { display: block; }
   .bk-actions .aui-btn--primary { flex: 0 0 auto; }
   .rail .bk-actions .aui-btn--primary { flex: 1; }
 }
+
+/* ═══════════ Разделы, добавленные по дизайну 15.09 (v3) ═══════════
+   Каждый раздел живёт в своём блоке ниже; блоки не переплетать. */
+
+/* @section:osmotr-otchet */
+/* Осмотр, отчёт по диагностике, фото дефектов. */
+/* Осмотр и отчёт — одна разметка на телефон и веб. На телефоне колонки
+   прозрачны для раскладки (display: contents), на вебе — две: слева машина,
+   «Снять дефект» и частые формулировки, справа «В отчёте» и итог. */
+.ins-cols, .ins-col { display: contents; }
+
+/* Карточка машины: пробег — ссылка в цвет акцента, состояние под пунктиром. */
+.ins-km { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
+.ins-km:active { opacity: .6; }
+.ins-state { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line-2); }
+.ins-state-t { font-size: 20px; font-weight: 800; letter-spacing: -.025em; }
+.ins-state-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.ins-master { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+/* «Снять дефект» — главная кнопка экрана, крупнее любой другой. */
+.ins-cta {
+  min-height: 76px; border-radius: 18px; background: var(--accent); color: #fff;
+  display: flex; align-items: center; gap: 14px; padding: 0 20px; box-shadow: var(--shadow-accent);
+  transition: transform .12s, background .15s, box-shadow .15s;
+}
+.ins-cta:active { transform: scale(.985) translateY(1px); box-shadow: none; }
+.ins-cta[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.ins-cta .sq { width: 46px; height: 46px; background: rgba(255, 255, 255, .18); color: #fff; }
+.ins-cta-t { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+.ins-cta-s { display: block; font-size: 12.5px; opacity: .82; margin-top: 2px; }
+
+/* Частые формулировки: заголовок-надпись и чипы-формы в перенос. */
+.ins-freq-h { display: flex; align-items: baseline; gap: 8px; padding: 8px 4px 0; }
+.ins-freq-s { margin-left: auto; font-size: 11.5px; color: var(--muted-2); text-align: right; }
+.ins-freq { display: flex; gap: 8px; flex-wrap: wrap; }
+.ins-freq form { display: contents; }
+.ins-fchip {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: var(--radius-pill);
+  background: #fff; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card);
+  transition: background .15s, transform .12s;
+}
+.ins-fchip:active { transform: scale(.96); background: var(--bg-2); }
+.ins-fchip-t { font-size: 13.5px; font-weight: 600; }
+.ins-fchip-m { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Точка срочности: красная — критично, охра — внимание. */
+.ins-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--tag-urgent); }
+.ins-dot.bad { background: var(--accent); }
+.ins-dot.lg { width: 10px; height: 10px; margin-top: 2px; }
+
+/* «В отчёте»: заголовок с суммой и карточки дефектов. Полоска слева и
+   рамка — по срочности, те же цвета, что у блоков статусов таймлайна. */
+.ins-sect { display: flex; align-items: center; gap: 8px; padding: 10px 4px 0; font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.ins-sect-s { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ins-def {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px;
+  background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); border-left: 3px solid var(--tag-urgent);
+  box-shadow: var(--shadow-m-card);
+}
+.ins-def.is-bad { border-color: var(--danger-line); border-left-color: var(--accent); }
+.ins-def form { display: contents; }
+.ins-meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.ins-def-t { font-size: 14px; font-weight: 700; letter-spacing: -.01em; margin-top: 5px; text-wrap: pretty; }
+.ins-def-s { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.ins-def-x {
+  flex: none; width: 34px; height: 34px; border-radius: var(--radius-pill); background: var(--bg-2); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; transition: transform .12s, background .12s;
+}
+.ins-def-x > span { display: inline-flex; transform: rotate(45deg); }
+.ins-def-x:active { transform: scale(.88); background: var(--danger-bg); }
+/* Плашка «фото не ушло» приходит от PhotoUpload рядом со слотом; перенос
+   на свою строку под карточкой — невидимым разделителем во всю ширину. */
+.ins-def:has(.ph-fail)::after { content: ""; order: 8; flex-basis: 100%; height: 0; margin-top: -12px; }
+.ins-def .ph-fail { order: 9; margin: -6px 0 0 84px; }
+.ins-note { font-size: 12.5px; color: var(--muted); padding: 6px 4px 0; text-wrap: pretty; }
+.ins-small { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+/* Кнопки блока «Осмотр при приёмке» в карточке записи. */
+.ins-bk-b { display: flex; gap: 8px; margin-top: 12px; }
+.ins-bk-b .aui-btn { min-height: 44px; }
+.ins-bk-b .aui-btn--secondary { flex: 1; }
+.card-s + .ins-bk-b, .rp-badges + .ins-bk-b { margin-top: 12px; }
+
+/* Шторка «Пробег сейчас»: крупное поле и единица справа. */
+.km-box { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border-radius: 16px; padding: 10px 16px; }
+.km-box input, .km-v { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 26px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-height: 52px; }
+.km-v { display: flex; align-items: center; }
+.km-box > span:last-child { flex: none; font-size: 15px; font-weight: 700; color: var(--muted); }
+.km-prev { font-size: 12px; color: var(--muted-2); }
+
+/* Шторка «Новый дефект»: плитки узлов — кнопки GET-формы. */
+.cap-nodes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cap-node {
+  display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 12px; border-radius: 14px; background: var(--bg-2);
+  font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: left; transition: background .15s, transform .12s;
+}
+.cap-node:active { transform: scale(.97); background: var(--warm); }
+.cap-node .sq { width: 36px; height: 36px; border-radius: 11px; background: #fff; }
+
+/* Шторка формулировок узла: строки каталога и своя формулировка. */
+.pre {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 66px; padding: 14px; border-radius: 16px;
+  background: var(--bg-2); text-align: left; transition: background .15s, transform .12s;
+}
+.pre:active { transform: scale(.985); background: var(--warm); }
+.pre-main { flex: 1; min-width: 0; }
+.pre-t { display: block; font-size: 15px; font-weight: 700; letter-spacing: -.015em; text-wrap: pretty; }
+.pre-s { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.pre-p { flex: none; font-size: 15px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cust { background: var(--bg-2); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.cust-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.cust input[name="title"] { min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 14px; background: #fff; font-size: 15px; }
+.cust input[name="title"]:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.cust .aui-btn--primary { min-height: 48px; border-radius: 14px; }
+.cust-note { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+/* Сегмент и чипы на радиокнопках: состояние живёт в форме, а не в адресе —
+   иначе набранный текст терялся бы при каждом переключении. */
+.rseg { background: #fff; }
+.rseg > label, .rchips .chip { position: relative; cursor: pointer; }
+.rseg input, .rchips input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rseg > label:has(:checked) { color: #fff; box-shadow: none; }
+.rseg > label:has([value="warn"]:checked) { background: var(--tag-urgent); }
+.rseg > label:has([value="bad"]:checked) { background: var(--accent); }
+.rchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rchips .chip:has(:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Фото: слоты одного вида в трёх местах. Файловое поле накрывает слот
+   целиком и прозрачно — тап по слоту открывает камеру. */
+.ph-input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.ph-slot {
+  position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: var(--bg-2); border: 1px dashed var(--line-2); border-radius: 12px; color: var(--muted-2); font-size: 12.5px; font-weight: 600;
+}
+.ph-slot > span { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; text-align: center; }
+.ph-slot img { width: 100%; height: 100%; object-fit: cover; }
+.ph-slot.has { border-style: solid; }
+.ph-slot[data-status="uploading"] img { opacity: .55; }
+.ph-slot[data-status="failed"] img { opacity: .35; }
+.ph-cap { display: flex; flex-direction: column; gap: 8px; }
+.ph-main { height: 160px; border-radius: 16px; }
+.ph-row { display: flex; gap: 8px; }
+.ph-small { flex: 1; height: 56px; border-radius: 10px; font-size: 18px; }
+.ph-sq { flex: none; width: 72px; height: 72px; font-size: 11.5px; }
+.ph-sq > span { flex-direction: column; gap: 2px; }
+.ph-grid { display: flex; gap: 6px; margin-top: 10px; }
+.ph-grid .ph-slot { flex: 1; height: 96px; }
+.ph-fail {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; border-radius: var(--radius-pill);
+  background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--accent); font-size: 11.5px; font-weight: 700;
+  transition: transform .12s;
+}
+.ph-fail:active { transform: scale(.95); }
+.ph-fail-card {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: 12px;
+  background: var(--danger-bg); border: 1px solid var(--danger-line);
+}
+.ph-fail-card > span { flex: 1; font-size: 12px; font-weight: 600; color: var(--accent); }
+.ph-fail-card .aui-btn { flex: none; min-height: 28px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 700; }
+
+/* Отчёт: шапка, карточки дефектов, норма и тёмная смета. */
+.rp-h { display: flex; align-items: baseline; gap: 8px; }
+.rp-no { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); }
+.rp-car { font-size: 19px; font-weight: 800; letter-spacing: -.025em; margin-top: 8px; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.rp-grid .tile-v { font-size: 14px; }
+.rp-badges { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.rp-def {
+  background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); border-left: 3px solid var(--tag-urgent);
+  box-shadow: var(--shadow-m-card); padding: 14px; transition: opacity .15s;
+}
+.rp-def.is-bad { border-color: var(--danger-line); border-left-color: var(--accent); }
+.rp-def.is-off { opacity: .55; }
+.rp-def .ins-meta { font-size: 12.5px; }
+.rp-def .ins-meta form { display: contents; }
+.rp-check {
+  margin-left: auto; flex: none; width: 26px; height: 26px; border-radius: var(--radius-pill); background: var(--bg-2); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .12s;
+}
+.rp-check[aria-pressed="true"] { background: var(--accent); }
+.rp-check:active { transform: scale(.9); }
+.rp-incl { display: none; }
+.rp-def-t { font-size: 15px; font-weight: 700; letter-spacing: -.015em; margin-top: 8px; text-wrap: pretty; }
+.rp-note { font-size: 13px; color: var(--ink-2); margin-top: 4px; text-wrap: pretty; }
+.rp-work { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-2); }
+.rp-work-t { font-size: 13.5px; font-weight: 600; }
+.rp-work-s { font-size: 11.5px; color: var(--muted); }
+.rp-price { font-size: 16px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.rp-book { margin-top: 10px; }
+.rp-book .aui-btn { min-height: 38px; background: #fff; }
+.rp-booked { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--green-dark); }
+.rp-ok-t { font-size: 13.5px; font-weight: 700; }
+.rp-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.rp-est { background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
+.rp-est-h { display: flex; align-items: center; gap: 8px; }
+.rp-est-t { font-size: 13.5px; font-weight: 600; color: rgba(255, 255, 255, .92); }
+.rp-est-c { margin-left: auto; font-size: 12px; color: rgba(255, 255, 255, .62); }
+.rp-est-row { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.rp-est-sum { font-size: 28px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.rp-est-time { font-size: 13px; color: rgba(255, 255, 255, .62); }
+.rp-est-note { font-size: 12px; color: rgba(255, 255, 255, .45); margin-top: 8px; text-wrap: pretty; }
+/* Кнопка PDF в подвале — квадратная белая, как в макете. */
+.sticky-actions .rp-pdf { background: #fff; }
+
+@media (min-width: 881px) {
+  /* Две колонки: инструменты слева в 392px, отчёт справа. */
+  .ins-cols { display: grid; grid-template-columns: 392px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .ins-col { display: flex; flex-direction: column; gap: 12px; }
+  .ins-cta { min-height: 68px; border-radius: var(--radius-lg); }
+  .ins-cta:hover { background: var(--accent-dark); }
+  .ins-fchip { min-height: 38px; box-shadow: none; border: 1px solid var(--line-2); }
+  .ins-fchip:hover, .ins-def-x:hover, .cap-node:hover, .pre:hover { background: var(--bg-2); }
+  .ins-sect { padding-top: 0; }
+  .ins-def, .rp-def { border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+  .ins-def.is-bad, .rp-def.is-bad { border-color: var(--danger-line); }
+  .ins-def { border-left-width: 3px; }
+  .rp-def { padding: 18px 20px; border-left-width: 3px; }
+  .rp-def .ins-meta { font-size: 13px; }
+  .rp-check { margin-left: 4px; width: 24px; height: 24px; }
+  .rp-incl { display: inline; font-size: 12.5px; color: var(--muted); }
+  .rp-def-t { font-size: 17px; letter-spacing: -.02em; }
+  .rp-price { font-size: 18px; }
+  .ph-grid .ph-slot { flex: none; width: 148px; height: 112px; }
+  .rp { max-width: 860px; }
+  .rp-est { border-radius: 14px; padding: 16px 18px; }
+  .rp-badges .aui-badge, .rp-est-c { flex: none; }
+  .cap-node, .pre, .ins-fchip, .rseg > label, .rchips .chip { cursor: pointer; }
+  .ins-bk-b .aui-btn { min-height: 40px; }
+}
+
+
+
+/* @section:roli-dostupy-mastera */
+/* Роли в оболочке, «Доступы», «Мастера», «Мой пост». */
+
+/* Бейдж роли в шапке телефона — перед подзаголовком, warm-фон и красные
+   капители 10.5px, как в макете (role.chipStyle). Подзаголовок при этом
+   остаётся в одну строку с многоточием. */
+.t-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.role-chip {
+  flex: none; padding: 2px 7px; border-radius: var(--radius-pill);
+  background: var(--warm); color: var(--accent);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+
+/* Список выбора в шторке (мастер записи, кому передать): формы не участвуют
+   в раскладке, кнопка .pick тянется во всю ширину. Выходной — тусклее. */
+.pick-list { display: flex; flex-direction: column; gap: 8px; }
+.pick-list form { display: contents; }
+.pick-list .ava { width: 40px; height: 40px; font-size: 13px; }
+.pick-list .pick-t, .pick-list .pick-s { display: block; }
+.pick-off { opacity: .55; }
+
+/* ─── Доступы ─── */
+/* Строка сотрудника: на телефоне карточка с сегментом роли под именем,
+   на вебе — строка таблицы с сегментом в 200px перед переключателем. */
+.acc-list { display: flex; flex-direction: column; gap: 10px; }
+.acc-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  background: #fff; border-radius: 18px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 14px;
+}
+.acc-row.off { opacity: .55; }
+.acc-row .ava { width: 44px; height: 44px; font-size: 14px; }
+.acc-n { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.acc-s { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Сегмент — форма с кнопками: на телефоне уходит на свою строку во всю ширину. */
+.acc-seg { order: 1; flex: 0 0 100%; }
+.acc-sw { display: contents; }
+/* Приглашение: на телефоне красная кнопка под списком, на вебе — в заголовке. */
+.acc-invite { min-height: 52px; border-radius: 14px; box-shadow: var(--shadow-accent); }
+.acc-invite:active { box-shadow: none; }
+.acc-invite-web { display: none; }
+
+/* ─── Мастера ─── */
+.m-grid { display: flex; flex-direction: column; gap: 10px; }
+.m-card .person .ava { width: 48px; height: 48px; font-size: 16px; }
+.m-card .person form { display: contents; }
+/* Плашка «остались без мастера» — красная, как ошибка сохранения: записи
+   ждут исполнителя, и это надо решить, а не прочитать. */
+.m-orphan {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px;
+  border-radius: 12px; background: var(--danger-bg); border: 1px solid var(--danger-line);
+}
+.m-orphan > span { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.m-orphan .aui-btn { flex: none; min-height: 32px; }
+.m-add { min-height: 52px; border-radius: 14px; background: #fff; }
+
+/* ─── Мой пост ─── */
+/* Тёмная карточка мастера — как выручка у хозяина: белым по --ink. */
+.mw-hero { background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
+.mw-hero .ava { width: 42px; height: 42px; font-size: 14px; background: rgba(255, 255, 255, .14); color: #fff; }
+.mw-hero .person-n { font-size: 15.5px; letter-spacing: -.015em; }
+.mw-hero .person-s { color: var(--dark-text-2, #a3aab6); }
+.mw-shift { flex: none; padding: 5px 10px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .14); font-size: 12px; font-weight: 700; }
+.mw-hero .tiles { margin-top: 14px; }
+.mw-hero .tile { background: rgba(255, 255, 255, .08); }
+.mw-hero .tile-k { color: var(--dark-text-2, #a3aab6); }
+/* Заголовки секций на этом экране видны и на вебе: колонка в 1000px без
+   них — одна стопка карточек. */
+.mw-sect { display: flex; }
+.mw-now-head { display: flex; align-items: center; gap: 8px; }
+.mw-time { font-size: 14px; font-weight: 600; }
+.mw-left { margin-left: auto; font-size: 12px; color: var(--accent); }
+.mw-now-t { font-size: 16px; font-weight: 700; letter-spacing: -.015em; margin-top: 8px; }
+.mw-now-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.mw-now-actions { display: flex; gap: 8px; margin-top: 14px; }
+.mw-now-actions form { display: contents; }
+.mw-now-actions .aui-btn { min-height: 46px; }
+.mw-now-actions .aui-btn--primary { flex: 1; }
+.mw-now-actions .aui-btn--outline { background: #fff; }
+.mw-report-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.mw-report { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
+.mw-report-no { flex: none; font-size: 11.5px; color: var(--muted); }
+.mw-report-car { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mw-reports .card-t { font-size: 13.5px; }
+
+@media (min-width: 881px) {
+  /* Доступы — колонка в 760px, строки в одной рамке, как таблица. */
+  .page-access { max-width: 760px; }
+  .acc-note-top, .acc-invite { display: none; }
+  .acc-invite-web { display: inline-flex; box-shadow: var(--shadow-accent); }
+  .acc-list { gap: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .acc-row { flex-wrap: nowrap; gap: 14px; padding: 14px 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+  .acc-row:last-child { border-bottom: 0; }
+  .acc-row .ava { width: 40px; height: 40px; font-size: 13px; }
+  .acc-s { font-size: 12.5px; }
+  .acc-seg { order: 0; flex: 0 0 200px; }
+  /* Мастера — сетка в три колонки, плашка «без мастера» над плитками. */
+  .page-masters { max-width: 1000px; }
+  .m-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .m-card { display: flex; flex-direction: column; padding: 18px; }
+  .m-card .person .ava { width: 46px; height: 46px; font-size: 15px; }
+  .m-card > .tiles { order: 2; margin-top: 16px; }
+  .m-orphan { order: 1; margin-top: 14px; padding: 9px 12px; border-radius: var(--radius); }
+  .m-orphan > span { font-size: 12px; }
+  .m-orphan .aui-btn { min-height: 30px; }
+  .m-note, .m-add { display: none; }
+  .mw-sect { padding: 8px 0 0; }
+}
+
+
+
+/* @section:dengi-chat-zametki */
+/* «Деньги» хозяина, чат, заметки о клиентах. */
+
+/* ── Деньги ── */
+/* Сегмент периода на телефоне стоит первым в колонке; на вебе он же —
+   в хвосте заголовка раздела, и колоночная копия прячется. */
+.dash-seg-touch { display: block; }
+/* Тёмная карточка выручки. Цвета текста на тёмном — те же, что в макете
+   (dark-text-2/3 сайта); в общих токенах их нет, поэтому живут здесь, на
+   единственной тёмной карточке приложения. */
+.dark-card {
+  --dark-text-2: #a3aab6; --dark-text-3: #9a9fa8;
+  background: var(--ink); color: #fff; border-radius: 18px; padding: 18px;
+}
+.dk-eyebrow { color: var(--dark-text-3); }
+.dk-row { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.dk-big { font-size: 32px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dk-delta { font-size: 13px; font-weight: 700; color: var(--green); }
+/* Падение — красным: зелёный минус читается как рост. */
+.dk-delta.is-down { color: var(--accent); }
+.dk-tiles { margin-top: 16px; }
+.dark-card .tile { background: rgba(255, 255, 255, .08); }
+.dark-card .tile-k { color: var(--dark-text-2); }
+/* Плитка «Записей» — только на вебе: на телефоне три плитки не влезают. */
+.tile-web { display: none; }
+
+.conv-head { display: flex; align-items: center; gap: 8px; }
+.conv-t { font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+.conv-n { margin-left: auto; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.conv-s { font-size: 12.5px; color: var(--muted); margin-top: 4px; text-wrap: pretty; }
+.conv-bar { height: 8px; margin-top: 12px; }
+/* Полоса конверсии и полосы долей: ширина из --k (0…1), как столбики недели. */
+.conv-bar > i { width: calc(var(--k, 0) * 100%); }
+
+/* Списки мастеров и услуг: строки внутри карточки с тесным вертикальным
+   отступом, как в макете (6px 16px). */
+.dash-list { padding: 6px 16px; }
+.dash-none { padding: 12px 0; font-size: 13px; color: var(--muted); text-wrap: pretty; }
+.mline, .sline { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.mline:last-child, .sline:last-child { border-bottom: 0; }
+.mline .ava { width: 36px; height: 36px; font-size: 12.5px; }
+.mline-n { font-size: 14px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mbar { height: 5px; border-radius: var(--radius-pill); background: var(--bg-2); margin-top: 6px; overflow: hidden; }
+.mbar > i {
+  display: block; height: 100%; border-radius: var(--radius-pill); background: var(--warm);
+  width: calc(var(--k, 0) * 100%); transform-origin: left; animation: barGrow .5s var(--ease-out);
+}
+/* Лидер — акцентом, остальные тёплым: видно, кто сделал кассу. */
+.mline.is-top .mbar > i { background: var(--accent); }
+.mline-tail { flex: none; text-align: right; }
+.mline-m, .sline-m { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mline-j, .sline-c { font-size: 11.5px; color: var(--muted); }
+.sline-t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-top, .dash-cols { display: contents; }
+
+/* ── Чат ── */
+/* Список диалогов: строка крупнее обычной — имя и последняя фраза. */
+.chat-row { padding: 13px 14px; }
+.chat-row .ava { width: 46px; height: 46px; font-size: 15px; }
+.chat-top { display: flex; align-items: center; gap: 6px; }
+.chat-n { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-at { margin-left: auto; flex: none; font-size: 11.5px; color: var(--muted-2); }
+.chat-bot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.chat-last { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-unread {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* Правая панель, шапка треда и колонка диалогов рядом с перепиской — веб. */
+.chat-pane-empty, .thread-head, .thread-page .chat-list { display: none; }
+.thread-body { display: flex; flex-direction: column; gap: 10px; }
+.thread-bk { display: flex; align-items: center; gap: 10px; padding: 12px 14px; transition: transform .12s; }
+.thread-bk:active { transform: scale(.99); }
+.thread-bk-t { font-size: 13px; font-weight: 600; }
+.thread-bk-s { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msgs { display: flex; flex-direction: column; gap: 8px; }
+.msg { display: flex; justify-content: flex-start; animation: fadeSlide .28s var(--ease-out) both; }
+.msg.mine { justify-content: flex-end; }
+.bubble {
+  max-width: 80%; padding: 9px 13px 7px; border-radius: 16px 16px 16px 5px;
+  background: #fff; border: .75px solid var(--m-hair); box-shadow: var(--shadow-sm);
+}
+.msg.mine .bubble { border-radius: 16px 16px 5px 16px; background: var(--warm); border: 1px solid #f6dfd8; }
+.bubble-t { font-size: 14px; line-height: 1.35; text-wrap: pretty; overflow-wrap: anywhere; }
+.bubble-at { font-size: 10.5px; color: var(--muted-2); text-align: right; margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* Подвал треда липнет к низу над вкладками — та же геометрия, что у
+   .sticky-actions; градиент прячет пузыри, уходящие под него. */
+.thread-foot {
+  position: sticky; bottom: 0; z-index: 2;
+  margin: 6px -12px calc(-1 * (var(--tabbar-h) + 30px)); padding: 10px 12px calc(var(--tabbar-h) + 14px);
+  background: linear-gradient(to bottom, rgba(243, 242, 239, 0), var(--m-bg) 22%);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.thread-foot .quick { margin: 0; padding: 0 0 2px; }
+.chat-form { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input {
+  flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; font-size: 14px;
+  background: #fff; border: .75px solid var(--m-hair); border-radius: 22px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.chat-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.chat-input::placeholder { color: var(--muted-2); }
+.chat-send {
+  flex: none; width: 46px; height: 46px; border-radius: var(--radius-pill);
+  background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-accent); transition: transform .12s, background .15s;
+}
+.chat-send:active { transform: scale(.9); }
+.chat-send-t { display: none; }
+.nosend { display: flex; flex-direction: column; gap: 10px; background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 14px; }
+.nosend .note-s { margin: 0; }
+.nosend-q { font-size: 13.5px; color: var(--ink-2); text-wrap: pretty; }
+.nosend .aui-btn { min-height: 44px; }
+
+/* ── Заметка о клиенте ── */
+.note-card { display: block; transition: transform .12s; }
+.note-card:active { transform: scale(.99); }
+.note-txt { font-size: 14px; margin-top: 6px; text-wrap: pretty; white-space: pre-line; }
+.note-empty { color: var(--muted); }
+.note-by { font-size: 11.5px; color: var(--muted-2); margin-top: 6px; }
+
+@media (min-width: 881px) {
+  /* Деньги: сегмент в заголовке, сверху тёмная карточка и конверсия рядом,
+     ниже мастера и услуги двумя колонками. Заголовки секций — внутри
+     карточек, как в макете: снаружи на вебе их прячет общий .sect. */
+  .dash-seg-touch { display: none; }
+  .dash-seg > * { flex: none; }
+  .dash-top { display: flex; gap: 12px; align-items: stretch; }
+  .dash-top .dark-card { flex: 1; min-width: 0; border-radius: var(--radius-lg); padding: 22px 24px; }
+  .dash-top .conv { flex: none; width: 340px; }
+  .dk-row { gap: 12px; margin-top: 10px; }
+  .dk-big { font-size: 38px; letter-spacing: -.035em; }
+  .dk-delta { font-size: 14px; }
+  .dk-tiles { margin-top: 18px; gap: 10px; }
+  .dark-card .tile { padding: 12px 14px; }
+  .dark-card .tile-v { font-size: 17px; }
+  .tile-web { display: block; }
+  .conv-n { font-size: 14px; }
+  .conv-bar { margin-top: 14px; }
+  .dash-cols { display: flex; gap: 12px; align-items: flex-start; }
+  .dash-block {
+    flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-lg); padding: 8px 20px; box-shadow: var(--shadow-sm);
+  }
+  .dash-block .sect { display: flex; font-size: 15px; font-weight: 700; letter-spacing: -.015em; padding: 14px 0 8px; }
+  .dash-block .card { border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+  .mline, .sline { gap: 14px; padding: 13px 0; border-bottom: 0; border-top: 1px solid var(--line); }
+  .mline .ava { width: 38px; height: 38px; font-size: 13px; }
+  .mbar { margin-top: 7px; }
+  .mline-m, .sline-m { font-size: 15px; }
+
+  /* Чат: две панели во весь рабочий экран — колонка диалогов слева,
+     переписка справа. Подсказка под списком на вебе не нужна. */
+  .chat-page { padding: 0; max-width: none; display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h)); }
+  .chat-hint { display: none; }
+  .chat-wrap { display: flex; flex: 1; min-height: 0; }
+  .chat-list, .thread-page .chat-list {
+    display: block; flex: none; width: 300px; border: 0; border-right: 1px solid var(--line);
+    border-radius: 0; box-shadow: none; background: #fff; overflow-y: auto;
+  }
+  .chat-row { padding: 14px 16px; }
+  .chat-row:hover { background: var(--bg-2); }
+  .chat-row[aria-current="page"] { background: var(--warm); }
+  .chat-row .ava { width: 40px; height: 40px; font-size: 13px; }
+  .chat-n { font-size: 14px; }
+  .chat-last { font-size: 12.5px; }
+  .chat-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-3); }
+  .chat-pane-empty { display: flex; align-items: center; justify-content: center; }
+  .thread-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--line); }
+  .thread-n { font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+  .thread-s { font-size: 12px; color: var(--muted); }
+  /* Карточка записи над пузырями — телефон: на вебе её заменяет шапка. */
+  .thread-bk { display: none; }
+  .thread-body { flex: 1; overflow-y: auto; padding: 20px 24px; gap: 10px; }
+  .bubble { max-width: 62%; padding: 10px 14px 8px; border: 1px solid var(--line); }
+  .bubble-t { line-height: 1.4; }
+  .bubble-at { font-size: 11px; }
+  .thread-foot {
+    position: static; margin: 0; padding: 14px 24px 18px; background: #fff; border-top: 1px solid var(--line); gap: 10px;
+  }
+  .thread-foot .quick { flex-wrap: wrap; padding: 0; }
+  .thread-foot .chip { min-height: 32px; padding: 0 12px; font-size: 12.5px; background: var(--bg-2); border: 0; }
+  .thread-foot .chip:hover { background: var(--warm); color: var(--accent); }
+  .chat-form { gap: 10px; align-items: center; }
+  .chat-input { padding: 10px 16px; border: 1px solid var(--line-2); border-radius: var(--radius-pill); }
+  .chat-send { width: auto; min-height: 46px; height: auto; padding: 0 22px; box-shadow: none; font-weight: 700; font-size: 14px; }
+  .chat-send:hover { background: var(--accent-dark); }
+  .chat-send:active { transform: translateY(1px); }
+  .chat-send-i { display: none; }
+  .chat-send-t { display: inline; }
+  .nosend { flex-direction: row; align-items: center; border: 0; box-shadow: none; padding: 0; }
+  .nosend .note-s { flex: 1; }
+  .nosend .aui-btn { flex: none; }
+}
+
+
+
+/* @section:bufer */
+/* Буфер между записями в расписании. Подпись под сегментом: .card-s даёт
+   4px сверху и 12.5px на вебе, макет — 6px и 12px, поэтому свой класс. */
+.buf-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; text-wrap: pretty; }
+@media (min-width: 881px) {
+  .buf-note { font-size: 12px; }
+}
+
+

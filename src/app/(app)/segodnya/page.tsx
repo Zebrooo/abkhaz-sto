@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
-import { countPending, listBookings } from "@/lib/bookings";
+import { requireSection } from "@/lib/context";
+import { countPending, dayBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -9,7 +9,6 @@ import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
 import { Timeline } from "@/components/Timeline";
 import { addDays, count, dayLabel, dayOfWeekLabel, dayTitle, todayLocal } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
-import { localTime } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -51,13 +50,15 @@ function StatusChips({ day, filter, counts }: { day: string; filter: Filter; cou
  */
 export default async function TodayPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("bookings"))!;
+  const shop = ctx.shop;
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
   const f = pick(sp.f);
   const filter: Filter = isFilter(f) ? f : "all";
 
-  const rows = await listBookings(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const rows = await dayBookings(shop.id, day);
   const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const live = rows.filter(isLive);

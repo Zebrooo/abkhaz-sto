@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { countPending } from "@/lib/bookings";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -7,8 +7,8 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { dayTitle } from "@/lib/format";
 import {
-  DEFAULT_STO_FREE_CANCEL_HOURS, DEFAULT_STO_STEP_MIN, MAX_STO_FREE_CANCEL_HOURS,
-  MAX_STO_POSTS, MAX_STO_PREPAY_AMOUNT, STO_DAYS, STO_DAY_LABEL, STO_STEPS_MIN, type StoDay,
+  DEFAULT_STO_BUFFER_MIN, DEFAULT_STO_FREE_CANCEL_HOURS, DEFAULT_STO_STEP_MIN, MAX_STO_FREE_CANCEL_HOURS,
+  MAX_STO_POSTS, MAX_STO_PREPAY_AMOUNT, STO_BUFFERS_MIN, STO_DAYS, STO_DAY_LABEL, STO_STEPS_MIN, type StoDay,
 } from "@/lib/sto/schedule";
 import { saveIntervalAction, saveScheduleAction, toggleDayOffAction } from "@/app/(app)/actions";
 
@@ -29,16 +29,21 @@ const TIMES = Array.from({ length: 37 }, (_, i) => {
 const SCHED_FORM = "sched";
 const IV_FORM = "iv";
 const HEAD_SUB = "Часы приёма, посты, шаг сетки и предоплата. От этого считаются свободные окна на сайте.";
+/** Подпись под буфером — дословно из макета: объясняет цифру на примере, а не термином. */
+const BUFFER_NOTE = "Прибавляется к каждому окну: запись на 60 мин занимает 75. Мастер успевает закрыть работу и принять следующую машину — окна не идут минута в минуту.";
 
 /**
  * «Расписание» — из чего сайт считает свободные окна: часы приёма по дням,
- * число постов, шаг сетки, разовые выходные и предоплата. Часы правятся по
- * одному интервалу шторкой и сохраняются сразу, остальное — одной кнопкой
- * внизу. Всё выбранное лежит в адресе, клиентского состояния нет.
+ * число постов, шаг сетки, буфер между записями, разовые выходные и
+ * предоплата. Часы правятся по одному интервалу шторкой и сохраняются сразу,
+ * остальное — одной кнопкой внизу. Всё выбранное лежит в адресе, клиентского
+ * состояния нет.
  */
 export default async function SchedulePage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("schedule"))!;
+  const shop = ctx.shop;
   const pending = await countPending(shop.id);
   const s = shop.schedule;
   const p = shop.prepay;
@@ -48,6 +53,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: SP 
   const posts = Number.isInteger(postsRaw) && postsRaw >= 1 && postsRaw <= MAX_STO_POSTS ? postsRaw : (s?.posts ?? 1);
   const stepRaw = Number(pick(sp.step));
   const stepMin = (STO_STEPS_MIN as readonly number[]).includes(stepRaw) ? stepRaw : (s?.stepMin ?? DEFAULT_STO_STEP_MIN);
+  // «Нет» — это 0, а Number("") — тоже 0: без проверки на пустоту отсутствие
+  // параметра в адресе сбрасывало бы сохранённый буфер на «Нет».
+  const bufferRaw = pick(sp.buffer);
+  const bufferMin = bufferRaw !== "" && (STO_BUFFERS_MIN as readonly number[]).includes(Number(bufferRaw))
+    ? Number(bufferRaw)
+    : (s?.bufferMin ?? DEFAULT_STO_BUFFER_MIN);
   const modeRaw = pick(sp.prepay);
   const prepayMode = modeRaw === "off" || modeRaw === "fixed" || modeRaw === "percent" ? modeRaw : p.mode;
 
@@ -64,10 +75,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: SP 
 
   // Одна ссылка на все переключатели: то, что не меняем, переезжает как есть,
   // иначе выбранный шаг терялся бы при открытии шторки часов.
-  type Over = { posts?: number; step?: number; prepay?: string; iv?: string | null; from?: string | null; to?: string | null };
+  type Over = { posts?: number; step?: number; buffer?: number; prepay?: string; iv?: string | null; from?: string | null; to?: string | null };
   const href = (over: Over = {}) => {
-    const v = { posts, step: stepMin, prepay: prepayMode, iv: ivMatch ? pick(sp.iv) : null, from, to, ...over };
-    const q = new URLSearchParams({ posts: String(v.posts), step: String(v.step), prepay: v.prepay });
+    const v = { posts, step: stepMin, buffer: bufferMin, prepay: prepayMode, iv: ivMatch ? pick(sp.iv) : null, from, to, ...over };
+    const q = new URLSearchParams({ posts: String(v.posts), step: String(v.step), buffer: String(v.buffer), prepay: v.prepay });
     if (v.iv) {
       q.set("iv", v.iv);
       if (v.from) q.set("from", v.from);
@@ -137,6 +148,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: SP 
               ))}
             </div>
 
+            <div className="set-lab">Буфер между записями</div>
+            <div className="seg">
+              {STO_BUFFERS_MIN.map(m => (
+                <Link key={m} href={href({ buffer: m })} aria-current={m === bufferMin ? "page" : undefined}>{m === 0 ? "Нет" : `${m} мин`}</Link>
+              ))}
+            </div>
+            <div className="buf-note">{BUFFER_NOTE}</div>
+
             <div className="set-lab">Разовые выходные</div>
             <div className="days-off">
               {daysOff.map(d => (
@@ -195,6 +214,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: SP 
             <input type="hidden" name="shopId" value={shop.id} />
             <input type="hidden" name="posts" value={posts} />
             <input type="hidden" name="stepMin" value={stepMin} />
+            <input type="hidden" name="bufferMin" value={bufferMin} />
             <input type="hidden" name="daysOff" value={daysOff.join(", ")} />
             <input type="hidden" name="prepayMode" value={prepayMode} />
             <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit">Сохранить расписание</button>

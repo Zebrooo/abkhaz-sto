@@ -1,0 +1,142 @@
+// Навигация по ролям: вкладки телефона, пункты левого меню веба и строки
+// экрана «Ещё» — один словарь без базы и сети. Его читают клиентский TabBar,
+// SideNav и серверный «Ещё», а тест проверяет, что ни одна роль не получает
+// вкладку в закрытый ей раздел и с любого адреса подсвечивается своя вкладка.
+//
+// Списки — дословно из макетов («Сервис — тач», ROLES[*].tabs и menu;
+// «Сервис — веб», WROLES[*].nav): у мастера свой пост и осмотр, у админа
+// смена и записи с кнопкой «+», у хозяина деньги и мастера.
+import type { Section, StoRole } from "@/lib/access";
+import type { IconName } from "@/components/Icon";
+
+export type NavKey =
+  | "mywork" | "inspect" | "chats" | "smena" | "today" | "clients" | "dash"
+  | "masters" | "more" | "services" | "schedule" | "notifs" | "access" | "report";
+
+/** Раздел, к которому относится пункт — по нему тест сверяет доступ. */
+export const NAV_SECTION: Record<NavKey, Section> = {
+  mywork: "bookings", inspect: "inspect", chats: "chat", smena: "shift", today: "bookings",
+  clients: "clients", dash: "money", masters: "masters", more: "bookings", services: "services",
+  schedule: "schedule", notifs: "shift", access: "access", report: "inspect",
+};
+
+/**
+ * Адреса пунктов. «Осмотр» — единственный без постоянного адреса: он ведёт
+ * на осмотр текущей записи, и его подставляет оболочка (hrefOf).
+ */
+const ROUTE: Record<Exclude<NavKey, "inspect">, string> = {
+  mywork: "/moi-raboty", chats: "/chat", smena: "/", today: "/segodnya", clients: "/klienty",
+  dash: "/svodka", masters: "/mastera", more: "/menu", services: "/uslugi", schedule: "/raspisanie",
+  notifs: "/uvedomleniya", access: "/dostupy",
+  // «Мои отчёты» мастера живут внизу его экрана — отдельного нет.
+  report: "/moi-raboty",
+};
+
+export function hrefOf(key: NavKey, inspectHref: string): string {
+  return key === "inspect" ? inspectHref : ROUTE[key];
+}
+
+export type TabDef = { key: NavKey | "fab"; label: string; icon: IconName };
+
+/** Вкладки снизу на телефоне. «fab» — красная кнопка новой записи. */
+export const TABS: Record<StoRole, readonly TabDef[]> = {
+  master: [
+    { key: "mywork", label: "Мой пост", icon: "list" },
+    { key: "inspect", label: "Осмотр", icon: "camera" },
+    { key: "chats", label: "Чат", icon: "comment" },
+    { key: "more", label: "Ещё", icon: "menu" },
+  ],
+  admin: [
+    { key: "smena", label: "Смена", icon: "chart" },
+    { key: "today", label: "Записи", icon: "list" },
+    { key: "fab", label: "", icon: "plus" },
+    { key: "clients", label: "Клиенты", icon: "users" },
+    { key: "more", label: "Ещё", icon: "menu" },
+  ],
+  owner: [
+    { key: "dash", label: "Деньги", icon: "chart" },
+    { key: "today", label: "Записи", icon: "list" },
+    { key: "masters", label: "Мастера", icon: "users" },
+    { key: "more", label: "Ещё", icon: "menu" },
+  ],
+};
+
+export type SideDef = { key: NavKey; label: string; icon: IconName };
+
+const SIDE_ITEM: Record<NavKey, SideDef> = {
+  dash: { key: "dash", label: "Деньги", icon: "chart" },
+  today: { key: "today", label: "Записи", icon: "list" },
+  inspect: { key: "inspect", label: "Осмотр и отчёты", icon: "camera" },
+  clients: { key: "clients", label: "Клиенты", icon: "users" },
+  chats: { key: "chats", label: "Чат", icon: "comment" },
+  services: { key: "services", label: "Услуги и цены", icon: "wrench" },
+  schedule: { key: "schedule", label: "Расписание", icon: "clock" },
+  masters: { key: "masters", label: "Мастера", icon: "user" },
+  notifs: { key: "notifs", label: "Уведомления", icon: "bell" },
+  access: { key: "access", label: "Доступы", icon: "cog" },
+  // В левом меню макета этих пунктов нет — они здесь ради полноты словаря.
+  mywork: { key: "mywork", label: "Мой пост", icon: "list" },
+  smena: { key: "smena", label: "Смена", icon: "chart" },
+  more: { key: "more", label: "Ещё", icon: "menu" },
+  report: { key: "report", label: "Мои отчёты", icon: "list" },
+};
+
+const SIDE_KEYS: Record<StoRole, readonly NavKey[]> = {
+  master: ["inspect", "chats"],
+  admin: ["today", "inspect", "clients", "chats", "services", "schedule", "notifs"],
+  owner: ["dash", "today", "inspect", "masters", "services", "schedule", "notifs", "access"],
+};
+
+/** Левое меню рабочего места — в порядке макета. */
+export function sideNav(role: StoRole): readonly SideDef[] {
+  return SIDE_KEYS[role].map(k => SIDE_ITEM[k]);
+}
+
+/** Строки «Ещё»: что не поместилось во вкладки. «shop» — витрина на сайте. */
+export type MenuKey = "inspect" | "report" | "services" | "schedule" | "masters" | "chats" | "notifs" | "access" | "shop";
+
+export const MENU: Record<StoRole, readonly MenuKey[]> = {
+  master: ["inspect", "report", "chats", "services"],
+  admin: ["inspect", "services", "schedule", "masters", "chats", "notifs", "shop"],
+  owner: ["services", "schedule", "masters", "notifs", "access", "shop"],
+};
+
+/**
+ * Какому пункту принадлежит адрес. Карточка записи и календарь — «Записи»,
+ * осмотр и отчёт внутри записи — «Осмотр», неизвестное — «Ещё».
+ */
+export function navKeyOf(path: string): NavKey {
+  if (path === "/") return "smena";
+  if (/^\/zapis\/\d+\/(osmotr|otchet)/.test(path)) return "inspect";
+  if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "today";
+  const first = "/" + path.split("/")[1];
+  const found = (Object.keys(ROUTE) as Exclude<NavKey, "inspect">[]).find(k => ROUTE[k] === first && k !== "report");
+  return found ?? "more";
+}
+
+/**
+ * Куда «поднимается» пункт, если у роли нет для него вкладки: у мастера
+ * запись — часть «Моего поста», у админа осмотр — часть «Записей», а всё
+ * служебное — в «Ещё». Цепочка всегда кончается на «Ещё»: оно есть у всех.
+ */
+const PARENT: Partial<Record<NavKey, NavKey>> = {
+  inspect: "today", report: "mywork", today: "mywork", smena: "dash", dash: "more", mywork: "more",
+  clients: "more", masters: "more", services: "more", schedule: "more", notifs: "more", access: "more", chats: "more",
+};
+
+/** Вкладка, которую подсветить на этом адресе у этой роли. */
+export function activeTab(role: StoRole, path: string): NavKey {
+  const keys = TABS[role].map(t => t.key);
+  let key = navKeyOf(path);
+  while (!keys.includes(key)) key = PARENT[key] ?? "more";
+  return key;
+}
+
+/** Все пункты, которые роль видит где-либо, — для проверки доступа тестом. */
+export function visibleKeys(role: StoRole): NavKey[] {
+  const keys = new Set<NavKey>();
+  for (const t of TABS[role]) if (t.key !== "fab") keys.add(t.key);
+  for (const s of SIDE_KEYS[role]) keys.add(s);
+  for (const m of MENU[role]) if (m !== "shop") keys.add(m);
+  return [...keys];
+}

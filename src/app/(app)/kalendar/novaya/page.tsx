@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentServiceShop } from "@/lib/shop";
+import { requireSection } from "@/lib/context";
 import { busyIntervals, countPending } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
@@ -32,7 +32,9 @@ const HEAD_SUB = "клиент с улицы или по телефону · о�
  */
 export default async function NewBookingPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const shop = (await currentServiceShop())!;
+  // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
+  const ctx = (await requireSection("bookings"))!;
+  const shop = ctx.shop;
   const pending = await countPending(shop.id);
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
@@ -102,6 +104,14 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
     ? `${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo} · ${minutesLabel(svc.durationMin)}`
     : `${dayTitle(day)} · окно не выбрано · ${minutesLabel(svc.durationMin)}`;
 
+  // Запись из отчёта («Записать на эту работу»): пункт сметы и запись, из
+  // которой пришли, едут через все шаги и в форму — после создания действие
+  // свяжет их и вернёт в отчёт.
+  const fromInspection = /^\d+$/.test(pick(sp.fromInspection)) ? pick(sp.fromInspection) : "";
+  const fromDefect = /^\d+$/.test(pick(sp.defect)) ? pick(sp.defect) : "";
+  const fromBooking = /^\d+$/.test(pick(sp.fromBooking)) ? pick(sp.fromBooking) : "";
+  const fromReport = !!(fromInspection && fromDefect && fromBooking);
+
   type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null };
   const href = (over: Over) => {
     const v = { step, d: day, s: svc.listingId, post: postNo, t: time, ...over };
@@ -109,6 +119,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
     if (v.step) q.set("step", String(v.step));
     if (v.post) q.set("post", String(v.post));
     if (v.t) q.set("t", v.t);
+    if (fromReport) { q.set("fromInspection", fromInspection); q.set("defect", fromDefect); q.set("fromBooking", fromBooking); }
     return `/kalendar/novaya?${q.toString()}`;
   };
 
@@ -138,6 +149,13 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
           <input type="hidden" name="listingId" value={svc.listingId} />
           <input type="hidden" name="hhmm" value={time} />
           {postNo && <input type="hidden" name="postNo" value={postNo} />}
+          {fromReport && (
+            <>
+              <input type="hidden" name="fromInspection" value={fromInspection} />
+              <input type="hidden" name="defect" value={fromDefect} />
+              <input type="hidden" name="fromBooking" value={fromBooking} />
+            </>
+          )}
 
           <div className="nb-cols">
             <div className="nb-svc">
@@ -182,6 +200,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     <span className="nb-l-s">
                       {postNo ? `пост ${postNo}` : "по всем постам"}
                       <span className="nb-w"> · шаг {schedule.stepMin} мин</span>
+                      {schedule.bufferMin > 0 && ` · с буфером ${schedule.bufferMin} мин`}
                     </span>
                   </div>
                   {slots.length === 0 ? (

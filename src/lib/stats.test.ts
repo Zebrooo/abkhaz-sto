@@ -12,6 +12,7 @@ const SCHEDULE: StoSchedule = {
   },
   posts: 3,
   stepMin: 30,
+  bufferMin: 0,
   daysOff: ["2026-09-16"],
 };
 

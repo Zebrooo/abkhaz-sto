@@ -5,8 +5,8 @@ name: Deploy
 # подтягивает его и перезапускает контейнер. Blue-green здесь нет: это отдельное
 # приложение с одним контейнером, сайт оно не трогает.
 #
-#   test → 185, rabota.abkhaz-auto.apsoftgroup.ru, контейнер abkhaz-rabota-test
-#   prod → 170, rabota.abkhaz-auto.ru,             контейнер abkhaz-rabota-prod
+#   test → 185, business.abkhaz-auto.apsoftgroup.ru, контейнер abkhaz-business-test
+#   prod → 170, business.abkhaz-auto.ru,             контейнер abkhaz-business-prod
 #
 # Публичные build-аргументы берутся из deploy/<контур>/build.env в репозитории,
 # а не из vars: они и так публичны (уезжают в браузер), и в git их видно вместе
@@ -107,14 +107,14 @@ jobs:
       - name: выкат
         env:
           ENVIRONMENT: ${{ inputs.environment }}
-          RABOTA_IMAGE: ${{ needs.build.outputs.image }}
+          BUSINESS_IMAGE: ${{ needs.build.outputs.image }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          container="abkhaz-rabota-${ENVIRONMENT}"
+          container="abkhaz-business-${ENVIRONMENT}"
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker pull "$RABOTA_IMAGE"
-          RABOTA_IMAGE="$RABOTA_IMAGE" docker compose -f "deploy/${ENVIRONMENT}/docker-compose.yml" up -d --no-build rabota
+          docker pull "$BUSINESS_IMAGE"
+          BUSINESS_IMAGE="$BUSINESS_IMAGE" docker compose -f "deploy/${ENVIRONMENT}/docker-compose.yml" up -d --no-build business
           # Здоровье берём у самого контейнера: портов наружу он не публикует
           # (ходит только через сеть Traefik), поэтому curl с хоста не подходит.
           for i in $(seq 1 30); do

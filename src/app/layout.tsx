@@ -10,7 +10,7 @@ import "@fontsource/jetbrains-mono/700.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Абхаз-Работа",
+  title: "АбхазАвто Бизнес",
   description: "Записи, календарь, расписание и прайс автосервиса",
 };
 

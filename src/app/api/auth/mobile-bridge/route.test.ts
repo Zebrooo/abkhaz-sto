@@ -16,7 +16,7 @@ vi.mock("@supabase/ssr", () => ({
 
 import { POST } from "./route";
 
-const post = (body: unknown) => POST(new Request("https://rabota.abkhaz-auto.ru/api/auth/mobile-bridge", {
+const post = (body: unknown) => POST(new Request("https://business.abkhaz-auto.ru/api/auth/mobile-bridge", {
   method: "POST", headers: { "content-type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body),
 }));
 

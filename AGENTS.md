@@ -1,4 +1,4 @@
-# abkhaz-rabota — «Абхаз-Работа», приложение для автосервисов
+# abkhaz-business — «АбхазАвто Бизнес», приложение для автосервисов
 
 Отдельный фронт над общей базой Абхаз Авто: записи, календарь, расписание,
 прайс сервиса. Эпик — `djonua/abkhaz-auto#1265`; правила ниже — те же, что в
@@ -42,9 +42,9 @@
   (секрет репозитория). Локально без токена: `types/service-ticket.d.ts`
   даёт типы, для сборки — временная заглушка в `node_modules` (README).
 - Деплой — `.github/workflows/deploy.yml` руками владельца, один workflow на
-  два контура (вход `environment`): `test` — контейнер `abkhaz-rabota-test` на
-  185 (`rabota.abkhaz-auto.apsoftgroup.ru`), `prod` — `abkhaz-rabota-prod` на
-  170 (`rabota.abkhaz-auto.ru`). Портов наружу нет, только сеть Traefik.
+  два контура (вход `environment`): `test` — контейнер `abkhaz-business-test` на
+  185 (`business.abkhaz-auto.apsoftgroup.ru`), `prod` — `abkhaz-business-prod` на
+  170 (`business.abkhaz-auto.ru`). Портов наружу нет, только сеть Traefik.
   Blue-green нет намеренно: одно приложение, один контейнер на контур
   (см. `deploy/<контур>/docker-compose.yml`).
 

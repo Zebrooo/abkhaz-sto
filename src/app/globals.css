@@ -1232,6 +1232,226 @@ svg { display: block; }
 
 /* @section:osmotr-otchet */
 /* Осмотр, отчёт по диагностике, фото дефектов. */
+/* Осмотр и отчёт — одна разметка на телефон и веб. На телефоне колонки
+   прозрачны для раскладки (display: contents), на вебе — две: слева машина,
+   «Снять дефект» и частые формулировки, справа «В отчёте» и итог. */
+.ins-cols, .ins-col { display: contents; }
+
+/* Карточка машины: пробег — ссылка в цвет акцента, состояние под пунктиром. */
+.ins-km { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
+.ins-km:active { opacity: .6; }
+.ins-state { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line-2); }
+.ins-state-t { font-size: 20px; font-weight: 800; letter-spacing: -.025em; }
+.ins-state-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.ins-master { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+/* «Снять дефект» — главная кнопка экрана, крупнее любой другой. */
+.ins-cta {
+  min-height: 76px; border-radius: 18px; background: var(--accent); color: #fff;
+  display: flex; align-items: center; gap: 14px; padding: 0 20px; box-shadow: var(--shadow-accent);
+  transition: transform .12s, background .15s, box-shadow .15s;
+}
+.ins-cta:active { transform: scale(.985) translateY(1px); box-shadow: none; }
+.ins-cta[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.ins-cta .sq { width: 46px; height: 46px; background: rgba(255, 255, 255, .18); color: #fff; }
+.ins-cta-t { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+.ins-cta-s { display: block; font-size: 12.5px; opacity: .82; margin-top: 2px; }
+
+/* Частые формулировки: заголовок-надпись и чипы-формы в перенос. */
+.ins-freq-h { display: flex; align-items: baseline; gap: 8px; padding: 8px 4px 0; }
+.ins-freq-s { margin-left: auto; font-size: 11.5px; color: var(--muted-2); text-align: right; }
+.ins-freq { display: flex; gap: 8px; flex-wrap: wrap; }
+.ins-freq form { display: contents; }
+.ins-fchip {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: var(--radius-pill);
+  background: #fff; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card);
+  transition: background .15s, transform .12s;
+}
+.ins-fchip:active { transform: scale(.96); background: var(--bg-2); }
+.ins-fchip-t { font-size: 13.5px; font-weight: 600; }
+.ins-fchip-m { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Точка срочности: красная — критично, охра — внимание. */
+.ins-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--tag-urgent); }
+.ins-dot.bad { background: var(--accent); }
+.ins-dot.lg { width: 10px; height: 10px; margin-top: 2px; }
+
+/* «В отчёте»: заголовок с суммой и карточки дефектов. Полоска слева и
+   рамка — по срочности, те же цвета, что у блоков статусов таймлайна. */
+.ins-sect { display: flex; align-items: center; gap: 8px; padding: 10px 4px 0; font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.ins-sect-s { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ins-def {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px;
+  background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); border-left: 3px solid var(--tag-urgent);
+  box-shadow: var(--shadow-m-card);
+}
+.ins-def.is-bad { border-color: var(--danger-line); border-left-color: var(--accent); }
+.ins-def form { display: contents; }
+.ins-meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.ins-def-t { font-size: 14px; font-weight: 700; letter-spacing: -.01em; margin-top: 5px; text-wrap: pretty; }
+.ins-def-s { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.ins-def-x {
+  flex: none; width: 34px; height: 34px; border-radius: var(--radius-pill); background: var(--bg-2); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; transition: transform .12s, background .12s;
+}
+.ins-def-x > span { display: inline-flex; transform: rotate(45deg); }
+.ins-def-x:active { transform: scale(.88); background: var(--danger-bg); }
+/* Плашка «фото не ушло» приходит от PhotoUpload рядом со слотом; перенос
+   на свою строку под карточкой — невидимым разделителем во всю ширину. */
+.ins-def:has(.ph-fail)::after { content: ""; order: 8; flex-basis: 100%; height: 0; margin-top: -12px; }
+.ins-def .ph-fail { order: 9; margin: -6px 0 0 84px; }
+.ins-note { font-size: 12.5px; color: var(--muted); padding: 6px 4px 0; text-wrap: pretty; }
+.ins-small { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+/* Кнопки блока «Осмотр при приёмке» в карточке записи. */
+.ins-bk-b { display: flex; gap: 8px; margin-top: 12px; }
+.ins-bk-b .aui-btn { min-height: 44px; }
+.ins-bk-b .aui-btn--secondary { flex: 1; }
+.card-s + .ins-bk-b, .rp-badges + .ins-bk-b { margin-top: 12px; }
+
+/* Шторка «Пробег сейчас»: крупное поле и единица справа. */
+.km-box { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border-radius: 16px; padding: 10px 16px; }
+.km-box input, .km-v { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 26px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-height: 52px; }
+.km-v { display: flex; align-items: center; }
+.km-box > span:last-child { flex: none; font-size: 15px; font-weight: 700; color: var(--muted); }
+.km-prev { font-size: 12px; color: var(--muted-2); }
+
+/* Шторка «Новый дефект»: плитки узлов — кнопки GET-формы. */
+.cap-nodes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cap-node {
+  display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 12px; border-radius: 14px; background: var(--bg-2);
+  font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: left; transition: background .15s, transform .12s;
+}
+.cap-node:active { transform: scale(.97); background: var(--warm); }
+.cap-node .sq { width: 36px; height: 36px; border-radius: 11px; background: #fff; }
+
+/* Шторка формулировок узла: строки каталога и своя формулировка. */
+.pre {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 66px; padding: 14px; border-radius: 16px;
+  background: var(--bg-2); text-align: left; transition: background .15s, transform .12s;
+}
+.pre:active { transform: scale(.985); background: var(--warm); }
+.pre-main { flex: 1; min-width: 0; }
+.pre-t { display: block; font-size: 15px; font-weight: 700; letter-spacing: -.015em; text-wrap: pretty; }
+.pre-s { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.pre-p { flex: none; font-size: 15px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cust { background: var(--bg-2); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.cust-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.cust input[name="title"] { min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 14px; background: #fff; font-size: 15px; }
+.cust input[name="title"]:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.cust .aui-btn--primary { min-height: 48px; border-radius: 14px; }
+.cust-note { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+/* Сегмент и чипы на радиокнопках: состояние живёт в форме, а не в адресе —
+   иначе набранный текст терялся бы при каждом переключении. */
+.rseg { background: #fff; }
+.rseg > label, .rchips .chip { position: relative; cursor: pointer; }
+.rseg input, .rchips input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rseg > label:has(:checked) { color: #fff; box-shadow: none; }
+.rseg > label:has([value="warn"]:checked) { background: var(--tag-urgent); }
+.rseg > label:has([value="bad"]:checked) { background: var(--accent); }
+.rchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rchips .chip:has(:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Фото: слоты одного вида в трёх местах. Файловое поле накрывает слот
+   целиком и прозрачно — тап по слоту открывает камеру. */
+.ph-input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.ph-slot {
+  position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: var(--bg-2); border: 1px dashed var(--line-2); border-radius: 12px; color: var(--muted-2); font-size: 12.5px; font-weight: 600;
+}
+.ph-slot > span { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; text-align: center; }
+.ph-slot img { width: 100%; height: 100%; object-fit: cover; }
+.ph-slot.has { border-style: solid; }
+.ph-slot[data-status="uploading"] img { opacity: .55; }
+.ph-slot[data-status="failed"] img { opacity: .35; }
+.ph-cap { display: flex; flex-direction: column; gap: 8px; }
+.ph-main { height: 160px; border-radius: 16px; }
+.ph-row { display: flex; gap: 8px; }
+.ph-small { flex: 1; height: 56px; border-radius: 10px; font-size: 18px; }
+.ph-sq { flex: none; width: 72px; height: 72px; font-size: 11.5px; }
+.ph-sq > span { flex-direction: column; gap: 2px; }
+.ph-grid { display: flex; gap: 6px; margin-top: 10px; }
+.ph-grid .ph-slot { flex: 1; height: 96px; }
+.ph-fail {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; border-radius: var(--radius-pill);
+  background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--accent); font-size: 11.5px; font-weight: 700;
+  transition: transform .12s;
+}
+.ph-fail:active { transform: scale(.95); }
+.ph-fail-card {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: 12px;
+  background: var(--danger-bg); border: 1px solid var(--danger-line);
+}
+.ph-fail-card > span { flex: 1; font-size: 12px; font-weight: 600; color: var(--accent); }
+.ph-fail-card .aui-btn { flex: none; min-height: 28px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 700; }
+
+/* Отчёт: шапка, карточки дефектов, норма и тёмная смета. */
+.rp-h { display: flex; align-items: baseline; gap: 8px; }
+.rp-no { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); }
+.rp-car { font-size: 19px; font-weight: 800; letter-spacing: -.025em; margin-top: 8px; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.rp-grid .tile-v { font-size: 14px; }
+.rp-badges { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.rp-def {
+  background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); border-left: 3px solid var(--tag-urgent);
+  box-shadow: var(--shadow-m-card); padding: 14px; transition: opacity .15s;
+}
+.rp-def.is-bad { border-color: var(--danger-line); border-left-color: var(--accent); }
+.rp-def.is-off { opacity: .55; }
+.rp-def .ins-meta { font-size: 12.5px; }
+.rp-def .ins-meta form { display: contents; }
+.rp-check {
+  margin-left: auto; flex: none; width: 26px; height: 26px; border-radius: var(--radius-pill); background: var(--bg-2); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .12s;
+}
+.rp-check[aria-pressed="true"] { background: var(--accent); }
+.rp-check:active { transform: scale(.9); }
+.rp-incl { display: none; }
+.rp-def-t { font-size: 15px; font-weight: 700; letter-spacing: -.015em; margin-top: 8px; text-wrap: pretty; }
+.rp-note { font-size: 13px; color: var(--ink-2); margin-top: 4px; text-wrap: pretty; }
+.rp-work { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-2); }
+.rp-work-t { font-size: 13.5px; font-weight: 600; }
+.rp-work-s { font-size: 11.5px; color: var(--muted); }
+.rp-price { font-size: 16px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.rp-book { margin-top: 10px; }
+.rp-book .aui-btn { min-height: 38px; background: #fff; }
+.rp-booked { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--green-dark); }
+.rp-ok-t { font-size: 13.5px; font-weight: 700; }
+.rp-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.rp-est { background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
+.rp-est-h { display: flex; align-items: center; gap: 8px; }
+.rp-est-t { font-size: 13.5px; font-weight: 600; color: rgba(255, 255, 255, .92); }
+.rp-est-c { margin-left: auto; font-size: 12px; color: rgba(255, 255, 255, .62); }
+.rp-est-row { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.rp-est-sum { font-size: 28px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.rp-est-time { font-size: 13px; color: rgba(255, 255, 255, .62); }
+.rp-est-note { font-size: 12px; color: rgba(255, 255, 255, .45); margin-top: 8px; text-wrap: pretty; }
+/* Кнопка PDF в подвале — квадратная белая, как в макете. */
+.sticky-actions .rp-pdf { background: #fff; }
+
+@media (min-width: 881px) {
+  /* Две колонки: инструменты слева в 392px, отчёт справа. */
+  .ins-cols { display: grid; grid-template-columns: 392px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .ins-col { display: flex; flex-direction: column; gap: 12px; }
+  .ins-cta { min-height: 68px; border-radius: var(--radius-lg); }
+  .ins-cta:hover { background: var(--accent-dark); }
+  .ins-fchip { min-height: 38px; box-shadow: none; border: 1px solid var(--line-2); }
+  .ins-fchip:hover, .ins-def-x:hover, .cap-node:hover, .pre:hover { background: var(--bg-2); }
+  .ins-sect { padding-top: 0; }
+  .ins-def, .rp-def { border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+  .ins-def.is-bad, .rp-def.is-bad { border-color: var(--danger-line); }
+  .ins-def { border-left-width: 3px; }
+  .rp-def { padding: 18px 20px; border-left-width: 3px; }
+  .rp-def .ins-meta { font-size: 13px; }
+  .rp-check { margin-left: 4px; width: 24px; height: 24px; }
+  .rp-incl { display: inline; font-size: 12.5px; color: var(--muted); }
+  .rp-def-t { font-size: 17px; letter-spacing: -.02em; }
+  .rp-price { font-size: 18px; }
+  .ph-grid .ph-slot { flex: none; width: 148px; height: 112px; }
+  .rp { max-width: 860px; }
+  .rp-est { border-radius: 14px; padding: 16px 18px; }
+  .rp-badges .aui-badge, .rp-est-c { flex: none; }
+  .cap-node, .pre, .ins-fchip, .rseg > label, .rchips .chip { cursor: pointer; }
+  .ins-bk-b .aui-btn { min-height: 40px; }
+}
 
 
 

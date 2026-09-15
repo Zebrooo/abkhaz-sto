@@ -10,7 +10,8 @@ import "server-only";
 // уже подтвердил currentServiceShop.
 import { cache } from "react";
 import { fetchMyMembership } from "@/lib/api/members";
-import type { StoRole } from "@/lib/access";
+import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
+import { redirect } from "next/navigation";
 import { currentServiceShop, type ServiceShop } from "@/lib/shop";
 import { getServerUser } from "@/lib/supabase/server";
 
@@ -41,3 +42,15 @@ export const serviceContext = cache(async (): Promise<ServiceContext | null> => 
   }
   return { shop, userId: user.id, role: membership.data.role, masterId: membership.data.masterId };
 });
+
+/**
+ * Гейт экрана: раздел закрыт роли — уводим на её первый экран, а не
+ * показываем пустую страницу. Одна строка в начале page.tsx. Нет сервиса —
+ * отдаём null, как serviceContext: layout уже нарисовал «сервис не найден».
+ */
+export async function requireSection(section: Section): Promise<ServiceContext | null> {
+  const ctx = await serviceContext();
+  if (!ctx) return null;
+  if (!can(ctx.role, section)) redirect(HOME_PATH[ctx.role]);
+  return ctx;
+}

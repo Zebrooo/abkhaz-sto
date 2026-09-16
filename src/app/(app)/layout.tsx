@@ -17,25 +17,22 @@ import { siteUrl, shopStorefrontUrl } from "@/lib/site";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await serviceContext();
   if (!ctx) {
+    // Та же карточка по центру экрана, что и на /vhod (.gate): каркас
+    // приложения без витрины рисовать нечем, а растянутая на всю ширину
+    // карточка с двумя кнопками в 320px разъезжалась.
     return (
-      <div className="app">
-        <main className="main">
-          <div className="page stack">
-            <div className="card">
-              <div className="empty">
-                <span className="sq"><Icon name="shop" size={26} /></span>
-                <div className="empty-t">Сервис не найден</div>
-                <div className="empty-s">У этого номера нет одобренной витрины с рубрикой «Автосервис». Витрину заводит менеджер площадки.</div>
-                <div className="hero-actions" style={{ maxWidth: 320 }}>
-                  <a className="aui-btn aui-btn--primary aui-btn--md" href={`${siteUrl()}/kontakty`}>Написать менеджеру</a>
-                  <a className="aui-btn aui-btn--ghost aui-btn--md" href={`${siteUrl()}/vhod?next=/lk`}>Войти другим номером</a>
-                </div>
-              </div>
-            </div>
-            <p className="hint">Вошли под тем же номером, что указан в витрине? Кука сессии общая с abkhaz-auto.ru.</p>
+      <main className="gate">
+        <div className="card empty">
+          <span className="sq"><Icon name="shop" size={26} /></span>
+          <div className="empty-t">Сервис не найден</div>
+          <div className="empty-s">У этого номера нет одобренной витрины с рубрикой «Автосервис». Витрину заводит менеджер площадки.</div>
+          <div className="hero-actions">
+            <a className="aui-btn aui-btn--primary aui-btn--md" href={`${siteUrl()}/kontakty`}>Написать менеджеру</a>
+            <a className="aui-btn aui-btn--ghost aui-btn--md" href={`${siteUrl()}/vhod?next=/lk`}>Войти другим номером</a>
           </div>
-        </main>
-      </div>
+          <p className="hint">Вошли под тем же номером, что указан в витрине? Кука сессии общая с abkhaz-auto.ru.</p>
+        </div>
+      </main>
     );
   }
   const { shop, role } = ctx;

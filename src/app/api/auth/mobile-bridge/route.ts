@@ -49,7 +49,9 @@ export async function POST(req: Request) {
   //
   // Имя куки от адреса не зависит (authCookieOptions задаёт его явно), поэтому
   // подмена базы на сессию не влияет.
-  const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  // || , а не ?? : пустая строка в переменной окружения — это «не задано», и
+  // через ?? она прошла бы как адрес, оставив клиент без базы.
+  const supabaseUrl = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const ssr = createServerClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookieOptions: authCookieOptions,
     cookies: {

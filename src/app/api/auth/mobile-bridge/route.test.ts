@@ -42,8 +42,10 @@ describe("POST /api/auth/mobile-bridge (приложение СТО)", () => {
     expect(mocks.createdWithUrl).toBe("http://supabase-aa-kong:8000");
   });
 
-  it("внутреннего адреса нет — остаётся публичный, мост не ломается", async () => {
+  it("внутреннего адреса нет или он пустой — остаётся публичный, мост не ломается", async () => {
     await post({ access_token: "a", refresh_token: "r" });
+    expect(mocks.createdWithUrl).toBe("https://sb.example");
+    process.env.SUPABASE_INTERNAL_URL = "";
     expect(mocks.createdWithUrl).toBe("https://sb.example");
   });
 

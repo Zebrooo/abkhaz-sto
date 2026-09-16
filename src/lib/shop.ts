@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createSupabaseAdmin, getServerUser } from "@/lib/supabase/server";
 import { fetchMyShops, type MyShopMembership } from "@/lib/api/members";
 import { listOr } from "@/lib/api/site-api";
+import { ownerFilter } from "@/lib/shop-owner";
 import { normalizeStoPrepay, normalizeStoSchedule, type StoPrepay, type StoSchedule } from "@/lib/sto/schedule";
 
 // Чей это сервис. Два пути внутрь.
@@ -11,7 +12,9 @@ import { normalizeStoPrepay, normalizeStoSchedule, type StoPrepay, type StoSched
 // базе: витрина принадлежит человеку по user_id ИЛИ по телефону учётки
 // (анкету магазина заполняют без входа на сайт, user_id у большинства пуст;
 // телефон учётки подтверждён кодом из СМС, у витрины уникален и
-// нормализован). Пустой телефон не считается совпадением. Найдя витрину по
+// нормализован). В profiles номер лежит без плюса — к E.164 его приводит
+// ownerFilter (shop-owner.ts), и только проверенный номер попадает в or().
+// Пустой или кривой телефон не считается совпадением. Найдя витрину по
 // телефону, проставляем ей user_id — дальше выборка идёт по индексу, а RPC
 // sto_shop_bookings в базе тоже узнает владельца по user_id.
 //
@@ -60,8 +63,7 @@ export const myServiceShops = cache(async (): Promise<ServiceShop[]> => {
   if (!user) return [];
   const admin = createSupabaseAdmin();
   const { data: profile } = await admin.from("profiles").select("phone").eq("id", user.id).maybeSingle();
-  const phone = typeof profile?.phone === "string" && profile.phone.trim() !== "" ? profile.phone : null;
-  const or = phone ? `user_id.eq.${user.id},phone.eq.${phone}` : `user_id.eq.${user.id}`;
+  const or = ownerFilter(user.id, typeof profile?.phone === "string" ? profile.phone : null);
 
   const [ownedRes, memberships] = await Promise.all([
     admin.from("shops").select(COLUMNS).eq("rubric", "service").eq("status", "approved").or(or).order("id").returns<ShopRow[]>(),

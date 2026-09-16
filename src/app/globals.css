@@ -136,6 +136,12 @@ svg { display: block; }
   transition: background .15s, color .15s, transform .12s;
 }
 .seg > [aria-pressed="true"], .seg > [aria-current="page"] { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
+/* Сегмент из радиокнопок — выбор внутри формы без перезагрузки страницы
+   (роль в приглашении): ссылка-сегмент стирала бы уже набранные поля. */
+.seg > label { position: relative; cursor: pointer; }
+.seg > label > input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.seg > label:has(:checked) { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
+.seg > label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .seg > :active { transform: scale(.97); }
 
 .chips { display: flex; gap: 6px; overflow-x: auto; margin: 0 -12px; padding: 0 12px 2px; scrollbar-width: none; }
@@ -420,9 +426,11 @@ svg { display: block; }
 .thing-s { font-size: 12.5px; color: var(--muted); }
 
 /* ─────────── Шторка / окно / тост ─────────── */
-.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(16, 18, 22, .34); animation: fadeIn .22s var(--ease-out); }
+/* Выше ящика записи на вебе (.detail, z-index 21): шторка «Действия» и «Отмена»
+   должны затемнять и блокировать его кнопки, а не стоять с ним вровень. */
+.scrim { position: fixed; inset: 0; z-index: 22; background: rgba(16, 18, 22, .34); animation: fadeIn .22s var(--ease-out); }
 .sheet {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 23;
   max-height: 88dvh; display: flex; flex-direction: column;
   background: #fff; border-radius: 24px 24px 0 0; box-shadow: var(--shadow-sheet);
   animation: sheetUp .3s var(--ease-out);
@@ -719,6 +727,10 @@ svg { display: block; }
 
   /* Карточки на вебе — хайрлайн вместо мягкой тени */
   .card { border-radius: var(--radius-lg); border: 1px solid var(--line); box-shadow: var(--shadow-sm); padding: 18px 20px; }
+  /* Модификаторы объявлены раньше этого .card и той же специфичности — повторяем, иначе веб их теряет. */
+  .card-flat { padding: 0; }
+  .card-accent { border-left: 3px solid var(--accent); }
+  .card-danger { border-color: var(--danger-line); box-shadow: none; }
   .card-sm { border-radius: var(--radius-md); padding: 14px 16px; }
   .card-warm { border-radius: 14px; padding: 16px 18px; }
   .stack { gap: 12px; }
@@ -893,10 +905,14 @@ svg { display: block; }
   .toast { border-radius: var(--radius-md); padding: 12px 18px; }
 
   /* Шторки на вебе — окно по центру */
+  /* Центр — отдельным свойством translate, а не transform: анимация fadeSlide
+     анимирует transform и на 0,26 с перебивала бы сдвиг — окно стояло левым
+     верхним углом в центре экрана и прыгало на место. overflow: hidden —
+     чтобы подвал с фоном не торчал квадратными углами из скруглённого окна. */
   .sheet {
-    position: fixed; left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%);
+    position: fixed; left: 50%; top: 50%; right: auto; bottom: auto; translate: -50% -50%;
     width: 560px; max-width: calc(100vw - 80px); max-height: calc(100dvh - 80px);
-    border-radius: 20px; animation: fadeSlide .26s var(--ease-out);
+    border-radius: 20px; overflow: hidden; animation: fadeSlide .26s var(--ease-out);
   }
   .sheet-grip { display: none; }
   .sheet-head { padding: 20px 24px; }
@@ -1302,7 +1318,6 @@ svg { display: block; }
   transition: transform .12s, background .15s, box-shadow .15s;
 }
 .ins-cta:active { transform: scale(.985) translateY(1px); box-shadow: none; }
-.ins-cta[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 .ins-cta .sq { width: 46px; height: 46px; background: rgba(255, 255, 255, .18); color: #fff; }
 .ins-cta-t { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
 .ins-cta-s { display: block; font-size: 12.5px; opacity: .82; margin-top: 2px; }

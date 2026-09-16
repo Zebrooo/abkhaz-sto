@@ -4,11 +4,13 @@ const mocks = vi.hoisted(() => ({
   setSession: vi.fn(),
   cookieStore: { getAll: vi.fn(() => []), set: vi.fn() },
   setAllCapture: null as null | ((toSet: { name: string; value: string; options: Record<string, unknown> }[]) => void),
+  createdWithUrl: "" as string,
 }));
 
 vi.mock("next/headers", () => ({ cookies: async () => mocks.cookieStore }));
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: (_u: string, _k: string, opts: { cookies: { setAll: typeof mocks.setAllCapture } }) => {
+  createServerClient: (u: string, _k: string, opts: { cookies: { setAll: typeof mocks.setAllCapture } }) => {
+    mocks.createdWithUrl = u;
     mocks.setAllCapture = opts.cookies.setAll;
     return { auth: { setSession: mocks.setSession } };
   },
@@ -23,11 +25,30 @@ const post = (body: unknown) => POST(new Request("https://business.abkhaz-auto.r
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://sb.example";
+  delete process.env.SUPABASE_INTERNAL_URL;
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
   mocks.setSession.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
 });
 
 describe("POST /api/auth/mobile-bridge (приложение СТО)", () => {
+  // setSession — серверный вызов к GoTrue. По публичному адресу он уходит из
+  // контейнера в интернет и обратно, и этот круг рвётся: 16.09.2026 на проде
+  // поймано «fetch failed» со status 0, маршрут ответил 503, а человек в
+  // приложении остался гостем. Внутри сети тот же вызов идёт единицы
+  // миллисекунд и наружу не выходит.
+  it("серверный клиент берёт внутренний адрес Supabase, когда он задан", async () => {
+    process.env.SUPABASE_INTERNAL_URL = "http://supabase-aa-kong:8000";
+    await post({ access_token: "a", refresh_token: "r" });
+    expect(mocks.createdWithUrl).toBe("http://supabase-aa-kong:8000");
+  });
+
+  it("внутреннего адреса нет или он пустой — остаётся публичный, мост не ломается", async () => {
+    await post({ access_token: "a", refresh_token: "r" });
+    expect(mocks.createdWithUrl).toBe("https://sb.example");
+    process.env.SUPABASE_INTERNAL_URL = "";
+    expect(mocks.createdWithUrl).toBe("https://sb.example");
+  });
+
   it("кривое тело или без токенов — 400, GoTrue не трогаем", async () => {
     expect((await post("{oops")).status).toBe(400);
     expect((await post({ access_token: "a" })).status).toBe(400);

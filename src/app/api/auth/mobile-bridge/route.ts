@@ -39,7 +39,20 @@ export async function POST(req: Request) {
   if (!accessToken || !refreshToken) return NextResponse.json({ ok: false, error: "Нет токенов сессии" }, { status: 400 });
 
   const cookieStore = await cookies();
-  const ssr = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  // ⚠️ ВНУТРЕННИЙ АДРЕС, А НЕ ПУБЛИЧНЫЙ. setSession — серверный вызов к GoTrue,
+  // и по NEXT_PUBLIC_SUPABASE_URL он уходил из контейнера в интернет, на
+  // Traefik и обратно (hairpin). Каждый такой круг — лишние сотни миллисекунд
+  // и лишний способ отказать: 16.09.2026 в проде поймано «fetch failed»
+  // со status 0, то есть обрыв на этом самом круге. Маршрут отвечает на него
+  // 503, оболочка повторяет, а человек в это время висит гостем. По
+  // supabase-aa-kong внутри сети — 4 мс и никакого интернета.
+  //
+  // Имя куки от адреса не зависит (authCookieOptions задаёт его явно), поэтому
+  // подмена базы на сессию не влияет.
+  // || , а не ?? : пустая строка в переменной окружения — это «не задано», и
+  // через ?? она прошла бы как адрес, оставив клиент без базы.
+  const supabaseUrl = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const ssr = createServerClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookieOptions: authCookieOptions,
     cookies: {
       getAll: () => cookieStore.getAll(),

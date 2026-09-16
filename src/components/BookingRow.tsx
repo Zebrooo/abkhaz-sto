@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { StoBookingRow } from "@/lib/sto/types";
 import { StatusBadge } from "@/components/Status";
+import { BookingGrip } from "@/components/CalendarDrag";
 import { formatRub, shortName, timeRange } from "@/lib/format";
 import { transitionAction } from "@/app/(app)/actions";
 
@@ -30,6 +31,9 @@ export function BookingRow({ b, variant = "day", returnTo, day }: {
   const href = `/zapis/${b.id}?d=${day}`;
   return (
     <article className="card card-sm bk bk-card">
+      {/* Ручка переноса — только в календаре: вне его провайдера нет и
+          BookingGrip ничего не рисует. */}
+      <BookingGrip bookingId={b.id} />
       <Link href={href} className="bk-link">
         <div className="bk-head">
           <span className="bk-time">{timeRange(b.starts_at, b.ends_at)}</span>

@@ -82,7 +82,12 @@ export async function rescheduleAction(fd: FormData) {
   const ret = returnTo(fd, "/kalendar");
   if (!shop.schedule) back(ret, { err: "Сначала задайте расписание" });
   const day = str(fd, "day");
-  const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), actorUserId: user.id });
+  // Пост приходит из сетки: запись перетащили на конкретную колонку, и
+  // ставить её на «первый свободный» нельзя — она уедет из-под курсора.
+  // Из списка окон поля нет, и пост по-прежнему выбирает сервер.
+  const postRaw = Number(str(fd, "postNo"));
+  const postNo = Number.isInteger(postRaw) && postRaw > 0 ? postRaw : undefined;
+  const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), postNo, actorUserId: user.id });
   revalidateBookings();
   if (!res.ok) back(ret, { err: res.error });
   back("/segodnya", { d: day, ok: "Запись перенесена — клиент уведомлён" });

@@ -95,9 +95,13 @@ export async function transitionBooking(input: {
   return { ok: true };
 }
 
-/** Перенос живой записи на другое окно (и, возможно, пост). */
+/**
+ * Перенос живой записи на другое окно (и, возможно, пост). Пост задан —
+ * ставим ровно на него (запись перетащили на колонку сетки), не задан —
+ * сервер берёт первый свободный, как в списке окон.
+ */
 export async function rescheduleBooking(input: {
-  shopId: number; bookingId: number; schedule: StoSchedule; day: string; hhmm: string; actorUserId: string;
+  shopId: number; bookingId: number; schedule: StoSchedule; day: string; hhmm: string; actorUserId: string; postNo?: number;
 }): Promise<ActionResult> {
   const { shopId, bookingId, schedule, day, hhmm, actorUserId } = input;
   const current = await getBooking(shopId, bookingId);
@@ -106,8 +110,11 @@ export async function rescheduleBooking(input: {
   const startsAt = localTime(day, hhmm);
   const durationMin = Math.max(1, Math.round((new Date(current.ends_at).getTime() - new Date(current.starts_at).getTime()) / 60_000));
   const busy = await busyIntervals(shopId, new Date(startsAt.getTime() - 24 * 3_600_000), new Date(startsAt.getTime() + 24 * 3_600_000), bookingId);
-  const free = isSlotFree({ schedule, startsAt, durationMin, busy });
-  if (!free.ok) return { ok: false, error: free.reason === "closed" ? "В это время сервис не работает" : "Окно уже занято" };
+  const free = isSlotFree({ schedule, startsAt, durationMin, busy, postNo: input.postNo });
+  if (!free.ok) {
+    const why = { closed: "В это время сервис не работает", past: "Это время уже прошло", no_post: "Такого поста у сервиса нет", taken: "Окно уже занято" } as const;
+    return { ok: false, error: why[free.reason] };
+  }
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   const history = [...(current.data.history ?? []), { at: new Date().toISOString(), from: current.starts_at, to: startsAt.toISOString(), by: "shop" as const }];
   const { data: updated, error } = await createSupabaseAdmin().from("sto_bookings")

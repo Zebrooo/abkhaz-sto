@@ -369,6 +369,59 @@ svg { display: block; }
 .tl-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 .tl-legend i { width: 10px; height: 10px; border-radius: 3px; }
 
+/* ─────────── Перетаскивание записи ─────────── */
+/* Ручка в углу блока: пальцем запись тянут только за неё, поэтому
+   touch-action: none стоит здесь, а не на блоке — иначе сетку нельзя было
+   бы прокрутить пальцем вовсе. */
+.tl-grip {
+  position: absolute; top: 1px; right: 1px; z-index: 2; width: 24px; height: 20px;
+  display: flex; align-items: center; justify-content: center; border-radius: 7px;
+  color: var(--muted); background: rgba(255, 255, 255, .7); touch-action: none; cursor: grab;
+}
+.tl-grip:active { cursor: grabbing; background: #fff; color: var(--ink); }
+.tl-block.dragging { opacity: .35; }
+/* Наложение по времени — красным: и чужая запись, и окно под курсором. */
+.tl-block.clash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* Окно под курсором — прозрачное: под ним должна остаться видна чужая
+   запись, на которую запись наводят, иначе красную подсветку наложения
+   закрывает сам призрак. */
+.tl-ghost {
+  position: absolute; left: 0; right: 0; z-index: 3; pointer-events: none; overflow: hidden;
+  border: 2px dashed var(--green-dark); border-radius: 10px; background: rgba(15, 122, 60, .12); color: var(--green-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+}
+.tl-ghost.bad { border-color: var(--accent); background: rgba(225, 29, 42, .12); color: var(--accent); }
+.tl-ghost > span { background: #fff; padding: 1px 7px; border-radius: var(--radius-pill); white-space: nowrap; }
+/* Пока запись ведут, сетка не выделяет текст и не зовёт свободными окнами. */
+.tl-grid[data-dragging] { user-select: none; }
+.tl-grid[data-dragging] .tl-free { opacity: .45; }
+/* Подсказка броска — над панелью вкладок, чтобы её было видно и с пальцем на экране. */
+.tl-warn {
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 12px); transform: translateX(-50%); z-index: 60;
+  max-width: min(92vw, 520px); padding: 9px 14px; border-radius: var(--radius-pill);
+  background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ink);
+  font-size: 12.5px; font-weight: 600; text-align: center; box-shadow: var(--shadow-pop); pointer-events: none;
+}
+.tl-warn.bad { background: var(--danger-bg); border-color: var(--accent); color: var(--accent); }
+/* Ручка на карточке записи — полоса слева; место под неё карточка отдаёт
+   только там, где ручка есть (в календаре). */
+.bk-card:has(.bk-grip) { position: relative; padding-left: 30px; }
+.bk-grip {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 26px;
+  display: flex; align-items: center; justify-content: center; border-radius: 16px 0 0 16px;
+  color: var(--muted); background: var(--bg-2); touch-action: none; cursor: grab;
+}
+.bk-grip svg { transform: rotate(90deg); }
+.bk-grip:active { cursor: grabbing; color: var(--ink); }
+.bk-card.dragging { opacity: .5; }
+/* День недели под курсором: зелёный — запись встанет, красный — время занято. */
+.week-bars > a.drop-ok i, .week-bars > a.drop-bad i { outline-offset: 2px; }
+.week-bars > a.drop-ok i { background: var(--green); outline: 2px solid var(--green-dark); }
+.week-bars > a.drop-bad i { background: var(--accent); outline: 2px solid var(--accent); }
+.week-days > a.drop-ok { background: var(--ok-bg); color: var(--green-dark); outline: 2px solid var(--green-dark); }
+.week-days > a.drop-bad { background: var(--danger-bg); color: var(--accent); outline: 2px solid var(--accent); }
+
 /* Цвета статусов — один источник для таймлайна и полосок */
 .st-new { background: var(--warm); border: 1px solid var(--danger-line); border-left: 3px solid var(--accent); color: var(--ink); }
 .st-confirmed { background: var(--ok-bg); border: 1px solid var(--ok-line); border-left: 3px solid var(--green-dark); color: var(--ink); }
@@ -817,6 +870,11 @@ svg { display: block; }
   .tl-block .b-price { display: inline; margin-left: auto; font-family: var(--font-sans); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .tl-free:hover { background: var(--warm); border-color: var(--accent); color: var(--accent); }
   .tl-now i, .tl-now b { left: -5px; top: -4px; width: 10px; height: 10px; }
+  /* За стойкой запись тянут мышью за весь блок, поэтому ручка появляется
+     только под курсором и не закрывает цену. */
+  .tl-grip { opacity: 0; transition: opacity .12s; }
+  .tl-block:hover .tl-grip, .tl-grip:active { opacity: 1; }
+  .tl-warn { bottom: 24px; font-size: 13px; padding: 10px 18px; }
 
   /* Неделя на вебе */
   .week-bars { gap: 10px; height: 150px; }

@@ -305,19 +305,24 @@ svg { display: block; }
 .tl-free-lab, .tl-block .b-to, .tl-block .b-price { display: none; }
 .tl-col { flex: 1; position: relative; min-width: 0; }
 .tl-free {
-  position: absolute; left: 0; right: 0; border: 1px dashed var(--line-2); border-radius: 10px;
+  position: absolute; left: 0; right: 0; border: 1px dashed var(--line-2); border-radius: 10px; padding: 0 6px; overflow: hidden;
   color: var(--muted-2); font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: background .12s, border-color .12s, color .12s;
 }
+/* Подпись окна в узкой колонке (три и больше постов) режется многоточием, а не переносится за рамку. */
+.tl-free-lab { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-free:active { background: var(--warm); border-color: var(--accent); color: var(--accent); }
+/* Прошедшее время дня — приглушённый фон под сеткой; блоки записей рисуются поверх. */
+.tl-past { position: absolute; left: 0; right: 0; border-radius: 8px; background: var(--bg-2); opacity: .55; pointer-events: none; }
 /* Перерыв между интервалами приёма — штриховая полоса через все посты. */
 .tl-break {
-  position: absolute; left: 0; right: 0; border-radius: 8px; pointer-events: none;
+  position: absolute; left: 0; right: 0; border-radius: 8px; pointer-events: none; overflow: hidden;
   background: repeating-linear-gradient(-45deg, var(--bg-2) 0 5px, transparent 5px 11px);
   display: flex; align-items: center; justify-content: center;
 }
+/* Пилюля в одну строку (line-height 1): в перерыв на 15 минут она должна поместиться. */
 .tl-break > span {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
   background: #fff; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap;
 }
 .tl-block {
@@ -337,7 +342,7 @@ svg { display: block; }
    есть блок без рамки в 1px сверху и снизу: до 44px — одна строка, время и
    услуга рядом; до 50px — без клиента; выше — все три. */
 @container (max-height: 44px) {
-  .tl-block .b-in { flex-direction: row; align-items: center; gap: 6px; }
+  .tl-block .b-in { flex-direction: row; align-items: center; gap: 6px; padding-top: 0; padding-bottom: 0; }
   .tl-block .b-in .b-time { display: contents; }
   .tl-block .b-in .b-title { flex: 1; min-width: 0; margin-top: 0; }
   .tl-block .b-in .b-price { order: 1; margin-left: auto; }

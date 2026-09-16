@@ -89,15 +89,20 @@ export const DEFAULT_GAP_RULES: GapRules = { stepMin: 30, bufferMin: 0 };
  * а форма отвечает «занято»:
  * - считаем по интервалам дня, а не от первого до последнего часа: обед — не
  *   свободное окно;
- * - после записи пост занят ещё bufferMin — окно начинается после буфера;
+ * - буфер держит пост после записи и нужен перед следующей (postTaken): окно
+ *   начинается на bufferMin позже предыдущей записи и кончается на bufferMin
+ *   раньше следующей; у края интервала буфера нет;
  * - окно начинается на узле сетки: запись ставится только с шагом stepMin
  *   от начала интервала, и «11:40» при шаге 30 в форме не выбрать;
- * - кусок короче шага не показываем: ни одна запись в него не встанет.
+ * - кусок короче шага не показываем: ни одна запись в него не встанет;
+ * - раньше notBeforeMin (минуты дня: «сейчас» плюс lead формы, Infinity для
+ *   прошедшего дня) окон нет — форма их тоже не предложит.
  */
 export function freeGaps(
   intervals: readonly { from: string; to: string }[],
   busy: readonly { from: number; to: number }[],
   rules: GapRules = DEFAULT_GAP_RULES,
+  notBeforeMin = 0,
 ): FreeGap[] {
   const step = Number.isInteger(rules.stepMin) && rules.stepMin > 0 ? rules.stepMin : DEFAULT_GAP_RULES.stepMin;
   const pad = Number.isFinite(rules.bufferMin) && rules.bufferMin > 0 ? rules.bufferMin : 0;
@@ -105,10 +110,11 @@ export function freeGaps(
   for (const iv of intervals) {
     const start = toMinutes(iv.from);
     const end = toMinutes(iv.to);
+    if (notBeforeMin >= end) continue;
     const onGrid = (min: number) => start + Math.ceil((min - start) / step) * step;
-    let cursor = start;
+    let cursor = Math.max(start, notBeforeMin);
     const inside = busy
-      .map(b => ({ from: b.from, to: b.to + pad }))
+      .map(b => ({ from: b.from - pad, to: b.to + pad }))
       .filter(b => b.to > start && b.from < end)
       .sort((a, b) => a.from - b.from);
     for (const b of inside) {

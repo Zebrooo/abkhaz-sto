@@ -85,7 +85,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               <Link className="aui-btn aui-btn--primary aui-btn--md" href={inspectHref}>Начать осмотр</Link>
             </div>
           </div>
-        ) : <Flash err={insp.error} />}
+        ) : <Flash title="Осмотр не загрузился" err={insp.error} />}
       </Frame>
     );
   }
@@ -103,7 +103,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               <Link className="aui-btn aui-btn--secondary aui-btn--md" href={inspectHref}>Открыть осмотр</Link>
             </div>
           </div>
-        ) : <Flash err={rep.error} />}
+        ) : <Flash title="Отчёт не загрузился" err={rep.error} />}
       </Frame>
     );
   }
@@ -139,15 +139,8 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
 
   return (
     <Frame sub={`${r.no} · ${r.car}`} back={inspectHref} unread={pending}>
-      <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
-      {pdfErr && (
-        <div className="toast-wrap">
-          <div className="toast toast-err" role="alert">
-            <i><Icon name="plus" size={13} style={{ transform: "rotate(45deg)" }} /></i>
-            PDF не открылся: {pdfErr}
-          </div>
-        </div>
-      )}
+      {/* Ошибка PDF — карточкой, а не тостом: тост гаснет через 2,7 с, а причину надо прочитать. ok/err/pdf из действий взаимно исключены. */}
+      <Flash ok={pick(sp.ok)} err={pick(sp.err) || pdfErr} title={pick(sp.err) ? undefined : "PDF не открылся"} />
 
       <div className="card">
         <div className="rp-h">

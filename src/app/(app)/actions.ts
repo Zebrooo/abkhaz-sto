@@ -18,23 +18,22 @@ import type { StoTransition } from "@/lib/sto/transitions";
 import { normalizePhone } from "@/lib/phone";
 import { linkItemBooking } from "@/lib/api/reports";
 
+/** Назад на экран: запрос адреса возврата сохраняем, свой итог дописываем вместо прошлых ok/err. */
 function back(path: string, q: Record<string, string | undefined>): never {
-  const sp = new URLSearchParams();
+  const i = path.indexOf("?");
+  const base = i === -1 ? path : path.slice(0, i);
+  const sp = new URLSearchParams(i === -1 ? "" : path.slice(i + 1));
+  sp.delete("ok");
+  sp.delete("err");
   for (const [k, v] of Object.entries(q)) if (v) sp.set(k, v);
   const s = sp.toString();
-  redirect(s ? `${path}?${s}` : path);
+  redirect(s ? `${base}?${s}` : base);
 }
 
 /** Адрес возврата из формы — только свой путь, без переезда на чужой сайт. */
 function returnTo(fd: FormData, fallback: string): string {
   const raw = String(fd.get("return") ?? "").trim();
   return raw.startsWith("/") && !raw.startsWith("//") ? raw : fallback;
-}
-
-/** Путь без запроса — чтобы дописать свой ?ok= вместо чужого. */
-function bare(path: string): string {
-  const i = path.indexOf("?");
-  return i === -1 ? path : path.slice(0, i);
 }
 
 /**
@@ -69,23 +68,23 @@ export async function transitionAction(fd: FormData) {
   const { user, shop } = await ctx(fd, "bookings");
   const ret = returnTo(fd, "/segodnya");
   const t = str(fd, "transition") as StoTransition;
-  if (!["confirm", "done", "no_show", "cancel"].includes(t)) back(bare(ret), { err: "Неизвестное действие" });
+  if (!["confirm", "done", "no_show", "cancel"].includes(t)) back(ret, { err: "Неизвестное действие" });
   const bookingId = Number(str(fd, "bookingId"));
   const res = await transitionBooking({ shopId: shop.id, bookingId, transition: t, actorUserId: user.id, reason: str(fd, "reason") || undefined });
   revalidateBookings();
   revalidatePath(`/zapis/${bookingId}`);
   const done = ({ confirm: "Запись подтверждена — клиент получил пуш", done: "Готово. Предоплата ушла сервису", no_show: "Отмечено: клиент не приехал", cancel: "Запись отменена, клиент уведомлён" } as const)[t];
-  back(bare(ret), res.ok ? { ok: done } : { err: res.error });
+  back(ret, res.ok ? { ok: done } : { err: res.error });
 }
 
 export async function rescheduleAction(fd: FormData) {
   const { user, shop } = await ctx(fd, "bookings");
   const ret = returnTo(fd, "/kalendar");
-  if (!shop.schedule) back(bare(ret), { err: "Сначала задайте расписание" });
+  if (!shop.schedule) back(ret, { err: "Сначала задайте расписание" });
   const day = str(fd, "day");
   const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), actorUserId: user.id });
   revalidateBookings();
-  if (!res.ok) back(bare(ret), { err: res.error });
+  if (!res.ok) back(ret, { err: res.error });
   back("/segodnya", { d: day, ok: "Запись перенесена — клиент уведомлён" });
 }
 

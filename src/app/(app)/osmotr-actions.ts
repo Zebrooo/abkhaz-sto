@@ -184,7 +184,7 @@ export async function sendReportAction(fd: FormData) {
   back(bare(ret), { d: dayOf(ret), ok: done });
 }
 
-/** PDF собирает сайт; мы только уводим по ссылке. Не собрался — тост на экране. */
+/** PDF собирает сайт; мы только уводим по ссылке. Не собрался — карточка на экране. */
 export async function reportPdfAction(fd: FormData) {
   const c = await ctx();
   const bookingId = int(fd, "bookingId");

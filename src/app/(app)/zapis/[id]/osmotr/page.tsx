@@ -147,7 +147,7 @@ export default async function InspectionPage({ params, searchParams }: { params:
         <div className="head">
           <div>
             <div className="head-t">Осмотр и отчёт по диагностике</div>
-            <div className="head-s">{car} · {plate} · запись № {b.id}{inspection?.masterName ? ` · мастер ${inspection.masterName}` : ""}</div>
+            <div className="head-s">{car} · {plate} · запись № {b.id}</div>
           </div>
           <div className="head-tail">
             <Link className="aui-btn aui-btn--outline aui-btn--md" href={reportHref}>Отчёт</Link>

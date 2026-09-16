@@ -166,12 +166,12 @@ svg { display: block; }
 /* Поля */
 .fld { display: flex; flex-direction: column; gap: 6px; }
 .fld > span { font-size: 12.5px; color: var(--muted); }
-.fld input, .fld select, .fld textarea {
+.fld input, .fld select, .fld textarea, .cust input[name="title"], .reason-other {
   min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 14px;
   background: #fff; font-size: 15px; transition: border-color .15s, box-shadow .15s;
 }
 .fld textarea { min-height: 76px; resize: none; }
-.fld input:focus, .fld select:focus, .fld textarea:focus {
+.fld input:focus, .fld select:focus, .fld textarea:focus, .cust input[name="title"]:focus, .reason-other:focus {
   outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
 }
 .fld input::placeholder, .fld textarea::placeholder { color: var(--muted-2); }
@@ -519,8 +519,6 @@ svg { display: block; }
   display: flex; align-items: center; gap: 8px;
 }
 .toast i { flex: none; width: 20px; height: 20px; border-radius: var(--radius-pill); background: #fff; color: var(--ink); display: inline-flex; align-items: center; justify-content: center; }
-.toast-err { background: var(--accent); }
-.toast-err i { color: var(--accent); }
 
 /* ─────────── Расписание ─────────── */
 .sched { padding: 6px 14px; }
@@ -598,7 +596,7 @@ svg { display: block; }
 .hero .ava { width: 64px; height: 64px; font-size: 22px; }
 .hero-n { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
 .hero-s { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.hero-actions { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 4px; }
 .hero-actions > * { flex: 1; min-height: 44px; }
 .hist { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .hist:last-child { border-bottom: 0; }
@@ -647,17 +645,18 @@ svg { display: block; }
   .logo-a { color: var(--accent); }
   .logo-gap { display: inline-block; width: .18em; }
   .logo-sub { font-size: 10.5px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  /* Не кнопка — без hover; длинное имя режется многоточием, а не ломает пилюлю. */
   .shop-switch {
-    display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px;
+    display: block; min-width: 0; max-width: 300px; line-height: 40px; padding: 0 14px;
     border-radius: var(--radius-pill); background: var(--bg-2); font-size: 13.5px; font-weight: 600;
-    transition: background .15s, transform .12s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .shop-switch:hover { background: var(--warm); }
   .topbar .search {
     flex: 1; max-width: 420px; min-height: 42px; border: 1px solid var(--line-2); border-radius: var(--radius-pill);
     background: var(--bg); box-shadow: none; padding: 0 16px;
   }
-  .topbar .search input { min-height: 40px; }
+  .topbar .search { min-width: 200px; }
+  .topbar .search input { min-height: 40px; min-width: 0; }
   .topbar .search:hover { border-color: var(--line); }
   .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   .topbar .bell { width: 42px; height: 42px; }
@@ -867,7 +866,7 @@ svg { display: block; }
   .stepper button { width: 34px; height: 34px; border-radius: var(--radius); border: 1px solid var(--line-2); box-shadow: none; font-size: 17px; }
   .stepper button:hover { background: var(--bg-2); }
   .stepper .v { min-width: 26px; font-size: 17px; }
-  .fld input, .fld select, .fld textarea { min-height: 44px; padding: 8px 14px; border-radius: var(--radius); }
+  .fld input, .fld select, .fld textarea, .cust input[name="title"], .reason-other { min-height: 44px; padding: 8px 14px; border-radius: var(--radius); }
 
   /* Услуги сеткой */
   .svc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
@@ -1019,11 +1018,7 @@ svg { display: block; }
 /* Подпись в шторке — во всю ширину, в отличие от .hint с полями по 4px. */
 .sheet-note { font-size: 13px; color: var(--muted); text-wrap: pretty; }
 /* Своя причина отмены: поле без подписи — она уже в плейсхолдере. */
-.reason-other {
-  width: 100%; min-height: 70px; margin-top: 4px; padding: 10px 14px;
-  border: 1px solid var(--line-2); border-radius: 14px; background: #fff; font-size: 15px; resize: none;
-}
-.reason-other:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.reason-other { width: 100%; min-height: 70px; margin-top: 4px; resize: none; }
 @media (max-width: 880px) {
   /* Без растяжки .page внутри не занимает экран и липкие кнопки всплывают. */
   .detail { flex: 1; display: flex; flex-direction: column; }
@@ -1058,9 +1053,9 @@ svg { display: block; }
 .nb-fields { display: flex; flex-direction: column; gap: 12px; }
 /* Точки шага стоят справа от названия шага — как в шапке шторки. */
 .sect .sheet-dots { margin-left: auto; }
-/* «Назад» — та же стрелка, что и «вперёд», просто развёрнутая. */
-.nb-back { transform: rotate(180deg); }
-.nb-back:active { transform: rotate(180deg) scale(.97); }
+/* «Назад» — та же стрелка, что и «вперёд», просто развёрнутая. Поворачиваем
+   глиф, а не кнопку: иначе :active кнопки на миг сбрасывает поворот. */
+.nb-back svg { transform: rotate(180deg); }
 
 @media (max-width: 880px) {
   /* Форма тянется на весь экран: иначе липкий подвал всплывает под контент. */
@@ -1096,7 +1091,7 @@ svg { display: block; }
   /* Услуга в колонке площе и тише, чем в шторке телефона. */
   .nb-svc .pick { min-height: 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-3); }
   .nb-svc .pick:hover { background: var(--bg-2); }
-  .nb-svc .pick[aria-pressed="true"]:hover { background: var(--warm); }
+  .nb-svc .pick[aria-pressed="true"], .nb-svc .pick[aria-pressed="true"]:hover { background: var(--warm); }
   .nb-svc .pick-t { font-size: 14px; }
   .nb-svc .pick-on { width: 24px; height: 24px; }
   /* День — чипом в строку, «Ср, 16»: запятую ставит псевдоэлемент, чтобы
@@ -1112,7 +1107,7 @@ svg { display: block; }
   .nb .daypick .dow { font-size: 13px; font-weight: 600; text-transform: capitalize; letter-spacing: 0; opacity: 1; }
   .nb .daypick .dow::after { content: ","; }
   .nb .daypick .num { font-size: 13px; font-weight: 600; letter-spacing: 0; }
-  .nb .seg { margin-top: 10px; max-width: 360px; }
+  .nb .chips { margin-top: 10px; }
   .nb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   /* Комментарий стоит в сетке рядом с «Машиной» — и высотой равен ей:
      min-height мало, две строки textarea задают высоту сами. */
@@ -1239,9 +1234,6 @@ svg { display: block; }
 /* Вход — страница без каркаса приложения: карточка по центру экрана. */
 .gate { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .gate .card { width: 100%; max-width: 420px; }
-/* Кнопки не сжимаются (nowrap): когда две подписи не помещаются в ширину
-   карточки, вторая уходит на свою строку, а не за край карточки. */
-.gate .hero-actions { flex-wrap: wrap; }
 .gate .hint { margin-top: 4px; }
 
 @media (max-width: 880px) {
@@ -1258,13 +1250,13 @@ svg { display: block; }
 @media (min-width: 881px) {
   .cli-ctl, .cli-list { display: none; }
   /* Лента — колонка в 780px: строка во весь экран уже не читается. */
-  .page-feed { max-width: 780px; }
+  .page.page-feed { max-width: 780px; }
   .notif-actions { flex: none; }
   .notif-actions .aui-btn { min-height: 34px; }
   .mrow { padding: 14px 16px; }
   /* Карточки клиента в макете веба нет: колонку сужаем, а заголовки секций
      возвращаем — без них машины и история сливаются в одну стопку. */
-  .page-card { max-width: 720px; }
+  .page.page-card { max-width: 720px; }
   .page-card .sect { display: flex; padding: 6px 0 0; }
 }
 
@@ -1308,7 +1300,8 @@ svg { display: block; }
 /* Карточка машины: пробег — ссылка в цвет акцента, состояние под пунктиром. */
 .ins-km { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
 .ins-km:active { opacity: .6; }
-.ins-state { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line-2); }
+/* Длинное имя мастера не сжимает заголовок — уходит на свою строку справа. */
+.ins-state { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line-2); }
 .ins-state-t { font-size: 20px; font-weight: 800; letter-spacing: -.025em; }
 .ins-state-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .ins-master { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
@@ -1375,7 +1368,8 @@ svg { display: block; }
 .card-s + .ins-bk-b, .rp-badges + .ins-bk-b { margin-top: 12px; }
 
 /* Шторка «Пробег сейчас»: крупное поле и единица справа. */
-.km-box { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border-radius: 16px; padding: 10px 16px; }
+.km-box { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border: 1px solid transparent; border-radius: 16px; padding: 10px 16px; }
+.km-box:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
 .km-box input, .km-v { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 26px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-height: 52px; }
 .km-v { display: flex; align-items: center; }
 .km-box > span:last-child { flex: none; font-size: 15px; font-weight: 700; color: var(--muted); }
@@ -1402,8 +1396,6 @@ svg { display: block; }
 .pre-p { flex: none; font-size: 15px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .cust { background: var(--bg-2); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .cust-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
-.cust input[name="title"] { min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 14px; background: #fff; font-size: 15px; }
-.cust input[name="title"]:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
 .cust .aui-btn--primary { min-height: 48px; border-radius: 14px; }
 .cust-note { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
 /* Сегмент и чипы на радиокнопках: состояние живёт в форме, а не в адресе —
@@ -1412,9 +1404,13 @@ svg { display: block; }
 .rseg > label, .rchips .chip { position: relative; cursor: pointer; }
 .rseg input, .rchips input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .rseg > label:has(:checked) { color: #fff; box-shadow: none; }
+/* Радиокнопка скрыта — фокус с клавиатуры показываем на обёртке. */
+.rseg > label:has(:focus-visible), .rchips .chip:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rseg > label:has([value="warn"]:checked) { background: var(--tag-urgent); }
 .rseg > label:has([value="bad"]:checked) { background: var(--accent); }
 .rchips { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Работа — строка прайса, ей можно две строки: чип-примитив nowrap рассчитан на ленту с прокруткой. */
+.rchips .chip { max-width: 100%; white-space: normal; text-align: left; padding: 6px 14px; line-height: 1.3; }
 .rchips .chip:has(:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* Фото: слоты одного вида в трёх местах. Файловое поле накрывает слот
@@ -1435,7 +1431,7 @@ svg { display: block; }
 .ph-small { flex: 1; height: 56px; border-radius: 10px; font-size: 18px; }
 .ph-sq { flex: none; width: 72px; height: 72px; font-size: 11.5px; }
 .ph-sq > span { flex-direction: column; gap: 2px; }
-.ph-grid { display: flex; gap: 6px; margin-top: 10px; }
+.ph-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ph-grid .ph-slot { flex: 1; height: 96px; }
 .ph-fail {
   display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; border-radius: var(--radius-pill);
@@ -1495,8 +1491,10 @@ svg { display: block; }
 .sticky-actions .rp-pdf { background: #fff; }
 
 @media (min-width: 881px) {
-  /* Две колонки: инструменты слева в 392px, отчёт справа. */
-  .ins-cols { display: grid; grid-template-columns: 392px minmax(0, 1fr); gap: 16px; align-items: start; }
+  /* Две колонки: инструменты слева, отчёт справа — 2:3 (на 952px это 374/562,
+     как макетные 392/544). Фиксированные 392px на узком вебе оставляли правой
+     колонке ~190px: дефект и главная кнопка вылезали за окно. */
+  .ins-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
   .ins-col { display: flex; flex-direction: column; gap: 12px; }
   .ins-cta { min-height: 68px; border-radius: var(--radius-lg); }
   .ins-cta:hover { background: var(--accent-dark); }
@@ -1513,10 +1511,13 @@ svg { display: block; }
   .rp-def-t { font-size: 17px; letter-spacing: -.02em; }
   .rp-price { font-size: 18px; }
   .ph-grid .ph-slot { flex: none; width: 148px; height: 112px; }
-  .rp { max-width: 860px; }
+  /* .page.rp — иначе перебивает .page:not(.board) с большей специфичностью. */
+  .page.rp { max-width: 860px; }
   .rp-est { border-radius: 14px; padding: 16px 18px; }
   .rp-badges .aui-badge, .rp-est-c { flex: none; }
   .cap-node, .pre, .ins-fchip, .rseg > label, .rchips .chip { cursor: pointer; }
+  /* Поле и кнопка «своими словами» — в один размер с .fld и подвалом шторки. */
+  .cust .aui-btn--primary { min-height: 44px; border-radius: var(--radius); }
   .ins-bk-b .aui-btn { min-height: 40px; }
 }
 
@@ -1551,7 +1552,8 @@ svg { display: block; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
   background: #fff; border-radius: 18px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 14px;
 }
-.acc-row.off { opacity: .55; }
+/* Выключенный доступ: тускнеет всё, кроме переключателя — им доступ включают обратно. */
+.acc-row.off .ava, .acc-row.off .row-main, .acc-row.off .acc-seg { opacity: .55; }
 .acc-row .ava { width: 44px; height: 44px; font-size: 14px; }
 .acc-n { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
 .acc-s { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -1579,14 +1581,14 @@ svg { display: block; }
 
 /* ─── Мой пост ─── */
 /* Тёмная карточка мастера — как выручка у хозяина: белым по --ink. */
-.mw-hero { background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
+.mw-hero { --dark-text-2: #a3aab6; background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }
 .mw-hero .ava { width: 42px; height: 42px; font-size: 14px; background: rgba(255, 255, 255, .14); color: #fff; }
 .mw-hero .person-n { font-size: 15.5px; letter-spacing: -.015em; }
-.mw-hero .person-s { color: var(--dark-text-2, #a3aab6); }
+.mw-hero .person-s { color: var(--dark-text-2); }
 .mw-shift { flex: none; padding: 5px 10px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .14); font-size: 12px; font-weight: 700; }
 .mw-hero .tiles { margin-top: 14px; }
 .mw-hero .tile { background: rgba(255, 255, 255, .08); }
-.mw-hero .tile-k { color: var(--dark-text-2, #a3aab6); }
+.mw-hero .tile-k { color: var(--dark-text-2); }
 /* Заголовки секций на этом экране видны и на вебе: колонка в 1000px без
    них — одна стопка карточек. */
 .mw-sect { display: flex; }
@@ -1608,7 +1610,7 @@ svg { display: block; }
 
 @media (min-width: 881px) {
   /* Доступы — колонка в 760px, строки в одной рамке, как таблица. */
-  .page-access { max-width: 760px; }
+  .page.page-access { max-width: 760px; }
   .acc-note-top, .acc-invite { display: none; }
   .acc-invite-web { display: inline-flex; box-shadow: var(--shadow-accent); }
   .acc-list { gap: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
@@ -1619,7 +1621,8 @@ svg { display: block; }
   .acc-seg { order: 0; flex: 0 0 200px; }
   /* Мастера — сетка в три колонки, плашка «без мастера» над плитками. */
   .page-masters { max-width: 1000px; }
-  .m-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  /* На узком вебе (до ~1100px) три колонки не вмещают плитки — auto-fill даёт две. */
+  .m-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
   .m-card { display: flex; flex-direction: column; padding: 18px; }
   .m-card .person .ava { width: 46px; height: 46px; font-size: 15px; }
   .m-card > .tiles { order: 2; margin-top: 16px; }
@@ -1786,7 +1789,9 @@ svg { display: block; }
 
   /* Чат: две панели во весь рабочий экран — колонка диалогов слева,
      переписка справа. Подсказка под списком на вебе не нужна. */
-  .chat-page { padding: 0; max-width: none; display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h)); }
+  /* .page.chat-page — иначе перебивает .page:not(.board) с большей специфичностью.
+     Высота фиксирована, чтобы прокручивались список и тред, а не вся страница. */
+  .page.chat-page { padding: 0; max-width: none; display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-h)); }
   .chat-hint { display: none; }
   .chat-wrap { display: flex; flex: 1; min-height: 0; }
   .chat-list, .thread-page .chat-list {
@@ -1816,6 +1821,8 @@ svg { display: block; }
   .thread-foot .quick { flex-wrap: wrap; padding: 0; }
   .thread-foot .chip { min-height: 32px; padding: 0 12px; font-size: 12.5px; background: var(--bg-2); border: 0; }
   .thread-foot .chip:hover { background: var(--warm); color: var(--accent); }
+  /* Выбранный быстрый ответ — акцентом, как на телефоне. */
+  .thread-foot .chip[aria-pressed="true"] { background: var(--accent); color: #fff; }
   .chat-form { gap: 10px; align-items: center; }
   .chat-input { padding: 10px 16px; border: 1px solid var(--line-2); border-radius: var(--radius-pill); }
   .chat-send { width: auto; min-height: 46px; height: auto; padding: 0 22px; box-shadow: none; font-weight: 700; font-size: 14px; }

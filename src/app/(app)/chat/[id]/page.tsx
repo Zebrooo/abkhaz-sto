@@ -52,7 +52,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
       <>
         <ScreenHead title="Чат" back="/chat" unread={pending} />
         <div className="page stack">
-          <Flash err={`Сайт пока не отдаёт чат: ${threadsRes.error}`} />
+          <Flash err={`Сайт пока не отдаёт чат: ${threadsRes.error}`} title="Сайт не ответил" />
           <Link className="aui-btn aui-btn--outline aui-btn--md" href="/chat">К диалогам</Link>
         </div>
       </>

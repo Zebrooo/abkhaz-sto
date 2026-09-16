@@ -49,7 +49,6 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
     <>
       <ScreenHead title={card.name} sub={visits} back="/klienty" unread={pending} />
       <div className="page page-card stack">
-        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
         <div className="head">
           <div>
             <div className="head-t">{card.name}</div>
@@ -59,6 +58,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
             <Link className="aui-btn aui-btn--outline aui-btn--md" href="/klienty">Все клиенты</Link>
           </div>
         </div>
+        <Flash ok={pick(sp.ok)} err={pick(sp.do) === "note" ? "" : pick(sp.err)} />
 
         <div className="card hero">
           <span className="ava ava-accent">{initials(card.name)}</span>
@@ -140,6 +140,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
         >
           {/* Форма живёт в теле, а кнопка — в подвале шторки: их связывает form=. */}
           <form id={NOTE_FORM} action={saveClientNoteAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
             <input type="hidden" name="clientKey" value={card.key} />
             <label className="fld">
               <span>Видит только сервис</span>

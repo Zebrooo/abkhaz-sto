@@ -155,7 +155,12 @@ ssh -p 22222 abkhaz-dev@185.228.132.60 'cd ~/abkhaz-business/src && set -a && . 
    `STO_TICKET_SRC`/`STO_TICKET_DST`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`.
 3. **Сеть Supabase.** Сверить имя (`docker network ls | grep supabase`) и при
    расхождении поправить `name:` в `deploy/prod/docker-compose.yml`.
-4. **Сборка и запуск** (раннеров у репозитория нет — собираем на сервере):
+4. **Сборка и запуск.** Штатный путь — Actions → Deploy с контуром `prod`:
+   образ собирает раннер `ci` на 185, выкатывает раннер `aa-prod-170-abkhaz-sto`
+   (метка `deploy-prod`, `/home/user/actions-runner-abkhaz-sto` на 170, запущен
+   `nohup ./run.sh` от `user`, как остальные раннеры хоста; после перезагрузки
+   сервера запустить так же). Запасной путь, если конвейер недоступен, —
+   собрать на сервере из архива исходников:
 
 ```bash
 git archive --format=tar HEAD | ssh <прод> 'mkdir -p /data/abkhaz-business/src && tar -x -C /data/abkhaz-business/src'

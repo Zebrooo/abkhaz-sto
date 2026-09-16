@@ -35,9 +35,17 @@ describe("навигация по ролям", () => {
     expect(activeTab("master", "/zapis/812")).toBe("mywork");
   });
 
+  // Ловушка, из-за которой хозяин не находил готовых отчётов: у пункта не
+  // было своего адреса, и он вёл туда же, куда «Осмотр», — на записи дня.
+  it("готовые отчёты — свой адрес, и он у всех ролей", () => {
+    expect(hrefOf("report", "/zapis/7/osmotr")).toBe("/otchety");
+    expect(navKeyOf("/otchety")).toBe("report");
+    for (const r of STO_ROLES) expect(visibleKeys(r), r).toContain("report");
+  });
+
   it("с любого адреса у любой роли подсвечена вкладка, которая у неё есть", () => {
     const paths = ["/", "/segodnya", "/kalendar?d=1", "/klienty/u1", "/svodka", "/mastera", "/chat/5",
-      "/uslugi", "/raspisanie", "/uvedomleniya", "/dostupy", "/menu", "/moi-raboty", "/chto-to"];
+      "/uslugi", "/raspisanie", "/uvedomleniya", "/dostupy", "/menu", "/moi-raboty", "/otchety", "/chto-to"];
     for (const r of STO_ROLES) {
       const keys = TABS[r].map(t => t.key);
       for (const p of paths) expect(keys, `${r} на ${p}`).toContain(activeTab(r, p));

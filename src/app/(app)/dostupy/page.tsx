@@ -66,7 +66,9 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
 
-        <Flash ok={pick(sp.ok)} err={pick(sp.err) || siteErr} />
+        {/* Ошибка формы приглашения — внутри шторки, где её читают; карточка
+            под затемнением не видна. Отказ чтения — своим заголовком. */}
+        <Flash ok={pick(sp.ok)} err={act === "invite" ? "" : pick(sp.err) || siteErr} title={pick(sp.err) ? undefined : "Сайт не ответил"} />
 
         <p className="hint acc-note-top">Роль решает, что человек видит: мастер — свой пост и осмотры, админ — записи и клиентов, хозяин — деньги и настройки. Вход — по номеру телефона, как на сайте.</p>
 
@@ -119,6 +121,7 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
           footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={INVITE_FORM}>Пригласить</button>}
         >
           <form id={INVITE_FORM} action={inviteMemberAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
             <label className="fld">
               <span>Телефон</span>
               <input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 940 000-00-00" required />
@@ -129,14 +132,17 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
             </label>
             <div className="fld">
               <span>Роль</span>
+              {/* Радиокнопки, а не ссылки: переход стирал бы набранные телефон и имя. */}
               <div className="seg">
                 {STAFF_ROLES.map(r => (
-                  <Link key={r} href={inviteHref(r)} aria-pressed={inviteRole === r}>{STO_ROLE_LABEL[r]}</Link>
+                  <label key={r}>
+                    <input type="radio" name="role" value={r} defaultChecked={inviteRole === r} />
+                    {STO_ROLE_LABEL[r]}
+                  </label>
                 ))}
               </div>
             </div>
-            <input type="hidden" name="role" value={inviteRole} />
-            <p className="sheet-note">{STO_ROLE_LABEL[inviteRole]} — {STO_ROLE_ACCESS[inviteRole]}.</p>
+            <p className="sheet-note">{STAFF_ROLES.map(r => `${STO_ROLE_LABEL[r]} — ${STO_ROLE_ACCESS[r]}`).join(". ")}.</p>
           </form>
         </Sheet>
       )}

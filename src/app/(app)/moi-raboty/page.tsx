@@ -179,7 +179,7 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
                 <span className={REPORT_BADGE[r.status]}>{REPORT_STATUS_LABEL[r.status]}</span>
               </Link>
             ))}
-            {reports.length === 0 && <div className="row-s">Отчётов за смену пока нет — они появятся после осмотра.</div>}
+            {reports.length === 0 && <div className="card-s">Отчётов за смену пока нет — они появятся после осмотра.</div>}
           </div>
         </div>
       </div>

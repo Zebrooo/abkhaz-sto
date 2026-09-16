@@ -95,7 +95,9 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const rest = untouchedNodeKeys(defects).length;
 
   const act = pick(sp.do);
-  const kmOpen = !inspection || act === "km";
+  // Отказ сайта — не «осмотра ещё нет»: шторку пробега с кнопкой, которая
+  // гарантированно упадёт, насильно не открываем, а показываем ошибку на экране.
+  const kmOpen = act === "km" || (!inspection && !loadErr);
   const captureOpen = !!inspection && act === "capture";
   const node = isNodeKey(pick(sp.node)) ? pick(sp.node) : null;
   const presetOpen = !!inspection && act === "preset" && !!node;
@@ -145,14 +147,16 @@ export default async function InspectionPage({ params, searchParams }: { params:
         <div className="head">
           <div>
             <div className="head-t">Осмотр и отчёт по диагностике</div>
-            <div className="head-s">{car} · {plate} · запись № {b.id}{inspection?.masterName ? ` · мастер ${inspection.masterName}` : ""}</div>
+            <div className="head-s">{car} · {plate} · запись № {b.id}</div>
           </div>
           <div className="head-tail">
             <Link className="aui-btn aui-btn--outline aui-btn--md" href={reportHref}>Отчёт</Link>
           </div>
         </div>
 
-        <Flash ok={pick(sp.ok)} err={sheetOpen ? loadErr : formErr || loadErr} />
+        {/* Пока открыта шторка, ошибка живёт в ней: карточка под затемнением
+            нечитаема, а одна и та же строка дважды выглядит как две беды. */}
+        <Flash ok={pick(sp.ok)} err={sheetOpen ? "" : formErr || loadErr} title={formErr ? undefined : "Осмотр не загрузился"} />
 
         <div className="ins-cols">
           <div className="ins-col">
@@ -178,11 +182,13 @@ export default async function InspectionPage({ params, searchParams }: { params:
               </div>
             </div>
 
-            <Link className="ins-cta" href={self("&do=capture")} aria-disabled={!inspection}>
+            {/* Без осмотра дефект не снять — ведём к пробегу и говорим почему,
+                а не гасим ссылку с живым href. */}
+            <Link className="ins-cta" href={inspection ? self("&do=capture") : self("&do=km")}>
               <span className="sq"><Icon name="camera" size={24} /></span>
               <span className="row-main">
                 <span className="ins-cta-t">Снять дефект</span>
-                <span className="ins-cta-s">фото, узел, и он уже в отчёте</span>
+                <span className="ins-cta-s">{inspection ? "фото, узел, и он уже в отчёте" : "сначала пробег — без него осмотра нет"}</span>
               </span>
             </Link>
 
@@ -261,7 +267,7 @@ export default async function InspectionPage({ params, searchParams }: { params:
             <form id={KM_FORM} action={startInspectionAction} className="sheet-stack">
               <input type="hidden" name="bookingId" value={b.id} />
               <input type="hidden" name="return" value={self()} />
-              {formErr && <Flash err={formErr} />}
+              {(formErr || loadErr) && <Flash err={formErr || loadErr} title={formErr ? undefined : "Осмотр не загрузился"} />}
               <div className="sheet-note">Один раз за осмотр — пробег попадёт в отчёт и в историю машины.</div>
               <label className="km-box">
                 <input name="odometer" inputMode="numeric" autoComplete="off" aria-label="Пробег, км" autoFocus />

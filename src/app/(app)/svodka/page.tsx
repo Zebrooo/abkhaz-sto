@@ -124,7 +124,7 @@ function Summary({ s, local, masterNames }: { s: MoneySummary; local: boolean; m
           </div>
           <div className="conv-s">Сколько диагностик клиенты одобрили — главный показатель осмотров.</div>
           {local ? (
-            <div className="conv-s">Сайт не ответил: конверсия отчётов и разбивка по мастерам придут, когда он проснётся.</div>
+            <div className="conv-s">Конверсию отчётов считает сайт — появится, когда он ответит.</div>
           ) : (
             <>
               <div className="bar conv-bar"><i style={{ "--k": conv.k } as React.CSSProperties} /></div>

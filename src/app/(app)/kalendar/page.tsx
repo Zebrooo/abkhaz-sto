@@ -26,6 +26,19 @@ const isFilter = (s: string): s is Filter => FILTERS.some(([k]) => k === s);
 const href = (day: string, filter: Filter, move?: number | null) =>
   `/kalendar?d=${day}${filter === "all" ? "" : `&f=${filter}`}${move ? `&move=${move}` : ""}`;
 
+/** Фильтр статусов: стоит и в шапке веба, и в блоке управления телефона. */
+function StatusChips({ day, filter, counts, move }: { day: string; filter: Filter; counts: Record<Filter, number>; move?: number | null }) {
+  return (
+    <div className="chips">
+      {FILTERS.map(([key, label]) => (
+        <Link key={key} className="chip" href={href(day, key, move)} aria-current={key === filter ? "page" : undefined}>
+          {label} {counts[key]}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 function ModeSeg({ day }: { day: string }) {
   return (
     <div className="seg">
@@ -106,13 +119,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           </div>
           <div className="head-tail">
             <ModeSeg day={day} />
-            <div className="chips">
-              {FILTERS.map(([key, label]) => (
-                <Link key={key} className="chip" href={href(day, key, moving?.id)} aria-current={key === filter ? "page" : undefined}>
-                  {label} {counts[key]}
-                </Link>
-              ))}
-            </div>
+            <StatusChips day={day} filter={filter} counts={counts} move={moving?.id} />
           </div>
         </div>
 
@@ -126,6 +133,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
             </div>
             <Link href={href(addDays(day, 7), filter, moving?.id)} aria-label="Следующая неделя"><Icon name="chevron" size={17} /></Link>
           </div>
+          <StatusChips day={day} filter={filter} counts={counts} move={moving?.id} />
         </div>
 
         <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
@@ -148,13 +156,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
               <Link key={w.day} href={href(w.day, filter, moving?.id)} aria-current={w.day === day ? "date" : undefined}>
                 <span className="dow">{dayOfWeekShort(w.day)}</span>
                 <span className="num">{dayNumber(w.day)}</span>
-                <span className="cnt">{w.off ? "выходной" : w.n > 0 ? count(w.n, "запись", "записи", "записей") : "—"}</span>
+                <span className="cnt">{w.n > 0 ? count(w.n, "запись", "записи", "записей") : shop.schedule && w.off ? "выходной" : "—"}</span>
               </Link>
             ))}
           </div>
         </div>
 
-        <p className="hint m-only">Нажмите день — откроется его таймлайн. Свободные окна показываются пунктиром, на них можно записать сразу.</p>
+        <p className="hint m-only">Нажмите день — ниже покажутся его записи. Сетка часов со свободными окнами — в «День».</p>
 
         {moving && (
           <div className="card note">

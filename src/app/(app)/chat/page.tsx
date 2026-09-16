@@ -57,13 +57,16 @@ export default async function ChatsPage() {
               </div>
             )}
           </div>
-          <div className="chat-pane chat-pane-empty">
-            <div className="empty">
-              <span className="sq"><Icon name="comment" size={26} /></span>
-              <div className="empty-t">Выберите диалог</div>
-              <div className="empty-s">Переписка откроется здесь, шапка записи — над ней.</div>
+          {/* Панель «выберите диалог» — только когда есть что выбирать. */}
+          {threads.length > 0 && (
+            <div className="chat-pane chat-pane-empty">
+              <div className="empty">
+                <span className="sq"><Icon name="comment" size={26} /></span>
+                <div className="empty-t">Выберите диалог</div>
+                <div className="empty-s">Переписка откроется здесь, шапка записи — над ней.</div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <p className="hint chat-hint">Чат приходит с сайта: клиент пишет из своей записи, история остаётся в карточке.</p>
       </div>

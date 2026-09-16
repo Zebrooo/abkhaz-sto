@@ -76,7 +76,7 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
           )}
         </div>
 
-        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
+        <Flash ok={pick(sp.ok)} err={act === "add" && role === "owner" ? "" : pick(sp.err)} />
 
         {active.length === 0 ? (
           <div className="card">
@@ -139,6 +139,7 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
           footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={ADD_FORM}>Добавить</button>}
         >
           <form id={ADD_FORM} action={createMasterAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
             <label className="fld">
               <span>Имя</span>
               <input name="name" placeholder="Как зовут мастера" maxLength={80} required autoFocus />

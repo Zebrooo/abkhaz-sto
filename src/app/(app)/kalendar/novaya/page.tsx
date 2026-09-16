@@ -147,7 +147,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
           <input type="hidden" name="shopId" value={shop.id} />
           <input type="hidden" name="day" value={day} />
           <input type="hidden" name="listingId" value={svc.listingId} />
-          <input type="hidden" name="hhmm" value={time} />
+          <input type="hidden" name="hhmm" value={chosen?.hhmm ?? ""} />
           {postNo && <input type="hidden" name="postNo" value={postNo} />}
           {fromReport && (
             <>
@@ -185,12 +185,12 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     ))}
                   </div>
                   <div className="nb-l nb-l-post">Пост</div>
-                  <div className="seg">
-                    <Link href={href({ post: null, t: null })} aria-current={postNo === null ? "page" : undefined}>
+                  <div className="chips">
+                    <Link className="chip" href={href({ post: null, t: null })} aria-current={postNo === null ? "page" : undefined}>
                       <span className="nb-p">Любой</span><span className="nb-w">Любой пост</span>
                     </Link>
                     {Array.from({ length: schedule.posts }, (_, i) => i + 1).map(p => (
-                      <Link key={p} href={href({ post: p, t: null })} aria-current={p === postNo ? "page" : undefined}>Пост {p}</Link>
+                      <Link key={p} className="chip" href={href({ post: p, t: null })} aria-current={p === postNo ? "page" : undefined}>Пост {p}</Link>
                     ))}
                   </div>
                 </div>

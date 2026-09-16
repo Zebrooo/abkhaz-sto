@@ -76,30 +76,48 @@ export function dayStats(input: { rows: readonly StoBookingRow[]; schedule: StoS
   };
 }
 
-/** Окно короче 45 минут на сетке не показываем: записать в него нечего. */
-export const MIN_FREE_MIN = 45;
-
 export type FreeGap = { fromMin: number; toMin: number };
 
+/** Правила сетки для свободных окон — те же, что у записи (slots.ts). */
+export type GapRules = { stepMin: number; bufferMin: number };
+/** Без расписания сетка запасная: шаг 30, буфера нет (schedule.ts DEFAULT_*). */
+export const DEFAULT_GAP_RULES: GapRules = { stepMin: 30, bufferMin: 0 };
+
 /**
- * Свободные куски поста внутри часов приёма. Считаем по интервалам дня, а не
- * от первого до последнего часа: обед — не свободное окно, предлагать запись
- * в него нельзя.
+ * Свободные куски поста внутри часов приёма — ровно те, куда запись потом
+ * пройдёт через freeSlots/isSlotFree (slots.ts), иначе сетка предлагает окно,
+ * а форма отвечает «занято»:
+ * - считаем по интервалам дня, а не от первого до последнего часа: обед — не
+ *   свободное окно;
+ * - после записи пост занят ещё bufferMin — окно начинается после буфера;
+ * - окно начинается на узле сетки: запись ставится только с шагом stepMin
+ *   от начала интервала, и «11:40» при шаге 30 в форме не выбрать;
+ * - кусок короче шага не показываем: ни одна запись в него не встанет.
  */
 export function freeGaps(
   intervals: readonly { from: string; to: string }[],
   busy: readonly { from: number; to: number }[],
+  rules: GapRules = DEFAULT_GAP_RULES,
 ): FreeGap[] {
+  const step = Number.isInteger(rules.stepMin) && rules.stepMin > 0 ? rules.stepMin : DEFAULT_GAP_RULES.stepMin;
+  const pad = Number.isFinite(rules.bufferMin) && rules.bufferMin > 0 ? rules.bufferMin : 0;
   const out: FreeGap[] = [];
   for (const iv of intervals) {
-    let cursor = toMinutes(iv.from);
+    const start = toMinutes(iv.from);
     const end = toMinutes(iv.to);
-    const inside = busy.filter(b => b.to > cursor && b.from < end).sort((a, b) => a.from - b.from);
+    const onGrid = (min: number) => start + Math.ceil((min - start) / step) * step;
+    let cursor = start;
+    const inside = busy
+      .map(b => ({ from: b.from, to: b.to + pad }))
+      .filter(b => b.to > start && b.from < end)
+      .sort((a, b) => a.from - b.from);
     for (const b of inside) {
-      if (b.from - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: b.from });
+      const from = onGrid(cursor);
+      if (b.from - from >= step) out.push({ fromMin: from, toMin: b.from });
       cursor = Math.max(cursor, b.to);
     }
-    if (end - cursor >= MIN_FREE_MIN) out.push({ fromMin: cursor, toMin: end });
+    const from = onGrid(cursor);
+    if (end - from >= step) out.push({ fromMin: from, toMin: end });
   }
   return out;
 }

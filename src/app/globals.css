@@ -1176,6 +1176,9 @@ svg { display: block; }
 /* Вход — страница без каркаса приложения: карточка по центру экрана. */
 .gate { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .gate .card { width: 100%; max-width: 420px; }
+/* Кнопки не сжимаются (nowrap): когда две подписи не помещаются в ширину
+   карточки, вторая уходит на свою строку, а не за край карточки. */
+.gate .hero-actions { flex-wrap: wrap; }
 .gate .hint { margin-top: 4px; }
 
 @media (max-width: 880px) {

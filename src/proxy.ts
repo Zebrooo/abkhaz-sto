@@ -2,8 +2,19 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authCookieOptions } from "@/lib/auth-cookies";
 
-/** Без входа: объяснение, как войти, здоровье и cookie-мост мобильной оболочки (он сессию и создаёт). */
-const PUBLIC_PATHS = ["/vhod", "/api/health", "/api/auth/mobile-bridge"];
+/**
+ * Без входа: объяснение, как войти, здоровье, cookie-мост мобильной оболочки
+ * (он сессию и создаёт) и файлы-ассоциации приложения.
+ *
+ * ⚠️ /.well-known ОБЯЗАН быть публичным. Apple и Google ходят за файлом
+ * ассоциации без куки; замок сессии отдал бы им страницу входа вместо json, и
+ * ссылки на этот домен перестали бы открываться в приложении. Обе формы пути:
+ * наружную видит робот, внутреннюю — rewrite из next.config.ts.
+ */
+const PUBLIC_PATHS = [
+  "/vhod", "/api/health", "/api/auth/mobile-bridge",
+  "/.well-known", "/well-known",
+];
 
 // Файл proxy.ts — в Next 16 так зовётся прежний middleware.
 // Стандартный приём @supabase/ssr: обновить сессию по куке и переложить

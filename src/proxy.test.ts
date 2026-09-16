@@ -42,6 +42,23 @@ describe("proxy: что видит гость", () => {
     expect(res.headers.get("x-middleware-rewrite")).toContain("/vhod");
   });
 
+  // Apple и Google ходят за файлом ассоциации БЕЗ куки. Замок отдал бы им
+  // страницу входа вместо json, проверка домена провалилась бы, и ссылки на
+  // этот хост перестали бы открываться в приложении. Обе формы пути: наружную
+  // видит робот, внутреннюю — rewrite из next.config.ts.
+  it("файлы-ассоциации приложения отдаются без сессии, в обеих формах пути", async () => {
+    for (const p of [
+      "/.well-known/apple-app-site-association",
+      "/.well-known/assetlinks.json",
+      "/well-known/apple-app-site-association",
+    ]) {
+      const res = await proxy(req(p));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    }
+    expect(mocks.getUser).not.toHaveBeenCalled();
+  });
+
   it("сам /vhod, здоровье и мост проходят без проверки сессии", async () => {
     for (const p of ["/vhod", "/api/health/live", "/api/auth/mobile-bridge"]) {
       const res = await proxy(req(p));

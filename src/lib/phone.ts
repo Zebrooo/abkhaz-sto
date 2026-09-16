@@ -7,3 +7,11 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (d.length < 7 || d.length > 15) return null;
   return "+" + d;
 }
+
+/**
+ * Целиком E.164: «+» и 11–15 цифр — как isValidE164 на сайте. Только такой
+ * номер можно подставлять в фильтр PostgREST: ничего, кроме плюса и цифр.
+ */
+export function isValidE164(phone: string | null | undefined): phone is string {
+  return typeof phone === "string" && /^\+\d{11,15}$/.test(phone);
+}

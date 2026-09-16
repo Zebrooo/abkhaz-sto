@@ -28,8 +28,10 @@ const ROUTE: Record<Exclude<NavKey, "inspect">, string> = {
   mywork: "/moi-raboty", chats: "/chat", smena: "/", today: "/segodnya", clients: "/klienty",
   dash: "/svodka", masters: "/mastera", more: "/menu", services: "/uslugi", schedule: "/raspisanie",
   notifs: "/uvedomleniya", access: "/dostupy",
-  // «Мои отчёты» мастера живут внизу его экрана — отдельного нет.
-  report: "/moi-raboty",
+  // Готовые отчёты за период. Раньше своего адреса у пункта не было и он вёл
+  // на «Мой пост», где отчёты видны только за сегодня и только мастеру, —
+  // хозяин искал готовые отчёты и не находил.
+  report: "/otchety",
 };
 
 export function hrefOf(key: NavKey, inspectHref: string): string {
@@ -74,17 +76,23 @@ const SIDE_ITEM: Record<NavKey, SideDef> = {
   masters: { key: "masters", label: "Мастера", icon: "user" },
   notifs: { key: "notifs", label: "Уведомления", icon: "bell" },
   access: { key: "access", label: "Доступы", icon: "cog" },
+  report: { key: "report", label: "Готовые отчёты", icon: "list" },
   // В левом меню макета этих пунктов нет — они здесь ради полноты словаря.
   mywork: { key: "mywork", label: "Мой пост", icon: "list" },
   smena: { key: "smena", label: "Смена", icon: "chart" },
   more: { key: "more", label: "Ещё", icon: "menu" },
-  report: { key: "report", label: "Мои отчёты", icon: "list" },
 };
 
+/**
+ * «Осмотр и отчёты» ведёт на осмотр текущей машины, и отчётов в нём не
+ * видно; «Готовые отчёты» рядом — постоянный адрес списка. Два пункта, а не
+ * один, потому что это две разные работы: одна про машину на подъёмнике,
+ * вторая про то, что уже сделано.
+ */
 const SIDE_KEYS: Record<StoRole, readonly NavKey[]> = {
-  master: ["inspect", "chats"],
-  admin: ["today", "inspect", "clients", "chats", "services", "schedule", "notifs"],
-  owner: ["dash", "today", "inspect", "masters", "services", "schedule", "notifs", "access"],
+  master: ["inspect", "report", "chats"],
+  admin: ["today", "inspect", "report", "clients", "chats", "services", "schedule", "notifs"],
+  owner: ["dash", "today", "inspect", "report", "masters", "services", "schedule", "notifs", "access"],
 };
 
 /** Левое меню рабочего места — в порядке макета. */
@@ -97,8 +105,10 @@ export type MenuKey = "inspect" | "report" | "services" | "schedule" | "masters"
 
 export const MENU: Record<StoRole, readonly MenuKey[]> = {
   master: ["inspect", "report", "chats", "services"],
-  admin: ["inspect", "services", "schedule", "masters", "chats", "notifs", "shop"],
-  owner: ["services", "schedule", "masters", "notifs", "access", "shop"],
+  admin: ["inspect", "report", "services", "schedule", "masters", "chats", "notifs", "shop"],
+  // Хозяину «Осмотр» не нужен — он не стоит у подъёмника, — а готовые
+  // отчёты нужны: на телефоне это его единственный путь к ним.
+  owner: ["report", "services", "schedule", "masters", "notifs", "access", "shop"],
 };
 
 /**
@@ -110,7 +120,7 @@ export function navKeyOf(path: string): NavKey {
   if (/^\/zapis\/\d+\/(osmotr|otchet)/.test(path)) return "inspect";
   if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "today";
   const first = "/" + path.split("/")[1];
-  const found = (Object.keys(ROUTE) as Exclude<NavKey, "inspect">[]).find(k => ROUTE[k] === first && k !== "report");
+  const found = (Object.keys(ROUTE) as Exclude<NavKey, "inspect">[]).find(k => ROUTE[k] === first);
   return found ?? "more";
 }
 
@@ -120,7 +130,8 @@ export function navKeyOf(path: string): NavKey {
  * служебное — в «Ещё». Цепочка всегда кончается на «Ещё»: оно есть у всех.
  */
 const PARENT: Partial<Record<NavKey, NavKey>> = {
-  inspect: "today", report: "mywork", today: "mywork", smena: "dash", dash: "more", mywork: "more",
+  // Готовые отчёты у всех трёх ролей лежат в «Ещё» — туда и поднимаются.
+  inspect: "today", report: "more", today: "mywork", smena: "dash", dash: "more", mywork: "more",
   clients: "more", masters: "more", services: "more", schedule: "more", notifs: "more", access: "more", chats: "more",
 };
 

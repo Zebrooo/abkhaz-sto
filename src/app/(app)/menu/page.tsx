@@ -7,12 +7,12 @@ import { fetchReports } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
-import { addDays, count, todayLocal } from "@/lib/format";
+import { count, todayLocal } from "@/lib/format";
 import { inspectHref, masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
+import { periodRange } from "@/lib/reports";
 import { shopStorefrontUrl } from "@/lib/site";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
-import { localTime } from "@/lib/sto/slots";
 
 const dayLab = (d: StoDay) => STO_DAY_LABEL[d].toLowerCase();
 
@@ -72,10 +72,15 @@ export default async function MorePage() {
   // спрашивать непрочитанные у хозяина, у которого чата нет.
   const unread = keys.includes("chats") ? await fetchUnread(shop.id, ctx.userId) : null;
   const masters = keys.includes("masters") ? (await masterDay(ctx, day)).masters : [];
-  const reports = keys.includes("report") && ctx.masterId !== null
+  // Ровно то же окно, что откроется по нажатию (экран «Готовые отчёты»
+  // стартует с недели): число в подписи обязано совпасть со списком, иначе
+  // строка врёт. Мастеру — только его отчёты, как и на самом экране.
+  const reportRange = periodRange("week", day);
+  const reports = keys.includes("report")
     ? listOr(await fetchReports({
-      shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId,
-      from: localTime(day, "00:00").toISOString(), to: localTime(addDays(day, 1), "00:00").toISOString(),
+      shopId: shop.id, actorUserId: ctx.userId,
+      masterId: role === "master" && ctx.masterId !== null ? ctx.masterId : undefined,
+      from: reportRange.from, to: reportRange.to,
     }))
     : [];
   const inspect = keys.includes("inspect") ? await inspectHref(ctx, day, new Date()) : "";
@@ -89,7 +94,9 @@ export default async function MorePage() {
 
   const ITEMS: Record<MenuKey, Item> = {
     inspect: { key: "inspect", href: inspect, icon: "camera", title: "Осмотр и отчёты", sub: "фото дефекта, узел — и он в отчёте" },
-    report: { key: "report", href: "/moi-raboty", icon: "list", title: "Мои отчёты", sub: `${reports.length} за смену` },
+    report: role === "master"
+      ? { key: "report", href: "/otchety", icon: "list", title: "Мои отчёты", sub: `${reports.length} за 7 дней` }
+      : { key: "report", href: "/otchety", icon: "list", title: "Готовые отчёты", sub: `${reports.length} за 7 дней · весь сервис` },
     services: role === "master"
       ? { key: "services", href: "/uslugi", icon: "wrench", title: "Прайс", sub: `${count(services.length, "услуга", "услуги", "услуг")} · только просмотр` }
       : { key: "services", href: "/uslugi", icon: "wrench", title: "Услуги и цены", sub: `${count(services.length, "услуга", "услуги", "услуг")} · окна считаются от длительности` },

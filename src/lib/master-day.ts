@@ -48,7 +48,12 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
 /**
  * Куда ведёт «Осмотр» из вкладок и левого меню: мастеру — на осмотр его
  * текущей записи, админу и хозяину — на ту, что идёт сейчас на любом посту.
- * Осматривать нечего — мастера возвращаем на его пост, остальных в «Записи».
+ *
+ * ОСМАТРИВАТЬ НЕЧЕГО — ВЕДЁМ К ГОТОВЫМ ОТЧЁТАМ, а не в календарь. Пункт
+ * называется «Осмотр и отчёты», и хозяин жал его именно ради отчётов; пустая
+ * сетка дня на это не отвечала — «перекидывает на календарь, не вижу, где
+ * посмотреть отчёты». У мастера свой пост остаётся: отчёты за смену видны
+ * внизу того же экрана.
  */
 export async function inspectHref(ctx: ServiceContext, day: string, now: Date): Promise<string> {
   if (ctx.role === "master") {
@@ -58,5 +63,5 @@ export async function inspectHref(ctx: ServiceContext, day: string, now: Date): 
   }
   const rows = await dayBookings(ctx.shop.id, day);
   const target = inspectTarget(rows.filter(isLive), now);
-  return target ? `/zapis/${target.id}/osmotr` : "/segodnya";
+  return target ? `/zapis/${target.id}/osmotr` : "/otchety";
 }

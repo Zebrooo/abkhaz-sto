@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { countPending } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
-import { fetchReports, REPORT_STATUS_LABEL, type ReportStatus } from "@/lib/api/reports";
+import { fetchReports, REPORT_STATUS_LABEL } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
 import { clientName, vehicleLine } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
@@ -10,6 +10,7 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, count, initials, minutesLabel, shortName, timeRange, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
 import { busyMinutes, jobNow, jobsAfter, minutesLeft } from "@/lib/mywork";
+import { REPORT_BADGE } from "@/lib/reports";
 import { dayWindow } from "@/lib/stats";
 import { localHHMM, localTime } from "@/lib/sto/slots";
 import type { StoBookingRow } from "@/lib/sto/types";
@@ -19,13 +20,6 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-
-/** Бейдж статуса отчёта: у клиента — зелёный, черновик — жёлтый, у админа — красный. */
-const REPORT_BADGE: Record<ReportStatus, string> = {
-  draft: "aui-badge is-tag-urgent",
-  with_admin: "aui-badge",
-  with_client: "aui-badge is-tag-free",
-};
 
 /** «Рустам А. · Nissan X-Trail 2016 · АГ 550 01» — кто и на чём. */
 function carLine(b: StoBookingRow): string {
@@ -180,6 +174,10 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
               </Link>
             ))}
             {reports.length === 0 && <div className="card-s">Отчётов за смену пока нет — они появятся после осмотра.</div>}
+          </div>
+          {/* За прошлые дни — отдельный экран: здесь только сегодняшняя смена. */}
+          <div className="note-b">
+            <Link className="aui-btn aui-btn--outline aui-btn--sm" href="/otchety">Все отчёты</Link>
           </div>
         </div>
       </div>

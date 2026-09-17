@@ -1,3 +1,4 @@
+import { logoutAction } from "@/app/auth-actions";
 import { serviceContext } from "@/lib/context";
 import { STO_ROLE_LABEL } from "@/lib/access";
 import { ViewBar } from "@/components/ViewBar";
@@ -6,6 +7,7 @@ import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
 import { SideNav } from "@/components/SideNav";
 import { TopBar } from "@/components/TopBar";
+import { PullRefresh } from "@/components/PullRefresh";
 import { Icon } from "@/components/Icon";
 import { formatPhone, todayLocal } from "@/lib/format";
 import { siteUrl, shopStorefrontUrl } from "@/lib/site";
@@ -57,9 +59,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <div className="hero-actions">
             <a className="aui-btn aui-btn--primary aui-btn--md" href={`${site}/kontakty`}>Написать менеджеру</a>
-            <a className="aui-btn aui-btn--ghost aui-btn--md" href={`${site}/vhod?next=/lk`}>Войти другим номером</a>
+            {/* Раньше здесь стояла ссылка «Войти другим номером» на сайт, но
+                она никого не выводила: сессия оставалась, сайт открывался
+                под тем же номером, и человек возвращался на этот же экран.
+                Сначала выход, потом вход — иначе сменить номер нечем. */}
+            <form action={logoutAction}>
+              <button className="aui-btn aui-btn--ghost aui-btn--md" type="submit">Выйти</button>
+            </form>
           </div>
-          <p className="hint">Организация есть, но открылась эта страница? Значит, в витрине указан другой номер — войдите под ним, кука сессии общая с abkhaz-auto.ru.</p>
+          <p className="hint">Организация есть, но открылась эта страница? Значит, в витрине указан другой номер — выйдите и войдите под ним на сайте, кука сессии общая с abkhaz-auto.ru.</p>
         </div>
       </main>
     );
@@ -72,6 +80,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const inspect = await inspectHref(ctx, day, new Date());
   return (
     <div className="app">
+      {/* Жест «потяни вниз» — на всех экранах приложения разом: он про
+          свежесть данных, а не про конкретный экран. */}
+      <PullRefresh />
       <TopBar shopName={shop.name} role={role} newHref={newHref} unread={pending} />
       {/* ПРИМЕРКА РОЛИ ВИДНА ВСЕГДА. Хозяин, забывший, что смотрит глазами
           мастера, решит, что половина приложения пропала. Полоса висит над

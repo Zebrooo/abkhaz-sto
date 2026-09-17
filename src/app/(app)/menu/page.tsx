@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { countPending } from "@/lib/bookings";
+import { logoutAction } from "@/app/auth-actions";
 import { requireSection } from "@/lib/context";
 import { listServices } from "@/lib/services";
 import { fetchUnread } from "@/lib/api/chat";
@@ -8,14 +9,23 @@ import { listOr } from "@/lib/api/site-api";
 import { Flash } from "@/components/Flash";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
-import { count, todayLocal } from "@/lib/format";
+import { Sheet } from "@/components/Sheet";
+import { count, formatPhone, todayLocal } from "@/lib/format";
 import { inspectHref, masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
 import { STO_ROLE_LABEL, type StoRole } from "@/lib/access";
 import { setRoleViewAction } from "@/app/(app)/view-actions";
 import { periodRange } from "@/lib/reports";
 import { shopStorefrontUrl } from "@/lib/site";
+import { getServerUser } from "@/lib/supabase/server";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
+
+type SP = Promise<Record<string, string | string[] | undefined>>;
+const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+
+/** Шторка подтверждения выхода — открывается адресом, как остальные. */
+const EXIT = "vyhod";
+const LOGOUT_FORM = "logout";
 
 const dayLab = (d: StoDay) => STO_DAY_LABEL[d].toLowerCase();
 
@@ -64,9 +74,8 @@ type Item = { key: MenuKey; href: string; icon: IconName; title: string; sub: st
  * заходя внутрь. На вебе эти разделы стоят в левом меню, экран нужен
  * телефону, но выглядит одинаково.
  */
-export default async function MorePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+export default async function MorePage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const pickSp = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ctx = (await requireSection("bookings"))!;
   const { shop, role } = ctx;
   const keys = MENU[role];
@@ -92,6 +101,10 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
     }))
     : [];
   const inspect = keys.includes("inspect") ? await inspectHref(ctx, day, new Date()) : "";
+  // Под какой учёткой сидит приложение — это и подпись строки выхода, и
+  // ответ на «почему я вижу чужой сервис»: номер виден, не выходя.
+  const user = await getServerUser();
+  const me = formatPhone(user?.phone) || user?.email || "";
 
   const unreadLine = !unread?.ok || unread.data.unread === 0
     ? "нет непрочитанных"
@@ -135,7 +148,7 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
           </div>
         </div>
 
-        <Flash ok={pickSp(sp.ok)} err={pickSp(sp.err)} />
+        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
 
         <div className="card card-flat">
           {keys.map(k => {
@@ -166,8 +179,37 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
           </div>
         )}
 
+        {/* Выход — отдельной карточкой, а не строкой среди разделов: он
+            уводит из приложения, а не открывает экран. Внизу, где его ищут. */}
+        <div className="card card-flat">
+          <Link className="row mrow row-exit" href={`/menu?do=${EXIT}`}>
+            <span className="sq sq-accent"><Icon name="arrowRight" size={18} /></span>
+            <div className="row-main">
+              <div className="row-t">Выйти</div>
+              <div className="row-s">{me ? `вы вошли как ${me}` : "закрыть сессию на этом устройстве"}</div>
+            </div>
+            <span className="chev"><Icon name="chevron" size={16} /></span>
+          </Link>
+        </div>
+
         <div className="foot-note">АбхазАвто Бизнес · 1.0 · business.abkhaz-auto.ru</div>
       </div>
+
+      {/* Спрашиваем, потому что обратно человек войдёт не кнопкой: вход — на
+          сайте по коду из звонка или SMS, и случайное нажатие стоит сервису
+          простоя у стойки. */}
+      {pick(sp.do) === EXIT && (
+        <Sheet
+          closeHref="/menu"
+          title="Выйти из приложения"
+          sub={me || undefined}
+          footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={LOGOUT_FORM}>Выйти</button>}
+        >
+          <form id={LOGOUT_FORM} action={logoutAction} className="sheet-stack">
+            <p className="sheet-note">Записи, отчёты и отметка на посту никуда не денутся — они на сервере, а не в этом телефоне. Чтобы вернуться, нужно снова войти по номеру телефона: сессия общая с abkhaz-auto.ru, поэтому выход закрывает и сайт на этом устройстве.</p>
+          </form>
+        </Sheet>
+      )}
     </>
   );
 }

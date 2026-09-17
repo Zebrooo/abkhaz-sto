@@ -134,6 +134,9 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   };
 
   const sendLabel = can(ctx.role, "sendReport") ? "Отправить клиенту" : "Передать администратору";
+  // Записать клиента на найденную работу может тот, кто вообще ведёт записи
+  // за стойкой: у мастера прав на привязку пункта к записи нет.
+  const canBook = can(ctx.role, "closeBooking");
   const pdfErr = pick(sp.pdf);
   const points = r.defects.length === 1 ? "пункта" : "пунктов";
 
@@ -193,11 +196,18 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               </div>
               <div className="rp-price">{priceText(item ? item.price : d.price)}</div>
             </div>
-            {on && (
+            {/* «Записан: …» видно и у исключённого пункта: клиент на работу
+                записан, и прятать это вместе с галочкой сметы нельзя. */}
+            {(on || item?.nextBookingId != null) && (
               <div className="rp-book">
                 {item?.nextBookingId != null
                   ? <span className="rp-booked"><Icon name="check" size={14} />Записан{when ? `: ${when}` : ` · запись № ${item.nextBookingId}`}</span>
-                  : <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>}
+                  // Запись на работу ставит стойка: привязать пункт к записи
+                  // (reports/book-item) мастеру сайт не даст, и кнопка увела
+                  // бы его в форму, из которой вышла бы запись-сирота.
+                  : canBook && on
+                    ? <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>
+                    : null}
               </div>
             )}
           </div>

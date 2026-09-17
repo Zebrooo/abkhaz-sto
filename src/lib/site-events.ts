@@ -22,12 +22,17 @@ export type SiteBookingEvent = {
 
 const TIMEOUT_MS = 2_500;
 
-export async function notifySite(event: SiteBookingEvent): Promise<void> {
+/**
+ * Дошло ли событие до сайта. Переход в базе от этого не зависит — он уже
+ * сделан, — но экран обязан знать правду: «клиент получил пуш» при молчащем
+ * сайте это враньё, из-за которого админ не позвонит клиенту сам.
+ */
+export async function notifySite(event: SiteBookingEvent): Promise<boolean> {
   const base = siteApiBase();
   const signed = issueTicket();
   if (!base || !signed) {
     console.warn("[сто] событие записи не отправлено на сайт: не задан адрес или ключ", event.event, event.bookingId);
-    return;
+    return false;
   }
   const headers: Record<string, string> = { "content-type": "application/json" };
   headers[SERVICE_TICKET_HEADER] = signed;
@@ -38,8 +43,10 @@ export async function notifySite(event: SiteBookingEvent): Promise<void> {
       method: "POST", headers, body: JSON.stringify(event), signal: ctrl.signal,
     });
     if (!res.ok) console.warn("[сто] сайт не принял событие записи:", res.status, event.event, event.bookingId);
+    return res.ok;
   } catch (e) {
     console.warn("[сто] сайт недоступен для события записи:", e);
+    return false;
   } finally {
     clearTimeout(timer);
   }

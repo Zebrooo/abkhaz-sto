@@ -129,6 +129,73 @@ export async function toggleMasterShiftAction(fd: FormData) {
   });
 }
 
+/**
+ * Правка мастера хозяином: имя, специальность, пост, увольнение и возврат в
+ * штат.
+ *
+ * ПАТЧ СТРОГО ЧАСТИЧНЫЙ, и это не аккуратность, а необходимость. Пост мастера
+ * пишет не только хозяин: утром мастер сам отмечается на подъёмнике
+ * (post-actions.ts) и заодно обновляет postNo в справочнике. Если форма
+ * правки отправит все поля разом, хозяин, поправивший опечатку в имени, молча
+ * вернёт человека на вчерашний пост. Поэтому форма несёт прежние значения
+ * (was*), а на сайт уезжает только то, что действительно изменилось.
+ *
+ * Смена поста и увольнение оставляют записи на местах — сайт отвечает их
+ * номерами (orphaned), и мы несём их в адрес так же, как переключатель смены.
+ */
+export async function updateMasterAction(fd: FormData) {
+  const c = await ctx("masters", "/mastera");
+  if (c.role !== "owner") back("/mastera", { err: "Мастеров правит хозяин сервиса" });
+  const masterId = Number(str(fd, "masterId"));
+  if (!Number.isInteger(masterId) || masterId <= 0) back("/mastera", { err: "Мастер не указан" });
+  // Отказ возвращает в ту же шторку, а не на общий экран: иначе набранное
+  // имя пропадёт, и человек будет гадать, что не понравилось.
+  const sheet = { do: "edit", edit: String(masterId) };
+
+  const fire = str(fd, "fire");
+  if (fire === "1" || fire === "0") {
+    const active = fire === "0";
+    const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, active });
+    revalidateMasters();
+    if (!res.ok) back("/mastera", { ...sheet, err: res.error });
+    const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
+    back("/mastera", {
+      ok: active ? `${res.data.master.name} снова в штате` : `${res.data.master.name} уволен — записи остались на постах`,
+      // Уволенного в общем списке не видно, поэтому и плашку «передайте
+      // записи» вешать не на кого: показываем список уволенных.
+      all: active ? undefined : "1",
+      m: orphaned.length ? String(masterId) : undefined,
+      orphaned: orphaned.length ? orphaned.join(",") : undefined,
+    });
+  }
+
+  const name = str(fd, "name").slice(0, 80);
+  if (!name) back("/mastera", { ...sheet, err: "Имя мастера обязательно" });
+  const speciality = str(fd, "speciality").slice(0, 80);
+  const postRaw = str(fd, "postNo");
+  const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo <= 0)) back("/mastera", { ...sheet, err: "Такого поста у сервиса нет" });
+
+  const wasPostRaw = str(fd, "wasPostNo");
+  const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);
+  const patch = {
+    ...(name !== str(fd, "wasName") ? { name } : {}),
+    ...(speciality !== str(fd, "wasSpeciality") ? { speciality } : {}),
+    ...(postNo !== wasPost ? { postNo } : {}),
+  };
+  if (Object.keys(patch).length === 0) back("/mastera", { ok: "Ничего не изменилось" });
+
+  const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, ...patch });
+  revalidateMasters();
+  if (!res.ok) back("/mastera", { ...sheet, err: res.error });
+  const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
+  back("/mastera", {
+    ok: `Сохранено: ${res.data.master.name}`,
+    m: orphaned.length ? String(masterId) : undefined,
+    orphaned: orphaned.length ? orphaned.join(",") : undefined,
+  });
+}
+
 /** Передать осиротевшие записи другому мастеру — по одной, все разом. */
 export async function handoffAction(fd: FormData) {
   const c = await ctx("masters", "/mastera");

@@ -5,6 +5,7 @@
 // склеиваются, а два «Ивана» без телефона не сливаются в одного.
 import type { StoBookingRow } from "@/lib/sto/types";
 import { normalizePhone } from "@/lib/phone";
+import { foldLookalike } from "@/lib/vehicle-input";
 
 export type ClientSummary = {
   /** Ключ для адреса /klienty/<key>. */
@@ -13,6 +14,10 @@ export type ClientSummary = {
   phone: string | null;
   /** Последняя машина — её видно в строке списка. */
   car: string | null;
+  /** Госномер последней машины — по нему в сервисе ищут человека чаще, чем по фамилии. */
+  plate: string | null;
+  /** VIN последней машины — им ищут, когда номер уже сменился. */
+  vin: string | null;
   visits: number;
   /** Последняя запись (ISO), по ней сортируем и показываем давность. */
   lastAt: string;
@@ -52,7 +57,11 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
     const prev = map.get(key);
     const spent = b.status === "done" ? (b.service.price ?? 0) : 0;
     if (!prev) {
-      map.set(key, { key, name: nameOf(b), phone: phoneOf(b), car: carLine(b), visits: 1, lastAt: b.starts_at, spent });
+      map.set(key, {
+        key, name: nameOf(b), phone: phoneOf(b), car: carLine(b),
+        plate: b.data.vehicle?.plate ?? null, vin: b.data.vehicle?.vin ?? null,
+        visits: 1, lastAt: b.starts_at, spent,
+      });
       continue;
     }
     prev.visits += 1;
@@ -61,7 +70,11 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
     if (b.starts_at > prev.lastAt) {
       prev.lastAt = b.starts_at;
       prev.car = carLine(b) ?? prev.car;
+      prev.plate = b.data.vehicle?.plate ?? prev.plate;
+      prev.vin = b.data.vehicle?.vin ?? prev.vin;
     }
+    prev.plate = prev.plate ?? b.data.vehicle?.plate ?? null;
+    prev.vin = prev.vin ?? b.data.vehicle?.vin ?? null;
     prev.phone = prev.phone ?? phoneOf(b);
     if (prev.name.startsWith("Клиент") && !nameOf(b).startsWith("Клиент")) prev.name = nameOf(b);
   }
@@ -81,15 +94,25 @@ export function clientCard(rows: readonly StoBookingRow[], key: string): ClientC
 }
 
 /**
- * Поиск по имени, телефону и машине — одной строкой, как в макете. Берёт
- * не всю карточку, а только эти три поля: тем же правилом ищет строка
- * «Имя» в ручной записи (components/ClientPick.tsx), где карточка целиком
- * в браузер не уезжает.
+ * Поиск по имени, телефону, машине, госномеру и VIN — одной строкой, как в
+ * макете. Берёт не всю карточку, а только эти поля: тем же правилом ищет
+ * строка «Имя» в ручной записи (components/ClientPick.tsx), где карточка
+ * целиком в браузер не уезжает.
+ *
+ * Номер и VIN сравниваем схлопнутыми к латинице (lib/vehicle-input.ts):
+ * «А123АВ» с русской раскладки и «A123AB» с латинской — одна машина, и
+ * человек, который ищет по табличке, не должен угадывать раскладку. По VIN
+ * ищут хвостом — вслух называют последние знаки, а не все семнадцать.
  */
-export function matchClient(c: Pick<ClientSummary, "name" | "phone" | "car">, query: string): boolean {
+export function matchClient(
+  c: Pick<ClientSummary, "name" | "phone" | "car"> & { plate?: string | null; vin?: string | null },
+  query: string,
+): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const digits = q.replace(/\D+/g, "");
   if (digits.length >= 3 && c.phone && c.phone.replace(/\D+/g, "").includes(digits)) return true;
+  const tight = foldLookalike(q.replace(/[\s-]+/g, ""));
+  if (tight.length >= 3 && [c.plate, c.vin].some(x => x && foldLookalike(x.replace(/[\s-]+/g, "")).includes(tight))) return true;
   return `${c.name} ${c.car ?? ""}`.toLowerCase().includes(q);
 }

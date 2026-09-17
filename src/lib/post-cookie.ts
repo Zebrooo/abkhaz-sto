@@ -69,8 +69,21 @@ export async function saveAccepted(ctx: ServiceContext, day: string, bookingId: 
   await write(ctx, day, addAccepted(base, bookingId));
 }
 
-/** Уйти со смены: отметка снимается целиком. */
-export async function dropPostHold(): Promise<void> {
-  const jar = await cookies();
-  jar.delete(POST_COOKIE);
+/**
+ * Уйти со смены: пост снимается, принятые машины остаются.
+ *
+ * Полное удаление куки выглядело бы честнее, но теряло бы список принятых
+ * машин — а машина, которую человек принял, остаётся за ним до конца работы
+ * (post-hold.ts). Вернулся после «ушёл со смены» — его работы на месте, а
+ * записи чужого поста больше не показываются.
+ */
+export async function clearPostMarks(ctx: ServiceContext, day: string): Promise<void> {
+  const base = await readPostHold(ctx, day);
+  if (!base) return;
+  if (base.accepted.length === 0) {
+    const jar = await cookies();
+    jar.delete(POST_COOKIE);
+    return;
+  }
+  await write(ctx, day, { ...base, marks: [] });
 }

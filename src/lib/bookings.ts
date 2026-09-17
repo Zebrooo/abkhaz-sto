@@ -11,6 +11,7 @@ import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/st
 import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
 import { addDays } from "@/lib/format";
 import type { StoSchedule } from "@/lib/sto/schedule";
+import { normalizeVin, plateInput } from "@/lib/vehicle-input";
 
 const COLUMNS = "id, shop_id, client_id, vehicle_id, listing_id, service, starts_at, ends_at, post_no, status, cancelled_by, source, prepay_amount, prepay_status, data, created_at, updated_at";
 
@@ -77,7 +78,12 @@ export async function busyIntervals(shopId: number, from: Date, to: Date, except
     .map(b => ({ postNo: b.post_no, startsAt: new Date(b.starts_at), endsAt: new Date(b.ends_at) }));
 }
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/**
+ * `told` — дошло ли событие до сайта. Пуш клиенту, Telegram и проводки
+ * предоплаты делает сайт; если он молчит, запись в базе всё равно изменилась,
+ * но обещать клиенту уведомление нельзя.
+ */
+export type ActionResult = { ok: true; told: boolean } | { ok: false; error: string };
 
 /** Переход сервисом: подтвердить, выполнено, не приехал, отменить (с причиной). */
 export async function transitionBooking(input: {
@@ -97,8 +103,8 @@ export async function transitionBooking(input: {
   if (error) return { ok: false, error: "Не удалось сохранить: " + error.message };
   if (!updated || updated.length === 0) return { ok: false, error: "Запись уже изменили — обновите экран" };
   const event = ({ confirm: "confirmed", done: "done", no_show: "no_show", cancel: "cancelled" } as const)[transition];
-  await notifySite({ bookingId, shopId, event, actorUserId, details: input.reason ? { reason: input.reason } : undefined });
-  return { ok: true };
+  const told = await notifySite({ bookingId, shopId, event, actorUserId, details: input.reason ? { reason: input.reason } : undefined });
+  return { ok: true, told };
 }
 
 /**
@@ -132,14 +138,16 @@ export async function rescheduleBooking(input: {
     return { ok: false, error: error.code === "23P01" ? "Окно только что заняли — выберите другое" : "Не удалось сохранить: " + error.message };
   }
   if (!updated || updated.length === 0) return { ok: false, error: "Запись уже изменили — обновите экран" };
-  await notifySite({ bookingId, shopId, event: "rescheduled", actorUserId, details: { startsAt: startsAt.toISOString() } });
-  return { ok: true };
+  const told = await notifySite({ bookingId, shopId, event: "rescheduled", actorUserId, details: { startsAt: startsAt.toISOString() } });
+  return { ok: true, told };
 }
 
 /** Ручная запись клиента с улицы из приложения: без учётки, имя и телефон снимком. */
 export async function createManualBooking(input: {
   shopId: number; schedule: StoSchedule; day: string; hhmm: string; service: StoBookingService; listingId: number | null;
   client: { name: string; phone: string | null }; vehicle: string; comment: string; actorUserId: string;
+  /** Госномер и VIN отдельными полями: по ним машина потом узнаётся. */
+  plate?: string | null; vin?: string | null;
   /** Пост выбран человеком; без него — первый свободный. */
   postNo?: number;
 }): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
@@ -152,9 +160,16 @@ export async function createManualBooking(input: {
     return { ok: false, error: why[free.reason] };
   }
   const endsAt = new Date(startsAt.getTime() + service.durationMin * 60_000);
+  // Марка, модель и год так и остаются одной строкой в brand: разбирать её
+  // догадками нельзя — старые записи от этого расклеятся по разным карточкам.
+  // А номер и VIN спрашиваются отдельными полями, и по ним машина узнаётся
+  // точно (lib/vehicles.ts).
+  const plate = plateInput(input.plate);
+  const vin = normalizeVin(input.vin);
+  const brand = input.vehicle.trim().slice(0, 80);
   const data: StoBookingData = {
     client: { name: client.name, phone: client.phone },
-    ...(input.vehicle.trim() ? { vehicle: { brand: input.vehicle.trim().slice(0, 80), model: null, year: null, plate: null } } : {}),
+    ...(brand || plate || vin ? { vehicle: { brand, model: null, year: null, plate, vin } } : {}),
     ...(input.comment.trim() ? { comment: input.comment.trim().slice(0, 500) } : {}),
   };
   const { data: row, error } = await createSupabaseAdmin().from("sto_bookings").insert({

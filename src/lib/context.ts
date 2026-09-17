@@ -10,6 +10,8 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
+import { readRoleView } from "@/lib/role-cookie";
+import { narrowRole } from "@/lib/role-view";
 import { currentServiceShop, type ServiceShop } from "@/lib/shop";
 import { getServerUser } from "@/lib/supabase/server";
 
@@ -17,7 +19,17 @@ export type ServiceContext = {
   shop: ServiceShop;
   /** Учётка человека — её ждёт каждый запрос к сайту как actorUserId. */
   userId: string;
+  /**
+   * Роль, по которой рисуется интерфейс. Если хозяин примеряет чужую роль
+   * (lib/role-view.ts), здесь лежит примеренная — весь экран обязан жить по
+   * ней, иначе кнопка скажет «передать администратору», а действие отправит
+   * отчёт клиенту.
+   */
   role: StoRole;
+  /** Настоящая роль человека — по ней решается, можно ли примерять дальше. */
+  realRole: StoRole;
+  /** Примерка включена: оболочка показывает полосу «вы смотрите как…». */
+  viewing: boolean;
   /** Мастер, если этот человек стоит на посту: по нему собирается «Мой пост». */
   masterId: number | null;
 };
@@ -31,12 +43,21 @@ export function roleIn(shop: ServiceShop): { role: StoRole; masterId: number | n
   return { role: shop.membership.role, masterId: shop.membership.masterId };
 }
 
-/** null там же, где его отдаёт currentServiceShop: нет входа или нет витрины. */
+/**
+ * null там же, где его отдаёт currentServiceShop: нет входа или нет витрины.
+ *
+ * ПРИМЕРКА РОЛИ ПРИМЕНЯЕТСЯ ЗДЕСЬ, И ТОЛЬКО ЗДЕСЬ. Контекст один на запрос,
+ * его читают и оболочка, и шапка, и сам экран; прочитать куку где-то ещё
+ * значит развести их между собой в одном рендере.
+ */
 export const serviceContext = cache(async (): Promise<ServiceContext | null> => {
   const shop = await currentServiceShop();
   const user = await getServerUser();
   if (!shop || !user) return null;
-  return { shop, userId: user.id, ...roleIn(shop) };
+  const { role: realRole, masterId } = roleIn(shop);
+  const view = await readRoleView({ shopId: shop.id, userId: user.id });
+  const role = narrowRole(realRole, view);
+  return { shop, userId: user.id, role, realRole, viewing: role !== realRole, masterId };
 });
 
 /**

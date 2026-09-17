@@ -89,7 +89,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
                 <a className="aui-btn aui-btn--secondary aui-btn--md" href={`sms:${card.phone}`}>Написать</a>
               </>
             )}
-            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}`}>Записать</Link>
+            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}&client=${encodeURIComponent(card.key)}`}>Записать</Link>
           </div>
         </div>
 
@@ -102,7 +102,8 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
                 <div className="row-main">
                   <div className="thing-n">{c.name}</div>
                   <div className="thing-s">
-                    {[count(c.visits, "запись", "записи", "записей"), `последняя ${relativeAt(c.lastAt)}`].join(" · ")}
+                    {[count(c.visits, "запись", "записи", "записей"), `последняя ${relativeAt(c.lastAt)}`,
+                      c.vin ? `VIN ${c.vin}` : null].filter(Boolean).join(" · ")}
                   </div>
                 </div>
                 {c.plate && <span className="rspec">{c.plate}</span>}

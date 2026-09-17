@@ -17,6 +17,7 @@ import type { StoBookingRow, StoBookingVehicleSnapshot } from "@/lib/sto/types";
 import { isLive } from "@/lib/stats";
 import { clientKey } from "@/lib/clients";
 import { normalizePhone } from "@/lib/phone";
+import { foldLookalike, normalizeVin } from "@/lib/vehicle-input";
 
 export type VehicleOwner = {
   /** Ключ карточки клиента (lib/clients.ts). */
@@ -33,6 +34,8 @@ export type VehicleSummary = {
   /** «Lada Vesta 2021» — как машину зовут в списке. */
   name: string;
   plate: string | null;
+  /** VIN — его называют в сервисе, когда номер уже сменился. */
+  vin: string | null;
   year: number | null;
   visits: number;
   lastAt: string;
@@ -44,10 +47,20 @@ export type VehicleSummary = {
 
 export type VehicleCard = VehicleSummary & { history: StoBookingRow[] };
 
-/** Номер к сравнимому виду: без пробелов и дефисов, в верхнем регистре. */
+/**
+ * Номер к сравнимому виду: без пробелов и дефисов, в верхнем регистре и с
+ * кириллицей, схлопнутой к латинице (lib/vehicle-input.ts). «А123АВ» с
+ * русской раскладки и «A123AB» с латинской — одна машина, и в карточке они
+ * обязаны слиться, а не завести две истории ремонта.
+ */
 export function normalizePlate(raw: string | null | undefined): string | null {
-  const s = (raw ?? "").replace(/[\s-]+/g, "").toUpperCase();
+  const s = foldLookalike((raw ?? "").replace(/[\s-]+/g, ""));
   return s.length >= 4 ? s : null;
+}
+
+/** VIN снимка к сравнимому виду; null — его нет или это не VIN. */
+export function vehicleVin(v: StoBookingVehicleSnapshot | undefined): string | null {
+  return normalizeVin(v?.vin);
 }
 
 /** «Lada Vesta 2021» — марка, модель и год одной строкой. */
@@ -88,7 +101,7 @@ export function summarizeVehicles(rows: readonly StoBookingRow[]): VehicleSummar
     const prev = map.get(key);
     if (!prev) {
       map.set(key, {
-        key, name: vehicleName(v), plate: normalizePlate(v.plate), year: v.year ?? null,
+        key, name: vehicleName(v), plate: normalizePlate(v.plate), vin: vehicleVin(v), year: v.year ?? null,
         visits: 1, lastAt: b.starts_at, spent, owners: [owner],
       });
       continue;
@@ -102,6 +115,7 @@ export function summarizeVehicles(rows: readonly StoBookingRow[]): VehicleSummar
       prev.year = v.year ?? prev.year;
     }
     prev.plate = prev.plate ?? normalizePlate(v.plate);
+    prev.vin = prev.vin ?? vehicleVin(v);
     const known = prev.owners.find(o => o.key === owner.key);
     if (!known) prev.owners.push(owner);
     else if (owner.lastAt > known.lastAt) known.lastAt = owner.lastAt;
@@ -123,18 +137,26 @@ export function clientVehicles(rows: readonly StoBookingRow[], key: string): Veh
   return summarizeVehicles(rows.filter(b => clientKey(b) === key));
 }
 
+/** Машина клиента для формы записи: название, номер и VIN — всё, что подставляется в поля. */
+export type ClientCar = { name: string; plate: string | null; vin: string | null };
+
 /**
- * Машины каждого клиента: ключ карточки клиента → названия его машин.
- * Нужно форме записи, где строка имени подставляет машину: пробегать записи
- * заново для каждого клиента в списке — лишняя работа на каждый рендер.
- * Порядок — как у свода машин, свежие визиты сверху.
+ * Машины каждого клиента: ключ карточки клиента → его машины. Нужно форме
+ * записи, где выбор клиента подставляет машину вместе с номером и VIN:
+ * пробегать записи заново для каждого клиента в списке — лишняя работа на
+ * каждый рендер. Порядок — как у свода машин, свежие визиты сверху.
+ *
+ * Номер и VIN тут уже нормализованные: в форму подставляется то, чем машина
+ * опознаётся, а не то, как её однажды набрали с опечаткой.
  */
-export function carsByClient(rows: readonly StoBookingRow[]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+export function carsByClient(rows: readonly StoBookingRow[]): Map<string, ClientCar[]> {
+  const out = new Map<string, ClientCar[]>();
   for (const v of summarizeVehicles(rows)) {
     for (const o of v.owners) {
       const list = out.get(o.key) ?? [];
-      if (!list.includes(v.name)) list.push(v.name);
+      if (!list.some(c => c.name === v.name && c.plate === v.plate)) {
+        list.push({ name: v.name, plate: v.plate, vin: v.vin });
+      }
       out.set(o.key, list);
     }
   }
@@ -148,8 +170,23 @@ export function carsByClient(rows: readonly StoBookingRow[]): Map<string, string
  */
 export function sameVehicle(a: StoBookingRow, b: StoBookingRow): boolean {
   if (a.vehicle_id != null && a.vehicle_id === b.vehicle_id) return true;
-  const key = vehicleKey(a.data.vehicle);
-  return key !== null && key === vehicleKey(b.data.vehicle);
+  return sameSnapshot(a.data.vehicle, b.data.vehicle);
+}
+
+/**
+ * Та же машина по снимкам записи. ПОРЯДОК ВАЖЕН: если VIN назван у обеих —
+ * решает он, и совпадение номеров его не перебивает (табличку перевесили на
+ * другую машину — это разные машины). Назван у одной или ни у одной —
+ * сравниваем по общему ключу, то есть по номеру, иначе по марке и году.
+ */
+export function sameSnapshot(
+  a: StoBookingVehicleSnapshot | undefined,
+  b: StoBookingVehicleSnapshot | undefined,
+): boolean {
+  const va = vehicleVin(a), vb = vehicleVin(b);
+  if (va && vb) return va === vb;
+  const key = vehicleKey(a);
+  return key !== null && key === vehicleKey(b);
 }
 
 /** Прошлое машины к моменту записи — то, что показывают мастеру на приёмке. */
@@ -183,15 +220,19 @@ const EMPTY_PAST: VehiclePast = { key: null, byName: false, visits: [], done: 0,
 export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, limit = 5): VehiclePast {
   const key = vehicleKey(b.data.vehicle);
   if (!key) return EMPTY_PAST;
-  const byName = key.startsWith("m");
+  const vin = vehicleVin(b.data.vehicle);
+  // Ключ склеен по марке и году — машину узнаём ненадёжно. Но если в записи
+  // есть VIN, догадки не нужны: он один на весь мир, и история берётся по
+  // нему даже у машины без номера.
+  const byName = key.startsWith("m") && !vin;
   const mine = clientKey(b);
   const past = rows
     .filter(r => r.id !== b.id
       && r.starts_at < b.starts_at
       && (isLive(r) || r.status === "done")
-      && vehicleKey(r.data.vehicle) === key
-      // Без номера машину узнаём только у того же клиента — чужую «Весту
-      // 2021» выдавать за эту нельзя.
+      && sameSnapshot(b.data.vehicle, r.data.vehicle)
+      // Без номера и без VIN машину узнаём только у того же клиента — чужую
+      // «Весту 2021» выдавать за эту нельзя.
       && (!byName || clientKey(r) === mine))
     .sort((a, c) => c.starts_at.localeCompare(a.starts_at));
   const owners = new Map<string, VehicleOwner>();

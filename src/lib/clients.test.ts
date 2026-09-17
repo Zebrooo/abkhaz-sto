@@ -119,3 +119,27 @@ describe("поиск клиента", () => {
     expect(matchClient({ name: "Гость", phone: null, car: null }, "гос")).toBe(true);
   });
 });
+
+describe("matchClient — номер и VIN", () => {
+  const c = { name: "Аслан", phone: "+79409211408", car: "Lada Vesta 2021", plate: "А123АВ 01", vin: "JN1TCNT31U0012345" };
+
+  it("по госномеру — в любой раскладке и с пробелами", () => {
+    expect(matchClient(c, "а123ав")).toBe(true);
+    expect(matchClient(c, "A123AB")).toBe(true);
+    // Ищут и куском таблички: «сто двадцать три ав» — это он.
+    expect(matchClient(c, "123 ав")).toBe(true);
+  });
+
+  it("по хвосту VIN — его и называют вслух", () => {
+    expect(matchClient(c, "0012345")).toBe(true);
+    expect(matchClient(c, "JN1TCNT")).toBe(true);
+  });
+
+  it("чужой номер не находит", () => {
+    expect(matchClient(c, "Б222ВВ")).toBe(false);
+  });
+
+  it("карточка без машины по номеру не находится и не падает", () => {
+    expect(matchClient({ name: "Гость", phone: null, car: null }, "А123АВ")).toBe(false);
+  });
+});

@@ -1,0 +1,54 @@
+// «Примерка роли»: хозяин смотрит приложение глазами мастера или админа.
+//
+// ЗАЧЕМ. У мастера и админа другие вкладки, другие кнопки и другие адреса по
+// умолчанию. Хозяин, который хочет понять, что увидит его мастер, сегодня не
+// может этого никак: своей витриной он всегда owner, а завести себе вторую
+// учётку ради проверки — не работа для человека.
+//
+// ГЛАВНОЕ ПРАВИЛО: ПРИМЕРКА ТОЛЬКО СУЖАЕТ. Роль в приложении — подсказка
+// интерфейсу, а не граница доступа: настоящую проверку делает сайт по
+// actorUserId, и записи приложение читает сервисным ключом после проверки
+// владения. Поэтому примерка обязана уметь ровно одно — показать МЕНЬШЕ, чем
+// человеку доступно. Мастер, попросивший «показать как хозяин», не получает
+// ничего: иначе подсказка превратилась бы в обход прав.
+//
+// Ничего, кроме рисовки, примерка не меняет: actorUserId в запросах к сайту
+// и shopId остаются настоящими, и в логах сайта человек остаётся собой.
+import type { StoRole } from "@/lib/access";
+
+/** Роли, которые можно примерить: только те, что уже своих прав человека. */
+export const VIEWABLE_ROLES = ["admin", "master"] as const;
+export type ViewableRole = (typeof VIEWABLE_ROLES)[number];
+
+export function isViewableRole(v: string): v is ViewableRole {
+  return (VIEWABLE_ROLES as readonly string[]).includes(v);
+}
+
+/** Примерка привязана к учётке и сервису: чужую кука не откроет. */
+export type RoleView = { shopId: number; userId: string; role: ViewableRole };
+
+/**
+ * Какую роль показывать. Настоящая роль — верхняя граница: примерять может
+ * только хозяин, и только сузив себя. Всё остальное — настоящая роль.
+ */
+export function narrowRole(real: StoRole, view: RoleView | null): StoRole {
+  if (!view || real !== "owner") return real;
+  return view.role;
+}
+
+/**
+ * Разбор куки: чужой сервис, чужая учётка и мусор — как будто примерки нет.
+ * Кука приходит из браузера, и верить ей нельзя (то же правило, что у
+ * отметки на подъёмнике, lib/post-hold.ts).
+ */
+export function parseRoleView(raw: string | undefined | null, who: { shopId: number; userId: string }): RoleView | null {
+  if (!raw) return null;
+  const [shopId, userId, role] = raw.split("|");
+  if (Number(shopId) !== who.shopId || userId !== who.userId || !isViewableRole(role ?? "")) return null;
+  return { shopId: who.shopId, userId: who.userId, role: role as ViewableRole };
+}
+
+/** В куке — только номер сервиса, учётка и роль: ни телефонов, ни имён. */
+export function serializeRoleView(v: RoleView): string {
+  return `${v.shopId}|${v.userId}|${v.role}`;
+}

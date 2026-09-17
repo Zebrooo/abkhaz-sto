@@ -34,6 +34,7 @@ export function isStoRole(v: unknown): v is StoRole {
 export type Section =
   | "shift"        // смена и таймлайн дня
   | "bookings"     // карточка записи, перенос, ручная запись
+  | "closeBooking" // отменить запись и отметить неявку — это разговор с клиентом
   | "clients"
   | "inspect"      // осмотр и отчёты
   | "sendReport"   // отправить отчёт клиенту
@@ -48,9 +49,13 @@ export type Section =
 const ALLOWED: Record<StoRole, readonly Section[]> = {
   // Мастер: свой пост, осмотр и чат. Прайс — только посмотреть, что сколько
   // стоит; отчёт он передаёт админу, а не клиенту.
+  //
+  // Отменить запись и отметить «клиент не приехал» мастер не может: и то, и
+  // другое клиент увидит у себя, и оба разговора ведёт стойка. Раздел
+  // «Записи» ему по-прежнему открыт — он отмечает работу выполненной.
   master: ["bookings", "inspect", "chat", "services"],
-  admin: ["shift", "bookings", "clients", "inspect", "sendReport", "chat", "services", "editServices", "schedule", "masters"],
-  owner: ["shift", "bookings", "clients", "inspect", "sendReport", "chat", "services", "editServices", "schedule", "masters", "money", "access"],
+  admin: ["shift", "bookings", "closeBooking", "clients", "inspect", "sendReport", "chat", "services", "editServices", "schedule", "masters"],
+  owner: ["shift", "bookings", "closeBooking", "clients", "inspect", "sendReport", "chat", "services", "editServices", "schedule", "masters", "money", "access"],
 };
 
 export function can(role: StoRole, section: Section): boolean {

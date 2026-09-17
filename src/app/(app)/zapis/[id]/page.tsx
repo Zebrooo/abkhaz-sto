@@ -76,7 +76,11 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
   const pending = await countPending(shop.id);
 
-  const trans = shopTransitions(b.status);
+  // Отмена и «не приехал» — разговор с клиентом, и ведёт его стойка: мастеру
+  // эти кнопки не показываем (access.ts, closeBooking). «Выполнено» и
+  // «Подтвердить» у него остаются — это про работу, а не про клиента.
+  const mayClose = can(ctx.role, "closeBooking");
+  const trans = shopTransitions(b.status).filter(t => mayClose || (t !== "cancel" && t !== "no_show"));
   const canMove = canReschedule(b.status);
   const hasActions = canMove || trans.includes("no_show") || trans.includes("cancel");
   const primary: { label: string; transition: StoTransition } | null =
@@ -109,6 +113,10 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const visits = (await recentBookings(shop.id)).filter(r => clientKey(r) === key).length;
   const car = vehicleLine(b);
   const plate = b.data.vehicle?.plate ?? null;
+  // Номер и VIN — под названием машины: по ним сверяют, ту ли машину приняли,
+  // и их же называют по телефону. VIN показываем целиком: половина VIN не
+  // опознаёт ничего.
+  const carSub = [plate, b.data.vehicle?.vin ? `VIN ${b.data.vehicle.vin}` : null].filter(Boolean).join(" · ");
   // У машины своя карточка: что ей делали, на сколько и кто на ней ездил.
   const carKey = vehicleKey(b.data.vehicle);
 
@@ -214,7 +222,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">
                 <div className="thing-n">{car}</div>
-                {plate && <div className="thing-s">{plate}</div>}
+                {carSub && <div className="thing-s">{carSub}</div>}
               </div>
               <Icon name="chevron" size={16} />
             </Link>
@@ -223,7 +231,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">
                 <div className="thing-n">{car}</div>
-                {plate && <div className="thing-s">{plate}</div>}
+                {carSub && <div className="thing-s">{carSub}</div>}
               </div>
             </div>
           ))}

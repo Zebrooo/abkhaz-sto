@@ -23,6 +23,7 @@ import { recentBookings } from "@/lib/bookings";
 import type { ServiceContext } from "@/lib/context";
 import { localDay } from "@/lib/sto/slots";
 import type { StoBookingRow } from "@/lib/sto/types";
+import { normalizeVin } from "@/lib/vehicle-input";
 import { normalizePlate, vehiclePast, type VehiclePast } from "@/lib/vehicles";
 
 /** Замечание прошлого визита — строка «в прошлый раз нашли». */
@@ -81,11 +82,16 @@ export const carBrief = cache(async (ctx: ServiceContext, b: StoBookingRow): Pro
     }
   }
 
-  // Машина из гаража — только та же самая: по id из записи или по номеру.
-  // «Основная» и совпадение по названию не годятся: у человека две Весты.
+  // Машина из гаража — только та же самая: по id из записи, по VIN или по
+  // номеру. «Основная» и совпадение по названию не годятся: у человека две
+  // Весты. VIN идёт раньше номера — номер меняют вместе с продажей.
   const plate = normalizePlate(b.data.vehicle?.plate);
+  const vin = normalizeVin(b.data.vehicle?.vin);
   const garage = garageRes.ok
-    ? (garageRes.data.find(g => (b.vehicle_id != null && g.id === b.vehicle_id) || (plate !== null && normalizePlate(g.plate) === plate)) ?? null)
+    ? (garageRes.data.find(g =>
+      (b.vehicle_id != null && g.id === b.vehicle_id)
+      || (vin !== null && normalizeVin(g.vin) === vin)
+      || (plate !== null && normalizePlate(g.plate) === plate)) ?? null)
     : null;
 
   return { past, prevKm, prevDefects, garage, siteDown };

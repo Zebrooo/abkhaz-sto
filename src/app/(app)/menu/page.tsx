@@ -5,11 +5,14 @@ import { listServices } from "@/lib/services";
 import { fetchUnread } from "@/lib/api/chat";
 import { fetchReports } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
+import { Flash } from "@/components/Flash";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { count, todayLocal } from "@/lib/format";
 import { inspectHref, masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
+import { STO_ROLE_LABEL, type StoRole } from "@/lib/access";
+import { setRoleViewAction } from "@/app/(app)/view-actions";
 import { periodRange } from "@/lib/reports";
 import { shopStorefrontUrl } from "@/lib/site";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
@@ -61,7 +64,9 @@ type Item = { key: MenuKey; href: string; icon: IconName; title: string; sub: st
  * заходя внутрь. На вебе эти разделы стоят в левом меню, экран нужен
  * телефону, но выглядит одинаково.
  */
-export default async function MorePage() {
+export default async function MorePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const pickSp = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ctx = (await requireSection("bookings"))!;
   const { shop, role } = ctx;
   const keys = MENU[role];
@@ -109,6 +114,10 @@ export default async function MorePage() {
       : { key: "services", href: "/uslugi", icon: "wrench", title: "Услуги и цены", sub: `${count(services.length, "услуга", "услуги", "услуг")} · окна считаются от длительности` },
     schedule: { key: "schedule", href: "/raspisanie", icon: "clock", title: "Расписание", sub: scheduleLine(shop.schedule) },
     masters: { key: "masters", href: "/mastera", icon: "users", title: "Мастера", sub: mastersLine },
+    clients: {
+      key: "clients", href: "/klienty", icon: "users", title: "Клиенты",
+      sub: "карточки по записям — имя, телефон, машины и VIN",
+    },
     chats: { key: "chats", href: "/chat", icon: "comment", title: "Чат с клиентами", sub: unreadLine },
     notifs: { key: "notifs", href: "/uvedomleniya", icon: "bell", title: "Уведомления", sub: count(pending, "новая запись", "новые записи", "новых записей") },
     access: { key: "access", href: "/dostupy", icon: "cog", title: "Доступы", sub: "мастер · админ · хозяин" },
@@ -126,12 +135,35 @@ export default async function MorePage() {
           </div>
         </div>
 
+        <Flash ok={pickSp(sp.ok)} err={pickSp(sp.err)} />
+
         <div className="card card-flat">
           {keys.map(k => {
             const it = ITEMS[k];
             return <Row key={k} href={it.href} icon={it.icon} title={it.title} sub={it.sub} external={it.external} />;
           })}
         </div>
+
+        {/* ПРИМЕРКА РОЛИ — только хозяину и только по настоящей роли: примерив
+            мастера, он обязан иметь дорогу назад, а мастеру этот блок не
+            показывается вовсе. */}
+        {ctx.realRole === "owner" && (
+          <div className="card mv-roles">
+            <div className="card-t">Посмотреть глазами</div>
+            <div className="card-s">
+              Проверьте, что видит мастер или админ: вкладки, кнопки и адреса станут его.
+              Права при этом ваши — сайт по-прежнему знает, что это вы.
+            </div>
+            <div className="chips mv-chips">
+              {(["owner", "admin", "master"] as StoRole[]).map(r => (
+                <form key={r} action={setRoleViewAction}>
+                  <input type="hidden" name="role" value={r} />
+                  <button className="chip" type="submit" aria-pressed={role === r}>{STO_ROLE_LABEL[r]}</button>
+                </form>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="foot-note">АбхазАвто Бизнес · 1.0 · business.abkhaz-auto.ru</div>
       </div>

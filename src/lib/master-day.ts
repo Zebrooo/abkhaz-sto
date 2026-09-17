@@ -34,6 +34,13 @@ export type MasterDay = {
   hold: PostHold | null;
   /** Где человек стоит сейчас: отметка, иначе закрепление справочника. */
   postNo: number | null;
+  /**
+   * Почему справочник пуст, если он пуст не по-честному. null — сайт ответил
+   * (в том числе «мастеров ещё не заводили»), строка — не ответил, и экран
+   * обязан сказать это вслух: «мастеров нет» и «мы их не спросили» выглядят
+   * одинаково, а делать в этих случаях надо разное.
+   */
+  mastersErr: string | null;
 };
 
 export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise<MasterDay> => {
@@ -49,6 +56,8 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
   ]);
   const list = listOr(masters);
   const pairs = listOr(links);
+  // not_found — обычное состояние нового сервиса, а не отказ (AGENTS.md).
+  const mastersErr = !masters.ok && masters.code !== "not_found" ? masters.error : null;
   const me = ctx.masterId === null ? null : (list.find(m => m.id === ctx.masterId) ?? null);
   // ПРИОРИТЕТ ИСТОЧНИКОВ «ЧЕЙ ПОСТ», в одном месте:
   //  1) сегодняшние отметки со временем (человек сам сказал, где стоит);
@@ -60,7 +69,10 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
   // справочника. Отметка на подъёмнике обязана работать и в этом случае,
   // иначе экран мастера пуст у всех.
   const mine = masterBookings(rows, pairs, ctx.masterId, post, hold?.accepted ?? []);
-  return { rows, links: pairs, masters: list, me, mine, hold, postNo: currentPost(hold) ?? me?.postNo ?? null };
+  return {
+    rows, links: pairs, masters: list, me, mine, hold, mastersErr,
+    postNo: currentPost(hold) ?? me?.postNo ?? null,
+  };
 });
 
 /**

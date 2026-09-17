@@ -10,12 +10,13 @@ import { Sheet } from "@/components/Sheet";
 import { addDays, count, initials, rub, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
 import { localTime } from "@/lib/sto/slots";
-import { createMasterAction, handoffAction, toggleMasterShiftAction } from "@/app/(app)/staff-actions";
+import { createMasterAction, handoffAction, toggleMasterShiftAction, updateMasterAction } from "@/app/(app)/staff-actions";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 const ADD_FORM = "master-add";
+const EDIT_FORM = "master-edit";
 const ID_LIST = /^\d+(,\d+)*$/;
 
 /** «на смене» или «выходной» — подпись мастера в шторке передачи. */
@@ -35,8 +36,12 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const { shop, role } = ctx;
   const day = todayLocal();
   const pending = await countPending(shop.id);
-  const { masters } = await masterDay(ctx, day);
+  const { masters, mastersErr } = await masterDay(ctx, day);
   const active = masters.filter(m => m.active);
+  // Уволенные прячутся, но не исчезают: вернуть человека в штат иначе нечем,
+  // а увольнение по ошибке — обычное дело.
+  const fired = masters.filter(m => !m.active);
+  const showFired = pick(sp.all) === "1";
   const load = active.length
     ? listOr(await fetchMastersLoad({
       shopId: shop.id, actorUserId: ctx.userId,
@@ -60,6 +65,18 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const newPost = Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0;
   const addHref = (post: number) => `/mastera?do=add${post ? `&post=${post}` : ""}`;
 
+  // Правка мастера — та же шторка, что и «Новый мастер», только с его
+  // значениями. Пост живёт в адресе, как и при создании: экран серверный,
+  // и выбор чипа — это переход, а не клиентское состояние.
+  const editId = Number(pick(sp.edit));
+  const editing = role === "owner" ? (masters.find(m => m.id === editId) ?? null) : null;
+  const postParam = pick(sp.post);
+  const editPost = editing
+    ? (postParam === "" ? (editing.postNo ?? 0) : (Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0))
+    : 0;
+  const editHref = (post: number) => `/mastera?edit=${editId}&post=${post}`;
+  const listHref = showFired ? "/mastera?all=1" : "/mastera";
+
   return (
     <>
       <ScreenHead title="Мастера" sub={subLine} back="/menu" unread={pending} />
@@ -76,15 +93,25 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
           )}
         </div>
 
-        <Flash ok={pick(sp.ok)} err={act === "add" && role === "owner" ? "" : pick(sp.err)} />
+        <Flash ok={pick(sp.ok)} err={(act === "add" || editing) && role === "owner" ? "" : pick(sp.err)} />
+
+        {/* «Мастеров нет» и «мы их не спросили» выглядят одинаково, а делать
+            надо разное: в первом случае — завести, во втором — ждать сайт.
+            Поэтому отказ называем вслух, как на «Доступах». */}
+        {mastersErr && (
+          <div className="card card-accent">
+            <div className="note-t">Справочник мастеров не загрузился</div>
+            <div className="note-s">{mastersErr}. Записи и посты работают, а имена мастеров появятся, когда сайт ответит.</div>
+          </div>
+        )}
 
         {active.length === 0 ? (
           <div className="card">
             <div className="empty">
               <span className="sq"><Icon name="users" size={26} /></span>
-              <div className="empty-t">Мастеров пока нет</div>
+              <div className="empty-t">{mastersErr ? "Список пуст, пока сайт молчит" : "Мастеров пока нет"}</div>
               <div className="empty-s">Записи стоят на постах без имени. Добавьте мастера — и запись на его пост сразу покажет, кто её делает.</div>
-              {role === "owner" && <Link className="aui-btn aui-btn--primary aui-btn--md" href={addHref(0)}>Добавить мастера</Link>}
+              {role === "owner" && !mastersErr && <Link className="aui-btn aui-btn--primary aui-btn--md" href={addHref(0)}>Добавить мастера</Link>}
             </div>
           </div>
         ) : (
@@ -100,6 +127,11 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
                       <div className="person-n">{m.name}</div>
                       <div className="person-s">{m.speciality || "специальность не указана"}</div>
                     </div>
+                    {role === "owner" && (
+                      <Link className="m-edit" href={`/mastera?edit=${m.id}`} aria-label={`Изменить: ${m.name}`}>
+                        <Icon name="edit" size={16} />
+                      </Link>
+                    )}
                     <form action={toggleMasterShiftAction}>
                       <input type="hidden" name="masterId" value={m.id} />
                       <input type="hidden" name="onShift" value={m.onShift ? "0" : "1"} />
@@ -123,6 +155,40 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
               );
             })}
           </div>
+        )}
+
+        {/* УВОЛЕННЫЕ НЕ ПРОПАДАЮТ НАВСЕГДА. Уволенный мастер исчезает из
+            списка, и вернуть его было бы нечем: строкой ниже он находится, а
+            в его шторке есть «Вернуть в штат». */}
+        {fired.length > 0 && (
+          showFired ? (
+            <>
+              <div className="sect">Уволенные</div>
+              <div className="card card-flat">
+                {fired.map(m => (
+                  <div key={m.id} className="row m-fired">
+                    <span className="ava">{initials(m.name)}</span>
+                    <div className="row-main">
+                      <div className="row-t">{m.name}</div>
+                      <div className="row-s">{[m.speciality, "не в штате"].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    {role === "owner" && (
+                      <form action={updateMasterAction}>
+                        <input type="hidden" name="masterId" value={m.id} />
+                        <input type="hidden" name="fire" value="0" />
+                        <button className="aui-btn aui-btn--outline aui-btn--sm" type="submit">Вернуть в штат</button>
+                      </form>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Link className="hint m-fired-link" href="/mastera">Скрыть уволенных</Link>
+            </>
+          ) : (
+            <Link className="hint m-fired-link" href="/mastera?all=1">
+              {count(fired.length, "уволенный мастер", "уволенных мастера", "уволенных мастеров")} — показать
+            </Link>
+          )
         )}
 
         <p className="hint m-note">Мастер привязывается к посту: запись на пост 2 сразу показывает, кто её делает. Выключенный мастер не занимает окна.</p>
@@ -159,7 +225,52 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
               </div>
             </div>
             <input type="hidden" name="postNo" value={newPost} />
-            <p className="sheet-note">Мастер без учётки в приложение не входит, но стоит в расписании и в отчётах. Учётку он получит в «Доступах».</p>
+            <p className="sheet-note">Мастер без учётки в приложение не входит, но стоит в расписании и в отчётах. Привязку учётки к мастеру сайт пока не отдаёт — до неё мастер отмечается на подъёмнике со своего телефона, а в отчёте остаётся без имени.</p>
+          </form>
+        </Sheet>
+      )}
+
+      {editing && (
+        <Sheet
+          closeHref={listHref}
+          title={editing.name}
+          sub="имя, специальность и пост"
+          footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={EDIT_FORM}>Сохранить</button>}
+        >
+          <form id={EDIT_FORM} action={updateMasterAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
+            <input type="hidden" name="masterId" value={editing.id} />
+            {/* Прежние значения — чтобы на сайт уехало только изменённое:
+                пост мастер ставит себе сам утром, и переписывать его правкой
+                имени нельзя (staff-actions.ts). */}
+            <input type="hidden" name="wasName" value={editing.name} />
+            <input type="hidden" name="wasSpeciality" value={editing.speciality ?? ""} />
+            <input type="hidden" name="wasPostNo" value={editing.postNo ?? 0} />
+            <label className="fld">
+              <span>Имя</span>
+              <input name="name" defaultValue={editing.name} maxLength={80} required autoFocus />
+            </label>
+            <label className="fld">
+              <span>Специальность</span>
+              <input name="speciality" defaultValue={editing.speciality ?? ""} placeholder="Двигатель, диагностика" maxLength={80} />
+            </label>
+            <div className="fld">
+              <span>Пост</span>
+              <div className="chips chips-wrap">
+                <Link className="chip" href={editHref(0)} aria-pressed={editPost === 0}>Без поста</Link>
+                {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
+                  <Link key={p} className="chip" href={editHref(p)} aria-pressed={editPost === p}>Пост {p}</Link>
+                ))}
+              </div>
+            </div>
+            <input type="hidden" name="postNo" value={editPost} />
+            <p className="sheet-note">Мастер и сам отмечается на подъёмнике, когда приходит на смену. Здесь — закрепление по умолчанию: с него начинается его день.</p>
+            {/* Увольнение — в той же шторке, но отдельной кнопкой и внизу:
+                это не «сохранить», это другое действие. Записи уволенного
+                остаются на постах, их предложат передать. */}
+            <button className="aui-btn aui-btn--ghost aui-btn--sm m-fire" type="submit" name="fire" value="1">
+              Уволить — записи останутся на постах
+            </button>
           </form>
         </Sheet>
       )}

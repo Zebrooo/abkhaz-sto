@@ -106,11 +106,25 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const history = await recentBookings(shop.id, 400);
   const cars = carsByClient(history);
   const known = summarizeClients(history).slice(0, 200).map(c => ({
-    key: c.key, name: c.name, phone: c.phone, car: c.car, visits: c.visits,
+    key: c.key, name: c.name, phone: c.phone, car: c.car, plate: c.plate, vin: c.vin, visits: c.visits,
     // Все машины клиента — в форме их показывают чипами: человек приезжает
     // не всегда на той, что была в прошлый раз.
     cars: cars.get(c.key)?.slice(0, 4) ?? [],
   }));
+  // Чем заполнить поля клиента сразу. Два источника, и оба из адреса:
+  //  1) ?client=<ключ карточки> — «записать снова» из карточки клиента или
+  //     машины: человек уже наш, перенабирать имя и номер незачем;
+  //  2) возврат из отказа (?n=&ph=&v=&pl=&vin=) — иначе опечатка в VIN
+  //     стирала бы всё, что набрали за стойкой.
+  const fromCard = known.find(c => c.key === pick(sp.client)) ?? null;
+  const fromCardCar = fromCard ? (cars.get(fromCard.key)?.[0] ?? null) : null;
+  const initial = {
+    name: pick(sp.n) || fromCard?.name || "",
+    phone: pick(sp.ph) || fromCard?.phone || "",
+    vehicle: pick(sp.v) || fromCardCar?.name || "",
+    plate: pick(sp.pl) || fromCardCar?.plate || "",
+    vin: pick(sp.vin) || fromCardCar?.vin || "",
+  };
   const { list: fitting, hidden } = fittingServices({ services, schedule, startsAt, postNo, busy, now, keepId: svc.listingId });
   const pickable = showAll ? services : fitting;
   // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots
@@ -269,7 +283,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                 <div className="nb-fields">
                   {/* Имя, телефон и машина живут в ClientPick: строка имени
                       ищет по тем, кто уже был, и заполняет остальные два поля. */}
-                  <ClientPick clients={known} />
+                  <ClientPick clients={known} initial={initial} />
                   <label className="fld"><span>Комментарий</span><textarea name="comment" maxLength={500} placeholder="что просил клиент" /></label>
                 </div>
               </div>

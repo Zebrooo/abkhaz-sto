@@ -87,6 +87,39 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 
 ---
 
+## Снимок машины в записи: VIN
+
+`StoBookingVehicleSnapshot` получил необязательное поле `vin`:
+
+```ts
+StoBookingVehicleSnapshot = { brand, model, year, plate, vin? }
+```
+
+Миграция не нужна — снимок лежит в уже существующем `data` jsonb. Но
+`src/lib/sto/types.ts` — **копия модуля сайта**, и та же правка обязана
+уехать в `abkhaz-auto` тем же текстом, иначе виджет записи и приложение
+начнут писать разные снимки.
+
+**Зачем.** Номер перебивают и меняют вместе с продажей, а «Лада Веста 2021»
+в городе не одна: без VIN история ремонта собирается по марке и году, то есть
+ненадёжно. Приложение спрашивает VIN и госномер отдельными полями при ручной
+записи и сравнивает машины сначала по VIN, потом по номеру
+(`src/lib/vehicle-input.ts`, `src/lib/vehicles.ts`).
+
+**Просьба к виджету записи на сайте:** когда клиент выбрал машину из гаража,
+класть в снимок `plate` и `vin` так же. Иначе у записей с сайта VIN будет
+виден только через `vehicle_id`, а у ручных — только из своего поля, и две
+записи одной машины не склеятся.
+
+**Просьба к `/api/sto/booking-event`:** при `event: "created"` и `source: "app"`
+сайт может сам достроить строке `client_id` по `data.client.phone` и
+`vehicle_id` по `data.vehicle.vin` (иначе по номеру) внутри гаража найденной
+учётки. Тело события расширять не нужно — снимок уже лежит в строке, сайт
+читает её по `bookingId`. Так приложению не нужен маршрут «найди учётку по
+телефону», то есть не появляется новый способ достать чужие данные.
+
+---
+
 ## Мастера
 
 Мастер и сотрудник — разные вещи. Мастер может не иметь учётки (`userId: null`):
@@ -241,6 +274,17 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 отправлять клиенту — он передаёт администратору, и `POST /reports/send`
 решает по роли `actorUserId`, какой это шаг.
 
+**Хозяин работает наравне.** В сервисе на два подъёмника он сам осматривает
+машину, сам правит смету и сам отправляет отчёт клиенту, поэтому `owner`
+назван в `/reports/item` и `/reports/send` явно. Приложение показывает ему эти
+кнопки (`src/lib/access.ts`) — если сайт возьмёт список ролей буквально без
+`owner`, сломается ровно та роль, под которой сегодня работают все.
+
+**Записывать на найденную работу мастеру нельзя.** `POST /reports/book-item`
+остаётся за стойкой (`admin`, `owner`), поэтому приложение и кнопку «Записать
+на эту работу» мастеру не показывает: иначе он создал бы запись, которая не
+привязалась бы к пункту отчёта, и в календаре осталось бы лишнее окно.
+
 **Смету считает сайт.** Приложение не складывает цены: сумма уходит клиенту и
 в деньги сервиса, а две реализации одного сложения рано или поздно разойдутся.
 
@@ -248,9 +292,9 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 |---|---|---|
 | `GET /reports?shopId&actorUserId&inspectionId` | `master`, `admin`, `owner` | `Report` |
 | `GET /reports/list?shopId&actorUserId&from&to&masterId?` | те же | `ReportBrief[]` |
-| `POST /reports/item` | `master`, `admin` | `{ …, defectId, included }` → **весь** `Report` |
+| `POST /reports/item` | `master`, `admin`, `owner` | `{ …, defectId, included }` → **весь** `Report` |
 | `POST /reports/book-item` | `admin`, `owner` | `{ …, defectId, bookingId }` → `Report` |
-| `POST /reports/send` | `master` → админу, `admin` → клиенту | `Report` |
+| `POST /reports/send` | `master` → админу, `admin` и `owner` → клиенту | `Report` |
 | `GET /reports/pdf?shopId&actorUserId&inspectionId` | те же | `{ url, expiresAt }` |
 
 ```ts

@@ -7,10 +7,11 @@ import { clientName, vehicleLine } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
+import { Sheet } from "@/components/Sheet";
 import { addDays, count, initials, minutesLabel, shortName, timeRange, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
 import { busyMinutes, jobNow, jobsAfter, jobsDue, minutesLeft, postCount } from "@/lib/mywork";
-import { leavePostAction, takePostAction } from "@/app/(app)/post-actions";
+import { leavePostAction, takePostAction, updateMyMasterAction } from "@/app/(app)/post-actions";
 import { REPORT_BADGE } from "@/lib/reports";
 import { dayWindow } from "@/lib/stats";
 import { localHHMM, localTime } from "@/lib/sto/slots";
@@ -81,6 +82,16 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   // В шапке телефона — только имя: «Пост 2 · Леван», фамилия не влезает.
   const title = postNo ? `Пост ${postNo}${me ? ` · ${me.name.trim().split(/\s+/)[0]}` : ""}` : "Мой пост";
   const self = "/moi-raboty";
+  // «Моя карточка» — единственное место, где мастер правит себя: раздел
+  // «Мастера» ему закрыт (там чужие люди и выручка). Пост в шторке живёт в
+  // адресе, как и на экране «Мастера»: экран серверный.
+  const meOpen = pick(sp.do) === "me" && me !== null;
+  const mePostRaw = Number(pick(sp.post));
+  const mePost = pick(sp.post) === ""
+    ? (me?.postNo ?? 0)
+    : (Number.isInteger(mePostRaw) && mePostRaw >= 1 && mePostRaw <= posts ? mePostRaw : 0);
+  const mePostHref = (p: number) => `${self}?do=me&post=${p}`;
+  const ME_FORM = "my-master";
 
   return (
     <>
@@ -135,8 +146,15 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
               </form>
             </div>
           )}
-          {ctx.masterId === null && (
-            <p className="hint">Учётка не привязана к мастеру: отметка живёт на этом телефоне, а в отчёте не будет имени. Привязать может хозяин в «Доступах».</p>
+          {me ? (
+            <div className="note-b">
+              <Link className="aui-btn aui-btn--outline aui-btn--sm" href={`${self}?do=me`}>Моя карточка</Link>
+            </div>
+          ) : (
+            <p className="hint">
+              Учётка не привязана к мастеру: отметка живёт на этом телефоне, а в отчёте не будет имени.
+              Привязку учётки к мастеру сайт пока не отдаёт — попросили.
+            </p>
           )}
         </div>
 
@@ -236,6 +254,42 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
       </div>
+
+      {meOpen && me && (
+        <Sheet
+          closeHref={self}
+          title="Моя карточка"
+          sub="имя, специальность и подъёмник по умолчанию"
+          footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={ME_FORM}>Сохранить</button>}
+        >
+          <form id={ME_FORM} action={updateMyMasterAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
+            {/* Прежние значения — чтобы на сайт уехало только изменённое. */}
+            <input type="hidden" name="wasName" value={me.name} />
+            <input type="hidden" name="wasSpeciality" value={me.speciality ?? ""} />
+            <input type="hidden" name="wasPostNo" value={me.postNo ?? 0} />
+            <label className="fld">
+              <span>Имя</span>
+              <input name="name" defaultValue={me.name} maxLength={80} required autoFocus />
+            </label>
+            <label className="fld">
+              <span>Специальность</span>
+              <input name="speciality" defaultValue={me.speciality ?? ""} placeholder="Двигатель, диагностика" maxLength={80} />
+            </label>
+            <div className="fld">
+              <span>Подъёмник по умолчанию</span>
+              <div className="chips chips-wrap">
+                <Link className="chip" href={mePostHref(0)} aria-pressed={mePost === 0}>Без поста</Link>
+                {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
+                  <Link key={p} className="chip" href={mePostHref(p)} aria-pressed={mePost === p}>Пост {p}</Link>
+                ))}
+              </div>
+            </div>
+            <input type="hidden" name="postNo" value={mePost} />
+            <p className="sheet-note">Это закрепление на каждый день. Сегодняшний подъёмник вы отмечаете кнопкой выше — он сильнее закрепления.</p>
+          </form>
+        </Sheet>
+      )}
     </>
   );
 }

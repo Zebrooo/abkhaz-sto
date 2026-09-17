@@ -212,12 +212,16 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 </a>
               </div>
             )}
-            <Link className="person-link" href={`/klienty/${key}`}>
-              Карточка клиента и машины <Icon name="arrowRight" size={15} />
-            </Link>
+            {/* Карточка клиента лежит в закрытом мастеру разделе: ссылка,
+                которая молча уводит его на «Мой пост», хуже, чем её отсутствие. */}
+            {can(ctx.role, "clients") && (
+              <Link className="person-link" href={`/klienty/${key}`}>
+                Карточка клиента и машины <Icon name="arrowRight" size={15} />
+              </Link>
+            )}
           </div>
 
-          {car && (carKey ? (
+          {car && (carKey && can(ctx.role, "clients") ? (
             <Link className="card thing" href={`/mashiny/${carKey}`}>
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">

@@ -151,7 +151,7 @@ StoBookingVehicleSnapshot = { brand, model, year, plate, vin? }
 | `GET /masters?shopId&actorUserId` | `admin`, `owner` | `StoMaster[]` |
 | `GET /masters/load?shopId&actorUserId&from&to` | `admin`, `owner` | `MasterLoad[]` |
 | `POST /masters` | `owner` | создать |
-| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin`; свою строку (`postNo`, `onShift`) — сам мастер, см. ниже | патч → `{ master, orphaned }` |
+| `POST /masters/update` | `owner`; имя, специальность, пост и смену — и `admin`; свою строку (`postNo`, `onShift`, имя, специальность) — сам мастер, см. ниже | патч → `{ master, orphaned }` |
 | `GET /masters/bookings?shopId&actorUserId&from&to` | любому своему | `{ bookingId, masterId }[]` |
 | `POST /masters/assign` | `admin`, `owner` | `{ …, bookingId, masterId \| null }` |
 
@@ -179,6 +179,17 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 
 Автор отчёта — мастер **записи**, а не тот, кто сегодня стоит на посту: за
 день на посту могут смениться двое.
+
+### Просьба: правку мастера — и админу
+
+Сейчас всё, кроме `onShift`, правит только `owner`. За стойкой это мешает:
+опечатку в имени и перестановку человека на другой подъёмник делает админ,
+и дёргать ради этого хозяина незачем. Просьба разрешить `admin` патчить
+`name`, `speciality` и `postNo`.
+
+`active` (уволить и вернуть в штат) остаётся за `owner` — это решение о
+человеке, а не о сегодняшней смене. Приложение уже так и показывает: кнопка
+«Уволить» видна только хозяину, остальное — обоим.
 
 ### Мастер отмечается сам
 

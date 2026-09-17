@@ -69,7 +69,7 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   // значениями. Пост живёт в адресе, как и при создании: экран серверный,
   // и выбор чипа — это переход, а не клиентское состояние.
   const editId = Number(pick(sp.edit));
-  const editing = role === "owner" ? (masters.find(m => m.id === editId) ?? null) : null;
+  const editing = masters.find(m => m.id === editId) ?? null;
   const postParam = pick(sp.post);
   const editPost = editing
     ? (postParam === "" ? (editing.postNo ?? 0) : (Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0))
@@ -93,7 +93,7 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
           )}
         </div>
 
-        <Flash ok={pick(sp.ok)} err={(act === "add" || editing) && role === "owner" ? "" : pick(sp.err)} />
+        <Flash ok={pick(sp.ok)} err={(act === "add" && role === "owner") || editing ? "" : pick(sp.err)} />
 
         {/* «Мастеров нет» и «мы их не спросили» выглядят одинаково, а делать
             надо разное: в первом случае — завести, во втором — ждать сайт.
@@ -127,11 +127,11 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
                       <div className="person-n">{m.name}</div>
                       <div className="person-s">{m.speciality || "специальность не указана"}</div>
                     </div>
-                    {role === "owner" && (
-                      <Link className="m-edit" href={`/mastera?edit=${m.id}`} aria-label={`Изменить: ${m.name}`}>
-                        <Icon name="edit" size={16} />
-                      </Link>
-                    )}
+                    {/* Правит и админ: раздел ему открыт, и опечатку в имени
+                        он исправляет сам. Увольнение внутри — только хозяину. */}
+                    <Link className="m-edit" href={`/mastera?edit=${m.id}`} aria-label={`Изменить: ${m.name}`}>
+                      <Icon name="edit" size={16} />
+                    </Link>
                     <form action={toggleMasterShiftAction}>
                       <input type="hidden" name="masterId" value={m.id} />
                       <input type="hidden" name="onShift" value={m.onShift ? "0" : "1"} />
@@ -280,9 +280,11 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
             {/* Увольнение — в той же шторке, но отдельной кнопкой и внизу:
                 это не «сохранить», это другое действие. Записи уволенного
                 остаются на постах, их предложат передать. */}
-            <button className="aui-btn aui-btn--ghost aui-btn--sm m-fire" type="submit" name="fire" value="1">
-              Уволить — записи останутся на постах
-            </button>
+            {role === "owner" && (
+              <button className="aui-btn aui-btn--ghost aui-btn--sm m-fire" type="submit" name="fire" value="1">
+                Уволить — записи останутся на постах
+              </button>
+            )}
           </form>
         </Sheet>
       )}

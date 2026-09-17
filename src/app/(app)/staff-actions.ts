@@ -145,8 +145,11 @@ export async function toggleMasterShiftAction(fd: FormData) {
  * номерами (orphaned), и мы несём их в адрес так же, как переключатель смены.
  */
 export async function updateMasterAction(fd: FormData) {
+  // Раздел «Мастера» открыт админу и хозяину — правят оба: админ за стойкой
+  // исправляет опечатку в имени и переставляет человека на другой подъёмник,
+  // не дёргая хозяина. А вот уволить и вернуть в штат может только хозяин:
+  // это решение о человеке, а не о сегодняшней смене (проверка ниже).
   const c = await ctx("masters", "/mastera");
-  if (c.role !== "owner") back("/mastera", { err: "Мастеров правит хозяин сервиса" });
   const masterId = Number(str(fd, "masterId"));
   if (!Number.isInteger(masterId) || masterId <= 0) back("/mastera", { err: "Мастер не указан" });
   // Отказ возвращает в ту же шторку, а не на общий экран: иначе набранное
@@ -155,6 +158,7 @@ export async function updateMasterAction(fd: FormData) {
 
   const fire = str(fd, "fire");
   if (fire === "1" || fire === "0") {
+    if (c.role !== "owner") back("/mastera", { ...sheet, err: "Уволить и вернуть в штат может только хозяин сервиса" });
     const active = fire === "0";
     const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, active });
     revalidateMasters();

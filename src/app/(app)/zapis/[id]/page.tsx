@@ -18,6 +18,7 @@ import { fetchInspection } from "@/lib/api/inspections";
 import { requireSection } from "@/lib/context";
 import { countBySeverity, inspectionState, untouchedNodeKeys } from "@/lib/inspection";
 import { localDay } from "@/lib/sto/slots";
+import { vehicleKey } from "@/lib/vehicles";
 import { canReschedule, shopTransitions, type StoTransition } from "@/lib/sto/transitions";
 import type { StoBookingRow, StoBookingStatus, StoPrepayStatus } from "@/lib/sto/types";
 
@@ -108,6 +109,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const visits = (await recentBookings(shop.id)).filter(r => clientKey(r) === key).length;
   const car = vehicleLine(b);
   const plate = b.data.vehicle?.plate ?? null;
+  // У машины своя карточка: что ей делали, на сколько и кто на ней ездил.
+  const carKey = vehicleKey(b.data.vehicle);
 
   // За ящиком на вебе — сетка того же дня: запись видно в контексте смены,
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
@@ -206,7 +209,16 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             </Link>
           </div>
 
-          {car && (
+          {car && (carKey ? (
+            <Link className="card thing" href={`/mashiny/${carKey}`}>
+              <span className="sq"><Icon name="car" size={24} /></span>
+              <div className="row-main">
+                <div className="thing-n">{car}</div>
+                {plate && <div className="thing-s">{plate}</div>}
+              </div>
+              <Icon name="chevron" size={16} />
+            </Link>
+          ) : (
             <div className="card thing">
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">
@@ -214,7 +226,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 {plate && <div className="thing-s">{plate}</div>}
               </div>
             </div>
-          )}
+          ))}
 
           {showInspect && (
             <div className="card">

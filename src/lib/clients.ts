@@ -6,8 +6,6 @@
 import type { StoBookingRow } from "@/lib/sto/types";
 import { normalizePhone } from "@/lib/phone";
 
-export type ClientCar = { name: string; meta: string; plate: string | null };
-
 export type ClientSummary = {
   /** Ключ для адреса /klienty/<key>. */
   key: string;
@@ -22,21 +20,12 @@ export type ClientSummary = {
   spent: number;
 };
 
-export type ClientCard = ClientSummary & {
-  cars: ClientCar[];
-  history: StoBookingRow[];
-};
+export type ClientCard = ClientSummary & { history: StoBookingRow[] };
 
 function carLine(b: StoBookingRow): string | null {
   const v = b.data.vehicle;
   if (!v) return null;
   return [v.brand, v.model, v.year ? String(v.year) : null].filter(Boolean).join(" ") || null;
-}
-
-function carMeta(b: StoBookingRow): string {
-  const v = b.data.vehicle;
-  if (!v) return "";
-  return [v.year ? `${v.year} год` : null, v.plate].filter(Boolean).join(" · ");
 }
 
 function nameOf(b: StoBookingRow): string {
@@ -79,18 +68,16 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
   return [...map.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
-/** Карточка одного клиента: контакты, его машины и история записей. */
+/**
+ * Карточка одного клиента: контакты и история записей. Машины сюда не
+ * входят: у них своя карточка и свой свод (lib/vehicles.ts) — иначе
+ * «какие у человека машины» считалось бы в двух местах по-разному.
+ */
 export function clientCard(rows: readonly StoBookingRow[], key: string): ClientCard | null {
   const mine = rows.filter(b => clientKey(b) === key);
   if (mine.length === 0) return null;
   const summary = summarizeClients(mine)[0];
-  const cars = new Map<string, ClientCar>();
-  for (const b of mine) {
-    const name = carLine(b);
-    if (!name || cars.has(name)) continue;
-    cars.set(name, { name, meta: carMeta(b), plate: b.data.vehicle?.plate ?? null });
-  }
-  return { ...summary, cars: [...cars.values()], history: [...mine].sort((a, b) => b.starts_at.localeCompare(a.starts_at)) };
+  return { ...summary, history: [...mine].sort((a, b) => b.starts_at.localeCompare(a.starts_at)) };
 }
 
 /**

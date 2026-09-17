@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { saveClientNoteAction } from "@/app/(app)/zametki-actions";
 import { countPending, recentBookings } from "@/lib/bookings";
 import { fetchClientNotes } from "@/lib/api/client-notes";
+import { fetchGarage } from "@/lib/api/garage";
 import { requireSection } from "@/lib/context";
 import { clientCard } from "@/lib/clients";
+import { clientVehicles, vehicleName } from "@/lib/vehicles";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
@@ -20,7 +22,10 @@ const NOTE_FORM = "client-note";
 
 /**
  * Карточка клиента: контакты, его машины и история записей — всё собрано из
- * снимков самих записей. Экран один на телефон и веб: на вебе заголовок
+ * снимков самих записей. Машины — ссылки на свои карточки (lib/vehicles.ts):
+ * у человека их бывает несколько, и «что делали этой» — отдельный вопрос.
+ * «Гараж на сайте» — то, чем клиент ездит сейчас (api/garage.ts): снимок в
+ * записи говорит, на чём приезжали тогда, и меняться задним числом не должен. Экран один на телефон и веб: на вебе заголовок
  * рисует `.head`, остальное читается той же колонкой. Заметка сервиса —
  * единственное своё: она живёт на сайте по тому же ключу (lib/api/client-notes.ts)
  * и правится шторкой ?do=note.
@@ -41,6 +46,17 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   // Заметку спрашиваем по ключу карточки: он совпадает с тем, что строит
   // clientKey, даже если в адресе имя пришло раскодированным.
   const notesRes = await fetchClientNotes({ shopId: shop.id, actorUserId: ctx.userId, keys: [card.key] });
+  // Машины клиента: у карточки машины свой адрес, и туда ведут ссылки ниже.
+  const cars = clientVehicles(rows, card.key);
+  // Гараж — актуальные машины из учётки клиента; маршрута на сайте пока нет,
+  // и пустой ответ здесь обычное дело: блок просто не рисуется.
+  const garageRes = await fetchGarage({
+    shopId: shop.id,
+    actorUserId: ctx.userId,
+    clientUserId: card.key.startsWith("u") ? card.key.slice(1) : null,
+    phone: card.phone,
+  });
+  const garage = garageRes.ok ? garageRes.data : [];
   const note = notesRes.ok ? (notesRes.data.find(n => n.clientKey === card.key) ?? null) : null;
   const notesFailed = !notesRes.ok && notesRes.code !== "not_found" ? notesRes.error : null;
   const self = (q = "") => `/klienty/${card.key}${q}`;
@@ -77,24 +93,38 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
           </div>
         </div>
 
-        {card.cars.length > 0 && (
+        {cars.length > 0 && (
           <>
             <div className="sect">Машины</div>
-            {card.cars.map(c => {
-              // carMeta склеивает год и номер, а номер стоит чипом справа —
-              // в подписи оставляем только то, чего в чипе нет.
-              const meta = c.meta.split(" · ").filter(p => p !== c.plate).join(" · ");
-              return (
-                <div key={c.name} className="card card-sm thing">
-                  <span className="sq"><Icon name="car" size={22} /></span>
-                  <div className="row-main">
-                    <div className="thing-n">{c.name}</div>
-                    {meta && <div className="thing-s">{meta}</div>}
+            {cars.map(c => (
+              <Link key={c.key} className="card card-sm thing" href={`/mashiny/${c.key}`}>
+                <span className="sq"><Icon name="car" size={22} /></span>
+                <div className="row-main">
+                  <div className="thing-n">{c.name}</div>
+                  <div className="thing-s">
+                    {[count(c.visits, "запись", "записи", "записей"), `последняя ${relativeAt(c.lastAt)}`].join(" · ")}
                   </div>
-                  {c.plate && <span className="rspec">{c.plate}</span>}
                 </div>
-              );
-            })}
+                {c.plate && <span className="rspec">{c.plate}</span>}
+              </Link>
+            ))}
+          </>
+        )}
+
+        {garage.length > 0 && (
+          <>
+            <div className="sect">Гараж на сайте</div>
+            {garage.map(g => (
+              <div key={g.id} className="card card-sm thing">
+                <span className="sq"><Icon name="garage" size={22} /></span>
+                <div className="row-main">
+                  <div className="thing-n">{vehicleName(g)}</div>
+                  <div className="thing-s">{g.vin ? `VIN ${g.vin}` : "VIN не указан"}</div>
+                </div>
+                {g.plate && <span className="rspec">{g.plate}</span>}
+              </div>
+            ))}
+            <p className="hint">Чем клиент ездит сейчас — из его учётки. Выше — машины, на которых он к нам приезжал.</p>
           </>
         )}
 

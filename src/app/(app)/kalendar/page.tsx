@@ -12,7 +12,7 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { STATUS_SHORT } from "@/components/Status";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, rangeLabel, rub, todayLocal, weekStart } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
-import { addMonths, monthFirst, safeMonth } from "@/lib/month";
+import { addMonths, monthFirst, monthOf, safeMonth } from "@/lib/month";
 import { busyBlocks, toDragBlock } from "@/lib/drag";
 import { dayOfWeek, freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
 import { canReschedule } from "@/lib/sto/transitions";
@@ -70,13 +70,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   // Маленький календарь: месяц в адресе, точки под числами — по записям
   // месяца. Запрос один и тот же по границам месяца, поэтому точки честные,
   // а не «есть что-то на этой неделе».
-  const month = safeMonth(pick(sp.m), day);
-  const monthFrom = monthFirst(month);
-  const monthTo = addMonths(month, 1) + "-01";
-
+  // Календарь открыт ровно тогда, когда месяц есть в адресе: закрытый не
+  // стоит экрану ни одного запроса.
+  const month = pick(sp.m) ? safeMonth(pick(sp.m), day) : "";
   const [weekRows, monthRows] = await Promise.all([
     listBookings(shop.id, localTime(ws, "00:00"), localTime(addDays(ws, 7), "00:00")),
-    listBookings(shop.id, localTime(monthFrom, "00:00"), localTime(monthTo, "00:00")),
+    month
+      ? listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00"))
+      : Promise.resolve([]),
   ]);
   const monthCounts: Record<string, number> = {};
   for (const b of monthRows.filter(isLive)) {
@@ -156,9 +157,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           </div>
           <DayPick
             day={day}
-            month={pick(sp.m) ? month : ""}
+            month={month}
             label={dayTitle(day)}
             counts={monthCounts}
+            openHref={href(day, filter, moving?.id, monthOf(day))}
+            closeHref={href(day, filter, moving?.id)}
             dayHref={d => href(d, filter, moving?.id)}
             monthHref={m => href(day, filter, moving?.id, m)}
             isOff={d => dayWindow(shop.schedule, d).off}
@@ -182,9 +185,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           <StatusChips day={day} filter={filter} counts={counts} move={moving?.id} />
           <DayPick
             day={day}
-            month={pick(sp.m) ? month : ""}
+            month={month}
             label={dayTitle(day)}
             counts={monthCounts}
+            openHref={href(day, filter, moving?.id, monthOf(day))}
+            closeHref={href(day, filter, moving?.id)}
             dayHref={d => href(d, filter, moving?.id)}
             monthHref={m => href(day, filter, moving?.id, m)}
             isOff={d => dayWindow(shop.schedule, d).off}

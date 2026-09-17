@@ -2,6 +2,7 @@ import Link from "next/link";
 import { can } from "@/lib/access";
 import { requireSection } from "@/lib/context";
 import { dayWindow } from "@/lib/stats";
+import { monthOf, safeMonth } from "@/lib/month";
 import { busyIntervals, countPending, recentBookings } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
@@ -12,7 +13,7 @@ import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutes
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
-import { carsByClient, clientVehicles } from "@/lib/vehicles";
+import { carsByClient, clientVehicles, vehicleCard } from "@/lib/vehicles";
 import { ClientPick } from "@/components/ClientPick";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
@@ -88,7 +89,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
 
   // Месяц маленького календаря живёт в адресе: открытый календарик переживает
   // переход по месяцам и «назад».
-  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(pick(sp.m)) ? pick(sp.m) : "";
+  const month = pick(sp.m) ? safeMonth(pick(sp.m), isDay(pick(sp.d)) ? pick(sp.d) : todayLocal()) : "";
 
   const stepRaw = Number(pick(sp.step));
   const step = stepRaw === 1 || stepRaw === 2 ? stepRaw : 0;
@@ -124,7 +125,8 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const history = mayPick ? await recentBookings(shop.id, 400) : [];
   const cars = carsByClient(history);
   const known = summarizeClients(history).slice(0, 200).map(c => ({
-    key: c.key, name: c.name, phone: c.phone, car: c.car, plate: c.plate, vin: c.vin, visits: c.visits,
+    key: c.key, name: c.name, phone: c.phone, car: c.car,
+    plate: c.plate, vin: c.vin, plates: c.plates, vins: c.vins, visits: c.visits,
     // Все машины клиента — в форме их показывают чипами: человек приезжает
     // не всегда на той, что была в прошлый раз.
     cars: cars.get(c.key)?.slice(0, 4) ?? [],
@@ -138,17 +140,21 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const wantCar = pick(sp.car);
   // Клиента ищем в свежем хвосте, а если его там нет — по всей доступной
   // истории: «записать снова» человека, который был год назад, обязано
-  // работать, а не молча открыть пустую форму.
-  const fromCard = wantClient
-    ? (known.find(c => c.key === wantClient)
-      ?? (mayPick ? summarizeClients(await recentBookings(shop.id)).find(c => c.key === wantClient) ?? null : null))
+  // работать, а не молча открыть пустую форму. Клиента и его машины берём из
+  // ОДНОЙ выборки, иначе машины не найдутся там, где нашёлся человек.
+  const wide = wantClient && mayPick && !known.some(c => c.key === wantClient)
+    ? await recentBookings(shop.id)
     : null;
-  const myCars = fromCard ? (cars.get(fromCard.key) ?? clientVehicles(history, fromCard.key).map(v => ({
-    key: v.key, name: v.name, plate: v.plate, vin: v.vin,
-  }))) : [];
-  // Пришли с карточки машины — подставляем её, а не самую свежую машину
-  // владельца: у человека их несколько, и приехал он на этой.
-  const fromCardCar = (wantCar ? myCars.find(c => c.key === wantCar) ?? null : null) ?? myCars[0] ?? null;
+  const pool = wide ?? history;
+  const fromCard = wantClient
+    ? (known.find(c => c.key === wantClient) ?? summarizeClients(pool).find(c => c.key === wantClient) ?? null)
+    : null;
+  const myCars = fromCard ? clientVehicles(pool, fromCard.key) : [];
+  // Пришли с карточки машины — подставляем ИМЕННО ЕЁ. Ключ мог смениться
+  // (у машины появился VIN), поэтому ищем и по прежним признакам; не нашли —
+  // не подставляем ничего: чужая машина в записи хуже пустого поля.
+  const askedCar = wantCar ? (myCars.find(c => c.key === wantCar) ?? vehicleCard(pool, wantCar)) : null;
+  const fromCardCar = wantCar ? askedCar : myCars[0] ?? null;
   const initial = {
     name: pick(sp.n) || fromCard?.name || "",
     phone: pick(sp.ph) || fromCard?.phone || "",
@@ -285,9 +291,12 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     day={day}
                     month={month}
                     label={day === today ? "Другой день" : dayTitle(day)}
+                    openHref={href({ m: monthOf(day) })}
+                    closeHref={href({ m: null })}
                     dayHref={d => href({ d, t: null, m: null })}
                     monthHref={m => href({ m })}
                     isOff={d => dayWindow(schedule, d).off}
+                    inline
                   />
                   <div className="nb-l nb-l-post">Пост</div>
                   <div className="chips">

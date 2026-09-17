@@ -24,6 +24,9 @@ export type KnownClient = {
   /** Госномер и VIN последней машины — по ним тоже ищут. */
   plate: string | null;
   vin: string | null;
+  /** Все его номера и VIN: клиента ищут и по машине, которую он продал. */
+  plates: string[];
+  vins: string[];
   visits: number;
   /** Все его машины, свежие сверху: человек приезжает не всегда на одной. */
   cars: ClientCar[];

@@ -17,7 +17,7 @@ import type { StoBookingRow, StoBookingVehicleSnapshot } from "@/lib/sto/types";
 import { isLive } from "@/lib/stats";
 import { clientKey } from "@/lib/clients";
 import { normalizePhone } from "@/lib/phone";
-import { foldLookalike, normalizeVin } from "@/lib/vehicle-input";
+import { foldLookalike, normalizeVin, plateInput } from "@/lib/vehicle-input";
 
 export type VehicleOwner = {
   /** Ключ карточки клиента (lib/clients.ts). */
@@ -54,8 +54,11 @@ export type VehicleCard = VehicleSummary & { history: StoBookingRow[] };
  * обязаны слиться, а не завести две истории ремонта.
  */
 export function normalizePlate(raw: string | null | undefined): string | null {
-  const s = foldLookalike((raw ?? "").replace(/[\s-]+/g, ""));
-  return s.length >= 4 ? s : null;
+  // Проверка формы та же, что у ввода (lib/vehicle-input.ts): в старых
+  // записях в поле машины попадало всякое, и склеивать машины по строке
+  // «привезёт вечером» нельзя — она стала бы ключом карточки.
+  const s = plateInput(raw);
+  return s === null ? null : foldLookalike(s.replace(/[\s-]+/g, ""));
 }
 
 /** VIN снимка к сравнимому виду; null — его нет или это не VIN. */
@@ -80,9 +83,13 @@ function vehicleIds(v: StoBookingVehicleSnapshot | undefined): string[] {
   if (!v) return [];
   const vin = vehicleVin(v);
   const plate = normalizePlate(v.plate);
-  if (vin || plate) return [...(vin ? [`v${vin}`] : []), ...(plate ? [`p${plate}`] : [])];
   const name = vehicleName(v).toLowerCase();
-  return name === "машина" ? [] : [`m${encodeURIComponent(name)}`];
+  const weak = name === "машина" ? [] : [`m${encodeURIComponent(name)}`];
+  if (plate) return [...(vin ? [`v${vin}`] : []), `p${plate}`];
+  // НОМЕРА НЕТ — слабый признак остаётся в строю даже при VIN. Иначе визит,
+  // в котором VIN вписали впервые, оторвался бы от всей прошлой истории
+  // машины: раньше её узнавали по марке и году, и других зацепок нет.
+  return [...(vin ? [`v${vin}`] : []), ...weak];
 }
 
 /**
@@ -211,7 +218,11 @@ function summarizeGroup(g: VehicleGroup): VehicleSummary | null {
  * обязана открывать ту же карточку после того, как у машины появился VIN.
  */
 export function vehicleCard(rows: readonly StoBookingRow[], key: string): VehicleCard | null {
-  const group = groupVehicles(rows).find(g => g.ids.has(key));
+  const groups = groupVehicles(rows);
+  // Сначала группа, для которой этот ключ КАНОНИЧЕСКИЙ, и только потом любая,
+  // где он встречается как признак: один номер может остаться в двух группах
+  // (табличку перевесили на другую машину), и открывать наугад нельзя.
+  const group = groups.find(g => groupKey(g) === key) ?? groups.find(g => g.ids.has(key));
   if (!group) return null;
   const summary = summarizeGroup(group);
   if (!summary) return null;
@@ -307,19 +318,23 @@ export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, li
   const key = vehicleKey(b.data.vehicle);
   if (!key) return EMPTY_PAST;
   const vin = vehicleVin(b.data.vehicle);
-  // Ключ склеен по марке и году — машину узнаём ненадёжно, и такую историю
-  // берём только у того же клиента: чужую «Весту 2021» выдавать за эту
-  // нельзя. VIN этой оговорки не отменяет: он снимает её ТОЛЬКО для записей,
-  // где VIN тоже назван, — совпадение по марке и году так и остаётся
-  // догадкой, даже если в нашей записи VIN есть.
-  const byName = key.startsWith("m");
+  const plate = normalizePlate(b.data.vehicle?.plate);
   const mine = clientKey(b);
+  // ЧУЖУЮ ИСТОРИЮ БЕРЁМ ТОЛЬКО ПО СИЛЬНОМУ ПРИЗНАКУ — совпал VIN или номер.
+  // Совпадение по марке и году — догадка: «Веста 2021» в городе не одна, и
+  // такую историю показываем лишь внутри одного клиента. Машину продали и
+  // новый хозяин приехал на ней же — сработает номер или VIN, как и должно.
+  const strong = (r: StoBookingRow) => {
+    const rv = vehicleVin(r.data.vehicle);
+    if (vin && rv) return rv === vin;
+    return plate !== null && normalizePlate(r.data.vehicle?.plate) === plate;
+  };
   const past = rows
     .filter(r => r.id !== b.id
       && r.starts_at < b.starts_at
       && (isLive(r) || r.status === "done")
       && sameSnapshot(b.data.vehicle, r.data.vehicle)
-      && (!byName || clientKey(r) === mine || (vin !== null && vehicleVin(r.data.vehicle) === vin)))
+      && (strong(r) || clientKey(r) === mine))
     .sort((a, c) => c.starts_at.localeCompare(a.starts_at));
   const owners = new Map<string, VehicleOwner>();
   for (const r of past) {
@@ -329,7 +344,7 @@ export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, li
   }
   return {
     key,
-    byName,
+    byName: key.startsWith("m"),
     visits: past.slice(0, Math.max(0, limit)),
     done: past.filter(r => r.status === "done").length,
     otherOwners: [...owners.values()],

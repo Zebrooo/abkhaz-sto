@@ -321,3 +321,47 @@ describe("VIN и склейка карточек", () => {
     expect(past.visits).toEqual([]);
   });
 });
+
+describe("история машины: сильный признак против догадки", () => {
+  const vin = "JN1TCNT31U0012345";
+
+  it("машина без номера не теряет историю, когда впервые вбили VIN", () => {
+    const now = row({ id: 3, at: "2026-09-17T06:00:00Z", plate: null, vin, status: "confirmed" });
+    const past = vehiclePast([
+      now,
+      row({ id: 2, at: "2026-05-01T06:00:00Z", plate: null }),
+      row({ id: 1, at: "2026-01-10T06:00:00Z", plate: null }),
+    ], now);
+    expect(past.visits.map(v => v.id)).toEqual([2, 1]);
+  });
+
+  it("а чужую «такую же» машину — не берёт", () => {
+    const now = row({ id: 3, at: "2026-09-17T06:00:00Z", plate: null, vin, status: "confirmed" });
+    const past = vehiclePast([
+      now,
+      row({ id: 2, at: "2026-05-01T06:00:00Z", plate: null, name: "Мария", phone: "+79409990022" }),
+    ], now);
+    expect(past.visits).toEqual([]);
+  });
+
+  it("новый хозяин на той же машине видит её историю: совпал номер", () => {
+    const now = row({ id: 3, at: "2026-09-17T06:00:00Z", plate: "А123АВ01", name: "Мария", phone: "+79409990022", status: "confirmed" });
+    const past = vehiclePast([now, row({ id: 2, at: "2026-05-01T06:00:00Z", plate: "А123АВ01" })], now);
+    expect(past.visits.map(v => v.id)).toEqual([2]);
+    expect(past.otherOwners.map(o => o.name)).toEqual(["Аслан"]);
+  });
+
+  it("карточку по номеру открывает та машина, для которой номер — её ключ", () => {
+    // Табличку перевесили: у старой машины номер сменился, у новой он же.
+    const rows = [
+      row({ id: 3, at: "2026-09-15T06:00:00Z", plate: "А123АВ01", vin: "XTA21099010000123" }),
+      row({ id: 2, at: "2026-06-01T06:00:00Z", plate: "Х999ХХ01", vin }),
+      row({ id: 1, at: "2026-01-01T06:00:00Z", plate: "А123АВ01", vin }),
+    ];
+    // pA123AB01 — канонический ключ только у той машины, у которой нет VIN…
+    const card = vehicleCard(rows, "pA123AB01");
+    expect(card).not.toBeNull();
+    // …а её история не должна вобрать визиты машины с другим VIN.
+    expect(card!.history.every(b => b.data.vehicle?.vin !== vin)).toBe(true);
+  });
+});

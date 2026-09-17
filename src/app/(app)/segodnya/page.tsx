@@ -11,7 +11,7 @@ import { Timeline } from "@/components/Timeline";
 import { addDays, count, dayLabel, dayOfWeekLabel, dayTitle, todayLocal } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
 import { localDay, localTime } from "@/lib/sto/slots";
-import { addMonths, monthFirst, safeMonth } from "@/lib/month";
+import { addMonths, monthFirst, monthOf, safeMonth } from "@/lib/month";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -64,10 +64,14 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
 
   // Маленький календарь: месяц из адреса и точки под числами по записям
   // месяца — видно, где густо, не листая дни по одному.
-  const month = safeMonth(pick(sp.m), day);
+  // Календарь открыт ровно тогда, когда месяц есть в адресе: закрытый не
+  // стоит экрану ни одного запроса.
+  const month = pick(sp.m) ? safeMonth(pick(sp.m), day) : "";
   const [rows, monthRows] = await Promise.all([
     dayBookings(shop.id, day),
-    listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00")),
+    month
+      ? listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00"))
+      : Promise.resolve([]),
   ]);
   const monthCounts: Record<string, number> = {};
   for (const b of monthRows.filter(isLive)) {
@@ -111,9 +115,11 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
           <div className="head-tail">
           <DayPick
             day={day}
-            month={pick(sp.m) ? month : ""}
+            month={month}
             label={dayTitle(day)}
             counts={monthCounts}
+            openHref={href(day, filter, monthOf(day))}
+            closeHref={href(day, filter)}
             dayHref={d => href(d, filter)}
             monthHref={mm => href(day, filter, mm)}
             isOff={d => dayWindow(shop.schedule, d).off}
@@ -136,9 +142,11 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
           <StatusChips day={day} filter={filter} counts={counts} />
           <DayPick
             day={day}
-            month={pick(sp.m) ? month : ""}
+            month={month}
             label={dayTitle(day)}
             counts={monthCounts}
+            openHref={href(day, filter, monthOf(day))}
+            closeHref={href(day, filter)}
             dayHref={d => href(d, filter)}
             monthHref={mm => href(day, filter, mm)}
             isOff={d => dayWindow(shop.schedule, d).off}

@@ -57,7 +57,9 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const orphanedRaw = pick(sp.orphaned);
   const orphaned = ID_LIST.test(orphanedRaw) ? orphanedRaw.split(",").map(Number) : [];
   const handoffId = Number(pick(sp.handoff));
-  const handoffFrom = active.find(m => m.id === handoffId) ?? null;
+  // Передавать записи приходится чаще всего как раз за уволенного, поэтому
+  // ищем среди всех, а не только среди активных.
+  const handoffFrom = masters.find(m => m.id === handoffId) ?? null;
 
   const act = pick(sp.do);
   const posts = shop.schedule?.posts ?? 1;
@@ -74,7 +76,6 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const editPost = editing
     ? (postParam === "" ? (editing.postNo ?? 0) : (Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0))
     : 0;
-  const editHref = (post: number) => `/mastera?edit=${editId}&post=${post}`;
   const listHref = showFired ? "/mastera?all=1" : "/mastera";
 
   return (
@@ -118,7 +119,8 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
           <div className="m-grid">
             {active.map(m => {
               const l = loadOf.get(m.id);
-              const orphans = m.id === orphanOf && !m.onShift ? orphaned : [];
+              // Записи сиротеют и от снятия со смены, и от смены поста.
+              const orphans = m.id === orphanOf ? orphaned : [];
               return (
                 <div key={m.id} className="card m-card">
                   <div className="person">
@@ -166,18 +168,28 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
               <div className="sect">Уволенные</div>
               <div className="card card-flat">
                 {fired.map(m => (
-                  <div key={m.id} className="row m-fired">
-                    <span className="ava">{initials(m.name)}</span>
-                    <div className="row-main">
-                      <div className="row-t">{m.name}</div>
-                      <div className="row-s">{[m.speciality, "не в штате"].filter(Boolean).join(" · ")}</div>
+                  <div key={m.id} className="m-fired-box">
+                    <div className="row m-fired">
+                      <span className="ava">{initials(m.name)}</span>
+                      <div className="row-main">
+                        <div className="row-t">{m.name}</div>
+                        <div className="row-s">{[m.speciality, "не в штате"].filter(Boolean).join(" · ")}</div>
+                      </div>
+                      {role === "owner" && (
+                        <form action={updateMasterAction}>
+                          <input type="hidden" name="masterId" value={m.id} />
+                          <input type="hidden" name="fire" value="0" />
+                          <button className="aui-btn aui-btn--outline aui-btn--sm" type="submit">Вернуть в штат</button>
+                        </form>
+                      )}
                     </div>
-                    {role === "owner" && (
-                      <form action={updateMasterAction}>
-                        <input type="hidden" name="masterId" value={m.id} />
-                        <input type="hidden" name="fire" value="0" />
-                        <button className="aui-btn aui-btn--outline aui-btn--sm" type="submit">Вернуть в штат</button>
-                      </form>
+                    {/* Записи уволенного остались на постах — передать их надо
+                        именно отсюда: в общем списке его уже нет. */}
+                    {m.id === orphanOf && orphaned.length > 0 && (
+                      <div className="m-orphan">
+                        <span>{count(orphaned.length, "запись осталась", "записи остались", "записей остались")} без мастера</span>
+                        <Link className="aui-btn aui-btn--primary aui-btn--sm" href={`/mastera?all=1&handoff=${m.id}&orphaned=${orphaned.join(",")}`}>Передать</Link>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -224,15 +236,18 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
             </label>
             <div className="fld">
               <span>Пост</span>
-              {/* Постов больше четырёх — сегмент не влезает, поэтому чипы с переносом. */}
-              <div className="chips chips-wrap">
-                <Link className="chip" href={addHref(0)} aria-pressed={newPost === 0}>Без поста</Link>
+              {/* Постов больше четырёх — сегмент не влезает, поэтому чипы с
+                  переносом. Радиокнопки, а не ссылки: выбор не должен уводить
+                  со страницы и стирать набранное имя. */}
+              <div className="rchips">
+                <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={newPost === 0} />Без поста</label>
                 {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
-                  <Link key={p} className="chip" href={addHref(p)} aria-pressed={newPost === p}>Пост {p}</Link>
+                  <label key={p} className="chip">
+                    <input type="radio" name="postNo" value={p} defaultChecked={newPost === p} />Пост {p}
+                  </label>
                 ))}
               </div>
             </div>
-            <input type="hidden" name="postNo" value={newPost} />
             <p className="sheet-note">
               Это строка справочника: она стоит в расписании и в отчётах, входить в приложение по ней нельзя.
               Чтобы мастер вошёл, пригласите его по номеру телефона в «Доступах» — роль включится, когда он войдёт этим номером.
@@ -260,41 +275,48 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
             <input type="hidden" name="wasPostNo" value={editing.postNo ?? 0} />
             <label className="fld">
               <span>Имя</span>
-              <input name="name" defaultValue={editing.name} maxLength={80} required autoFocus />
+              <input name="name" defaultValue={pick(sp.n) || editing.name} maxLength={80} required autoFocus />
             </label>
             <label className="fld">
               <span>Специальность</span>
-              <input name="speciality" defaultValue={editing.speciality ?? ""} placeholder="Двигатель, диагностика" maxLength={80} />
+              <input name="speciality" defaultValue={pick(sp.sp) || editing.speciality || ""} placeholder="Двигатель, диагностика" maxLength={80} />
             </label>
             <div className="fld">
               <span>Пост</span>
-              <div className="chips chips-wrap">
-                <Link className="chip" href={editHref(0)} aria-pressed={editPost === 0}>Без поста</Link>
+              {/* Радиокнопки, а не ссылки: выбор поста не должен уводить со
+                  страницы и стирать набранное имя. */}
+              <div className="rchips">
+                <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={editPost === 0} />Без поста</label>
                 {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
-                  <Link key={p} className="chip" href={editHref(p)} aria-pressed={editPost === p}>Пост {p}</Link>
+                  <label key={p} className="chip">
+                    <input type="radio" name="postNo" value={p} defaultChecked={editPost === p} />Пост {p}
+                  </label>
                 ))}
               </div>
             </div>
-            <input type="hidden" name="postNo" value={editPost} />
-            <p className="sheet-note">Мастер и сам отмечается на подъёмнике, когда приходит на смену. Здесь — закрепление по умолчанию: с него начинается его день.</p>
-            {/* Увольнение — в той же шторке, но отдельной кнопкой и внизу:
-                это не «сохранить», это другое действие. Записи уволенного
-                остаются на постах, их предложат передать. */}
-            {role === "owner" && (
-              <button className="aui-btn aui-btn--ghost aui-btn--sm m-fire" type="submit" name="fire" value="1">
+            <p className="sheet-note">Мастер отмечается на подъёмнике сам, когда приходит на смену, — и эта отметка обновляет закрепление. Здесь вы ставите, с какого поста начинается его день.</p>
+          </form>
+          {/* УВОЛЬНЕНИЕ — ОТДЕЛЬНОЙ ФОРМОЙ, а не кнопкой внутри правки.
+              Внутри формы Enter в поле «Имя» отправлял бы её первой кнопкой,
+              то есть увольнял человека вместо сохранения. */}
+          {role === "owner" && (
+            <form action={updateMasterAction} className="m-fire-form">
+              <input type="hidden" name="masterId" value={editing.id} />
+              <input type="hidden" name="fire" value="1" />
+              <button className="aui-btn aui-btn--ghost aui-btn--sm m-fire" type="submit">
                 Уволить — записи останутся на постах
               </button>
-            )}
-          </form>
+            </form>
+          )}
         </Sheet>
       )}
 
       {handoffFrom && orphaned.length > 0 && (
         <Sheet
-          closeHref="/mastera"
+          closeHref={listHref}
           title="Передать записи"
           sub={`${count(orphaned.length, "запись", "записи", "записей")} · от ${handoffFrom.name}`}
-          footer={<Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href="/mastera">Закрыть</Link>}
+          footer={<Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href={listHref}>Закрыть</Link>}
         >
           <div className="pick-list">
             <p className="sheet-note">Записи встанут на пост нового мастера — он увидит их у себя в «Мой пост».</p>

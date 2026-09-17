@@ -21,14 +21,21 @@ import { normalizePhone } from "@/lib/phone";
 import { plateProblem, vinProblem } from "@/lib/vehicle-input";
 import { linkItemBooking } from "@/lib/api/reports";
 
-/** Назад на экран: запрос адреса возврата сохраняем, свой итог дописываем вместо прошлых ok/err. */
-function back(path: string, q: Record<string, string | undefined>): never {
+/**
+ * Назад на экран: запрос адреса возврата сохраняем, свой итог дописываем
+ * вместо прошлых ok/err. null в значении — «убрать этот параметр»: после
+ * переноса экран не должен вернуться в режим переноса.
+ */
+function back(path: string, q: Record<string, string | undefined | null>): never {
   const i = path.indexOf("?");
   const base = i === -1 ? path : path.slice(0, i);
   const sp = new URLSearchParams(i === -1 ? "" : path.slice(i + 1));
   sp.delete("ok");
   sp.delete("err");
-  for (const [k, v] of Object.entries(q)) if (v) sp.set(k, v);
+  for (const [k, v] of Object.entries(q)) {
+    if (v === null) sp.delete(k);
+    else if (v) sp.set(k, v);
+  }
   const s = sp.toString();
   redirect(s ? `${base}?${s}` : base);
 }
@@ -114,12 +121,16 @@ export async function rescheduleAction(fd: FormData) {
   // остаёмся в неделе. Раньше любой перенос выбрасывал в день.
   back(ret, {
     d: day,
+    // Режим переноса закончился — убираем его из адреса, иначе экран
+    // возвращается с той же записью «в руках».
+    move: null,
+    do: null,
     ok: res.told ? "Запись перенесена — клиент уведомлён" : "Запись перенесена. Сайт не ответил — клиента предупредите сами",
   });
 }
 
 export async function createManualAction(fd: FormData) {
-  const { user, shop } = await ctx(fd, "bookings");
+  const { user, shop, role } = await ctx(fd, "bookings");
   const day = str(fd, "day");
   const listingId = Number(str(fd, "listingId"));
   const postRaw = Number(str(fd, "postNo"));
@@ -129,8 +140,10 @@ export async function createManualAction(fd: FormData) {
   // иначе повторная попытка потеряет связь.
   const fromInspection = Number(str(fd, "fromInspection")), fromDefect = Number(str(fd, "defect")), fromBooking = Number(str(fd, "fromBooking"));
   const fromReport = [fromInspection, fromDefect, fromBooking].every(n => Number.isInteger(n) && n > 0);
+  const backTo = str(fd, "back");
   const keep = {
     d: day, s: String(listingId), post: postNo ? String(postNo) : undefined, t: hhmm || undefined,
+    back: backTo.startsWith("/") && !backTo.startsWith("//") ? backTo : undefined,
     ...(fromReport ? { fromInspection: String(fromInspection), defect: String(fromDefect), fromBooking: String(fromBooking) } : {}),
   };
   const ret = "/kalendar/novaya";
@@ -167,6 +180,12 @@ export async function createManualAction(fd: FormData) {
   revalidateBookings();
   if (!res.ok) back(ret, { ...keep, ...typed, step: "1", err: res.error });
   if (fromReport) {
+    // Право то же, что у кнопки «Записать на эту работу»: привязку пункта к
+    // записи сайт даёт стойке, а не мастеру. Экран кнопку прячет — здесь
+    // проверяем ещё раз, потому что экран не граница.
+    if (!can(role, "closeBooking")) {
+      back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
+    }
     // Запись уже есть; связь с пунктом сметы — на сайте. Не связалось — запись
     // всё равно создана, и об этом честно в отчёте.
     const link = await linkItemBooking({ shopId: shop.id, actorUserId: user.id, inspectionId: fromInspection, defectId: fromDefect, bookingId: res.id });

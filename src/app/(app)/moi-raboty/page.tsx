@@ -90,7 +90,6 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   const mePost = pick(sp.post) === ""
     ? (me?.postNo ?? 0)
     : (Number.isInteger(mePostRaw) && mePostRaw >= 1 && mePostRaw <= posts ? mePostRaw : 0);
-  const mePostHref = (p: number) => `${self}?do=me&post=${p}`;
   const ME_FORM = "my-master";
 
   return (
@@ -104,7 +103,9 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
 
-        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
+        {/* Пока открыта шторка, ошибка живёт в ней: одна и та же строка дважды
+            выглядит как две беды. */}
+        <Flash ok={pick(sp.ok)} err={meOpen ? "" : pick(sp.err)} />
 
         <div className="mw-hero">
           <div className="person">
@@ -278,15 +279,17 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
             </label>
             <div className="fld">
               <span>Подъёмник по умолчанию</span>
-              <div className="chips chips-wrap">
-                <Link className="chip" href={mePostHref(0)} aria-pressed={mePost === 0}>Без поста</Link>
+              {/* Радиокнопки: выбор не уводит со страницы и не стирает имя. */}
+              <div className="rchips">
+                <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={mePost === 0} />Без поста</label>
                 {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
-                  <Link key={p} className="chip" href={mePostHref(p)} aria-pressed={mePost === p}>Пост {p}</Link>
+                  <label key={p} className="chip">
+                    <input type="radio" name="postNo" value={p} defaultChecked={mePost === p} />Пост {p}
+                  </label>
                 ))}
               </div>
             </div>
-            <input type="hidden" name="postNo" value={mePost} />
-            <p className="sheet-note">Это закрепление на каждый день. Сегодняшний подъёмник вы отмечаете кнопкой выше — он сильнее закрепления.</p>
+            <p className="sheet-note">С этого поста начинается ваш день. Когда вы отмечаетесь на подъёмнике кнопкой выше, закрепление обновляется само.</p>
           </form>
         </Sheet>
       )}

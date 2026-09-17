@@ -119,6 +119,16 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const carSub = [plate, b.data.vehicle?.vin ? `VIN ${b.data.vehicle.vin}` : null].filter(Boolean).join(" · ");
   // У машины своя карточка: что ей делали, на сколько и кто на ней ездил.
   const carKey = vehicleKey(b.data.vehicle);
+  // «Записать снова» открывает форму с тем же человеком, той же машиной и той
+  // же услугой: этот клиент только что стоял перед вами, набирать его заново
+  // незачем.
+  const againHref = (() => {
+    const q = new URLSearchParams({ d: day, client: key });
+    if (carKey) q.set("car", carKey);
+    if (b.listing_id) q.set("s", String(b.listing_id));
+    return `/kalendar/novaya?${q.toString()}`;
+  })();
+
 
   // За ящиком на вебе — сетка того же дня: запись видно в контексте смены,
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
@@ -278,7 +288,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit">{primary.label}</button>
               </form>
             ) : (
-              <Link className="aui-btn aui-btn--primary aui-btn--lg" href="/kalendar/novaya">Записать снова</Link>
+              <Link className="aui-btn aui-btn--primary aui-btn--lg" href={againHref}>Записать снова</Link>
             )}
             {hasActions && (
               <Link className="aui-btn aui-btn--outline aui-btn--lg btn-sq" href={self("&do=1")} aria-label="Другие действия">

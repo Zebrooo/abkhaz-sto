@@ -18,6 +18,9 @@ export type ClientSummary = {
   plate: string | null;
   /** VIN последней машины — им ищут, когда номер уже сменился. */
   vin: string | null;
+  /** ВСЕ его номера и VIN: ищут и по позапрошлой машине, которую он продал. */
+  plates: string[];
+  vins: string[];
   visits: number;
   /** Последняя запись (ISO), по ней сортируем и показываем давность. */
   lastAt: string;
@@ -60,6 +63,8 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
       map.set(key, {
         key, name: nameOf(b), phone: phoneOf(b), car: carLine(b),
         plate: b.data.vehicle?.plate ?? null, vin: b.data.vehicle?.vin ?? null,
+        plates: b.data.vehicle?.plate ? [b.data.vehicle.plate] : [],
+        vins: b.data.vehicle?.vin ? [b.data.vehicle.vin] : [],
         visits: 1, lastAt: b.starts_at, spent,
       });
       continue;
@@ -75,6 +80,9 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
     }
     prev.plate = prev.plate ?? b.data.vehicle?.plate ?? null;
     prev.vin = prev.vin ?? b.data.vehicle?.vin ?? null;
+    const p = b.data.vehicle?.plate, v = b.data.vehicle?.vin;
+    if (p && !prev.plates.includes(p)) prev.plates.push(p);
+    if (v && !prev.vins.includes(v)) prev.vins.push(v);
     prev.phone = prev.phone ?? phoneOf(b);
     if (prev.name.startsWith("Клиент") && !nameOf(b).startsWith("Клиент")) prev.name = nameOf(b);
   }
@@ -105,7 +113,8 @@ export function clientCard(rows: readonly StoBookingRow[], key: string): ClientC
  * ищут хвостом — вслух называют последние знаки, а не все семнадцать.
  */
 export function matchClient(
-  c: Pick<ClientSummary, "name" | "phone" | "car"> & { plate?: string | null; vin?: string | null },
+  c: Pick<ClientSummary, "name" | "phone" | "car">
+    & { plate?: string | null; vin?: string | null; plates?: string[]; vins?: string[] },
   query: string,
 ): boolean {
   const q = query.trim().toLowerCase();
@@ -113,6 +122,9 @@ export function matchClient(
   const digits = q.replace(/\D+/g, "");
   if (digits.length >= 3 && c.phone && c.phone.replace(/\D+/g, "").includes(digits)) return true;
   const tight = foldLookalike(q.replace(/[\s-]+/g, ""));
-  if (tight.length >= 3 && [c.plate, c.vin].some(x => x && foldLookalike(x.replace(/[\s-]+/g, "")).includes(tight))) return true;
+  // Ищем по ВСЕМ его машинам, а не только по последней: человек называет
+  // номер той, на которой приезжал в прошлый раз, а с тех пор сменил машину.
+  const marks = [...(c.plates ?? []), ...(c.vins ?? []), c.plate, c.vin];
+  if (tight.length >= 3 && marks.some(x => x && foldLookalike(x.replace(/[\s-]+/g, "")).includes(tight))) return true;
   return `${c.name} ${c.car ?? ""}`.toLowerCase().includes(q);
 }

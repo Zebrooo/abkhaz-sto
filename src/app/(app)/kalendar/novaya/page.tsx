@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { can } from "@/lib/access";
 import { requireSection } from "@/lib/context";
+import { dayWindow } from "@/lib/stats";
 import { busyIntervals, countPending, recentBookings } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
+import { DayPick } from "@/components/DayPick";
 import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
-import { carsByClient } from "@/lib/vehicles";
+import { carsByClient, clientVehicles } from "@/lib/vehicles";
 import { ClientPick } from "@/components/ClientPick";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
@@ -79,6 +81,15 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
     );
   }
 
+  // Пришли из отчёта («Записать на эту работу») — «Отмена» и стрелка назад
+  // обязаны вернуть в отчёт, а не в список дня: человек стоял в отчёте.
+  const backRaw = pick(sp.back);
+  const backHref = backRaw.startsWith("/") && !backRaw.startsWith("//") ? backRaw : `/segodnya?d=${day}`;
+
+  // Месяц маленького календаря живёт в адресе: открытый календарик переживает
+  // переход по месяцам и «назад».
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(pick(sp.m)) ? pick(sp.m) : "";
+
   const stepRaw = Number(pick(sp.step));
   const step = stepRaw === 1 || stepRaw === 2 ? stepRaw : 0;
   const postRaw = Number(pick(sp.post));
@@ -123,8 +134,21 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   //     машины: человек уже наш, перенабирать имя и номер незачем;
   //  2) возврат из отказа (?n=&ph=&v=&pl=&vin=) — иначе опечатка в VIN
   //     стирала бы всё, что набрали за стойкой.
-  const fromCard = known.find(c => c.key === pick(sp.client)) ?? null;
-  const fromCardCar = fromCard ? (cars.get(fromCard.key)?.[0] ?? null) : null;
+  const wantClient = pick(sp.client);
+  const wantCar = pick(sp.car);
+  // Клиента ищем в свежем хвосте, а если его там нет — по всей доступной
+  // истории: «записать снова» человека, который был год назад, обязано
+  // работать, а не молча открыть пустую форму.
+  const fromCard = wantClient
+    ? (known.find(c => c.key === wantClient)
+      ?? (mayPick ? summarizeClients(await recentBookings(shop.id)).find(c => c.key === wantClient) ?? null : null))
+    : null;
+  const myCars = fromCard ? (cars.get(fromCard.key) ?? clientVehicles(history, fromCard.key).map(v => ({
+    key: v.key, name: v.name, plate: v.plate, vin: v.vin,
+  }))) : [];
+  // Пришли с карточки машины — подставляем её, а не самую свежую машину
+  // владельца: у человека их несколько, и приехал он на этой.
+  const fromCardCar = (wantCar ? myCars.find(c => c.key === wantCar) ?? null : null) ?? myCars[0] ?? null;
   const initial = {
     name: pick(sp.n) || fromCard?.name || "",
     phone: pick(sp.ph) || fromCard?.phone || "",
@@ -161,21 +185,28 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const fromBooking = /^\d+$/.test(pick(sp.fromBooking)) ? pick(sp.fromBooking) : "";
   const fromReport = !!(fromInspection && fromDefect && fromBooking);
 
-  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null; all?: boolean };
+  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null; all?: boolean; m?: string | null };
   const href = (over: Over) => {
-    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, all: showAll, ...over };
+    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, all: showAll, m: month, ...over };
     const q = new URLSearchParams({ d: v.d, s: String(v.s) });
     if (v.step) q.set("step", String(v.step));
     if (v.post) q.set("post", String(v.post));
     if (v.t) q.set("t", v.t);
     if (v.all) q.set("all", "1");
+    if (v.m) q.set("m", v.m);
     if (fromReport) { q.set("fromInspection", fromInspection); q.set("defect", fromDefect); q.set("fromBooking", fromBooking); }
+    // Набранное и подставленное едет с собой по всем переходам: выбор дня не
+    // должен стирать клиента, машину и дорогу назад.
+    for (const [k, val] of Object.entries({
+      client: wantClient, car: wantCar, back: backRaw,
+      n: pick(sp.n), ph: pick(sp.ph), v: pick(sp.v), pl: pick(sp.pl), vin: pick(sp.vin),
+    })) if (val) q.set(k, val);
     return `/kalendar/novaya?${q.toString()}`;
   };
 
   return (
     <>
-      <ScreenHead title="Новая запись" sub={STEPS[step].sub} back={`/segodnya?d=${day}`} unread={pending} />
+      <ScreenHead title="Новая запись" sub={STEPS[step].sub} back={backHref} unread={pending} />
       <div className="page stack nb" data-step={step}>
         <div className="head">
           <div>
@@ -196,6 +227,8 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
         <form action={createManualAction} className="nb-box">
           <input type="hidden" name="shopId" value={shop.id} />
           <input type="hidden" name="day" value={day} />
+          {/* Откуда пришли — чтобы отказ не потерял дорогу назад в отчёт. */}
+          {backRaw && <input type="hidden" name="back" value={backRaw} />}
           <input type="hidden" name="listingId" value={svc.listingId} />
           <input type="hidden" name="hhmm" value={chosen?.hhmm ?? ""} />
           {postNo && <input type="hidden" name="postNo" value={postNo} />}
@@ -246,6 +279,16 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                       </Link>
                     ))}
                   </div>
+                  {/* Чипы — ближайшие дни, а записывают и на октябрь: тут
+                      календарик на любой день вперёд. */}
+                  <DayPick
+                    day={day}
+                    month={month}
+                    label={day === today ? "Другой день" : dayTitle(day)}
+                    dayHref={d => href({ d, t: null, m: null })}
+                    monthHref={m => href({ m })}
+                    isOff={d => dayWindow(schedule, d).off}
+                  />
                   <div className="nb-l nb-l-post">Пост</div>
                   <div className="chips">
                     <Link className="chip" href={href({ post: null, t: null })} aria-current={postNo === null ? "page" : undefined}>
@@ -308,7 +351,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                 <Icon name="chevron" size={18} />
               </Link>
             )}
-            <Link className="aui-btn aui-btn--outline aui-btn--md nb-cancel" href={`/segodnya?d=${day}`}>Отмена</Link>
+            <Link className="aui-btn aui-btn--outline aui-btn--md nb-cancel" href={backHref}>Отмена</Link>
             <Link className="aui-btn aui-btn--primary aui-btn--lg nb-next" href={href({ step: nextStep(step, chosen !== null) })}>Далее</Link>
             <button className="aui-btn aui-btn--primary aui-btn--lg nb-submit" type="submit">Записать</button>
           </div>

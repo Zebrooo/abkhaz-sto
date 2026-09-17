@@ -12,7 +12,9 @@ import { can, isStoRole, type Section } from "@/lib/access";
 import { blockIfViewing, serviceContext, type ServiceContext } from "@/lib/context";
 import { assignBookingMaster, createMaster, updateMaster } from "@/lib/api/masters";
 import { inviteMember, setMemberActive, setMemberRole } from "@/lib/api/members";
-import { count } from "@/lib/format";
+import { count, todayLocal } from "@/lib/format";
+import { dayBookings } from "@/lib/bookings";
+import { postCount } from "@/lib/mywork";
 import { normalizePhone } from "@/lib/phone";
 
 function back(path: string, q: Record<string, string | undefined>): never {
@@ -158,11 +160,15 @@ export async function updateMasterAction(fd: FormData) {
 
   const fire = str(fd, "fire");
   if (fire === "1" || fire === "0") {
-    if (c.role !== "owner") back("/mastera", { ...sheet, err: "Уволить и вернуть в штат может только хозяин сервиса" });
     const active = fire === "0";
+    // Отказ по увольнению возвращаем в СПИСОК, а не в шторку правки: после
+    // «Вернуть в штат» шторка открылась бы с кнопкой «Уволить» — ровно
+    // наоборот тому, что человек делал.
+    const fireBack = active ? { all: "1" } : sheet;
+    if (c.role !== "owner") back("/mastera", { ...fireBack, err: "Уволить и вернуть в штат может только хозяин сервиса" });
     const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, active });
     revalidateMasters();
-    if (!res.ok) back("/mastera", { ...sheet, err: res.error });
+    if (!res.ok) back("/mastera", { ...fireBack, err: res.error });
     const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
     back("/mastera", {
       ok: active ? `${res.data.master.name} снова в штате` : `${res.data.master.name} уволен — записи остались на постах`,
@@ -175,11 +181,17 @@ export async function updateMasterAction(fd: FormData) {
   }
 
   const name = str(fd, "name").slice(0, 80);
-  if (!name) back("/mastera", { ...sheet, err: "Имя мастера обязательно" });
   const speciality = str(fd, "speciality").slice(0, 80);
+  // Набранное несём обратно в адрес: отказ сайта не должен стирать
+  // исправленное имя — человек правил его при мастере, а не по памяти.
+  const typed = { ...sheet, n: name || undefined, sp: speciality || undefined };
+  if (!name) back("/mastera", { ...typed, err: "Имя мастера обязательно" });
   const postRaw = str(fd, "postNo");
   const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
-  if (postNo !== null && (!Number.isInteger(postNo) || postNo <= 0)) back("/mastera", { ...sheet, err: "Такого поста у сервиса нет" });
+  const posts = postCount(c.shop.schedule?.posts ?? undefined, await dayBookings(c.shop.id, todayLocal()));
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > posts)) {
+    back("/mastera", { ...typed, err: `Такого поста у сервиса нет: их ${posts}` });
+  }
 
   const wasPostRaw = str(fd, "wasPostNo");
   const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);
@@ -192,7 +204,7 @@ export async function updateMasterAction(fd: FormData) {
 
   const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, ...patch });
   revalidateMasters();
-  if (!res.ok) back("/mastera", { ...sheet, err: res.error });
+  if (!res.ok) back("/mastera", { ...typed, err: res.error });
   const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
   back("/mastera", {
     ok: `Сохранено: ${res.data.master.name}`,

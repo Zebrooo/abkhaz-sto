@@ -75,8 +75,10 @@ export function ClientPick({ clients, initial }: { clients: readonly KnownClient
     setPicked(c);
     // Машину подставляем, только если поля пустые: человек мог уже написать,
     // на чём клиент приехал в этот раз, и затирать это нельзя.
+    // Название, номер и VIN берём У ОДНОЙ машины — свежей. Иначе марка была
+    // бы от одной, а номер от другой, и в запись уехала бы химера.
     const car = c.cars[0] ?? null;
-    if (c.car && !vehicle.trim()) setVehicle(c.car);
+    if (!vehicle.trim() && (car?.name || c.car)) setVehicle(car?.name ?? c.car ?? "");
     if (car?.plate && !plate.trim()) setPlate(car.plate);
     if (car?.vin && !vin.trim()) setVin(car.vin);
     setOpen(false);
@@ -219,7 +221,9 @@ export function ClientPick({ clients, initial }: { clients: readonly KnownClient
           <span>VIN</span>
           <input
             name="vin"
-            maxLength={17}
+            // Вставляют VIN и с пробелами, и с дефисами: режем по факту на
+            // сервере, а не обрезаем на 17-м знаке прямо в поле.
+            maxLength={25}
             placeholder="17 знаков"
             autoComplete="off"
             autoCapitalize="characters"

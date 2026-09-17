@@ -71,7 +71,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ key: s
             </div>
           </div>
           <div className="hero-actions">
-            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}${card.owners[0] ? `&client=${encodeURIComponent(card.owners[0].key)}` : ""}`}>Записать</Link>
+            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}${card.owners[0] ? `&client=${encodeURIComponent(card.owners[0].key)}` : ""}&car=${encodeURIComponent(card.key)}`}>Записать</Link>
           </div>
         </div>
 

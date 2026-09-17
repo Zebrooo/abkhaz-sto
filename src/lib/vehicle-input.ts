@@ -57,18 +57,30 @@ export function vinProblem(raw: string | null | undefined): string | null {
 const PLATE_MIN = 4;
 
 /**
+ * На номере есть и буквы, и цифры — в любой стране, куда к нам приезжают.
+ * Проверка нестрогая (формат у Абхазии, России и Грузии разный), но она
+ * отсекает то, из-за чего ломается вся склейка машин: случайно набранное в
+ * поле номера слово вроде «привезёт вечером» стало бы ключом карточки.
+ */
+const PLATE_SHAPE = /^(?=.*\d)(?=.*[A-ZА-ЯЁ])[A-ZА-ЯЁ0-9]{4,12}$/;
+
+/**
  * Госномер так, как он попадёт в запись: без лишних пробелов, в верхнем
  * регистре и написанием человека. Сравнивать его будет normalizePlate
  * (lib/vehicles.ts) — там кириллица схлопывается, здесь нет.
  */
 export function plateInput(raw: string | null | undefined): string | null {
-  const s = (raw ?? "").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 12);
-  return s.replace(/[\s-]+/g, "").length >= PLATE_MIN ? s : null;
+  const s = (raw ?? "").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 16);
+  const tight = s.replace(/[\s-]+/g, "");
+  return tight.length >= PLATE_MIN && PLATE_SHAPE.test(tight) ? s : null;
 }
 
-/** «Похоже на номер, но коротко» — единственная ошибка, о которой стоит сказать. */
+/** Что не так с набранным номером. null — пусто или похоже на номер. */
 export function plateProblem(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
-  return plateInput(s) ? null : "Госномер короче, чем бывает — проверьте";
+  if (plateInput(s)) return null;
+  const tight = s.replace(/[\s-]+/g, "");
+  if (tight.length < PLATE_MIN) return "Госномер короче, чем бывает — проверьте";
+  return "Госномер — буквы и цифры с таблички, без лишних слов";
 }

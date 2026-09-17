@@ -1710,6 +1710,57 @@ svg { display: block; }
 .mv-chips { margin-top: 12px; }
 .mv-chips form { display: contents; }
 
+/* ─── Маленький календарь ─── */
+/* Открывается обычным <details>, поэтому и работает без единой строчки JS.
+   Всплывает поверх экрана: на телефоне он растянулся бы на пол-страницы и
+   утащил вниз всё, что под ним. */
+.dp { position: relative; }
+.dp-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border-radius: var(--radius-pill); border: .75px solid var(--m-hair); background: #fff;
+  font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; list-style: none; white-space: nowrap;
+}
+.dp-btn::-webkit-details-marker { display: none; }
+.dp[open] .dp-btn { background: var(--warm); border-color: var(--accent); color: var(--accent); }
+.dp-btn > :last-child { transform: rotate(90deg); opacity: .6; }
+.dp[open] .dp-btn > :last-child { transform: rotate(-90deg); }
+.dp-box {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; width: 288px; padding: 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg, 0 18px 40px rgba(16, 18, 22, .16));
+}
+.dp-head { display: flex; align-items: center; gap: 8px; }
+.dp-title { flex: 1; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
+.dp-nav {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: 9px; color: var(--muted);
+}
+.dp-nav:hover { background: var(--bg-2); color: var(--ink); }
+.dp-nav > svg { transform: rotate(180deg); }
+.dp-next > svg { transform: none; }
+.dp-week, .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-week { margin-top: 10px; }
+.dp-week > span { text-align: center; font-size: 11px; color: var(--muted-2); padding-bottom: 4px; }
+.dp-day {
+  position: relative; display: flex; align-items: center; justify-content: center; height: 34px;
+  border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--ink);
+}
+.dp-day:hover { background: var(--bg-2); }
+.dp-out { color: var(--muted-2); font-weight: 500; }
+.dp-day.is-off { color: var(--muted-2); }
+.dp-day.is-today { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.dp-day.is-on { background: var(--accent); color: #fff; }
+.dp-day.is-on:hover { background: var(--accent); }
+/* Точка — «в этот день есть живые записи». Не число: в клетку 34px оно не
+   влезает, а взгляду нужно только «густо или пусто». */
+.dp-dot { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+.dp-day.is-on .dp-dot { background: #fff; }
+.dp-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.dp-today { font-size: 12.5px; font-weight: 600; color: var(--accent); padding: 4px; }
+/* На узком телефоне календарик прижимается к правому краю экрана. */
+@media (max-width: 560px) {
+  .dp-box { left: auto; right: 0; width: min(288px, calc(100vw - 32px)); }
+}
+
 /* ─── Мой пост ─── */
 /* Тёмная карточка мастера — как выручка у хозяина: белым по --ink. */
 .mw-hero { --dark-text-2: #a3aab6; background: var(--ink); color: #fff; border-radius: 18px; padding: 16px; }

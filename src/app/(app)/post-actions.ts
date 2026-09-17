@@ -86,7 +86,10 @@ export async function updateMyMasterAction(fd: FormData) {
   const speciality = String(fd.get("speciality") ?? "").trim().slice(0, 80);
   const postRaw = String(fd.get("postNo") ?? "").trim();
   const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
-  if (postNo !== null && (!Number.isInteger(postNo) || postNo <= 0)) back({ do: "me", err: "Такого подъёмника у сервиса нет" });
+  const posts = postCount(c.shop.schedule?.posts ?? undefined, await dayBookings(c.shop.id, todayLocal()));
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > posts)) {
+    back({ do: "me", err: `Такого подъёмника у сервиса нет: их ${posts}` });
+  }
 
   const wasPostRaw = String(fd.get("wasPostNo") ?? "").trim();
   const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);

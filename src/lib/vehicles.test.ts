@@ -270,3 +270,54 @@ describe("vehiclePast — что машине уже делали", () => {
     expect(vehiclePast([now, ...rows], now, 3).done).toBe(8);
   });
 });
+
+describe("VIN и склейка карточек", () => {
+  const vin = "JN1TCNT31U0012345";
+
+  it("перебили номер: одна карточка, номер — свежий", () => {
+    const list = summarizeVehicles([
+      row({ id: 2, at: "2026-09-15T06:00:00Z", plate: "Х999ХХ01", vin }),
+      row({ id: 1, at: "2026-05-01T06:00:00Z", plate: "А123АВ01", vin }),
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0].visits).toBe(2);
+    expect(list[0].plate).toBe("X999XX01");
+    expect(list[0].key).toBe(`v${vin}`);
+  });
+
+  it("запись без VIN и запись с VIN на один номер — одна машина", () => {
+    const list = summarizeVehicles([
+      row({ id: 2, at: "2026-09-15T06:00:00Z", plate: "А123АВ01", vin }),
+      row({ id: 1, at: "2026-05-01T06:00:00Z", plate: "А123АВ01" }),
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0].visits).toBe(2);
+  });
+
+  it("старая ссылка по номеру открывает ту же карточку", () => {
+    const rows = [
+      row({ id: 2, at: "2026-09-15T06:00:00Z", plate: "Х999ХХ01", vin }),
+      row({ id: 1, at: "2026-05-01T06:00:00Z", plate: "А123АВ01", vin }),
+    ];
+    expect(vehicleCard(rows, "pA123AB01")?.history.map(b => b.id)).toEqual([2, 1]);
+    expect(vehicleCard(rows, `v${vin}`)?.history.map(b => b.id)).toEqual([2, 1]);
+  });
+
+  it("один номер и разные VIN — две машины, а не одна", () => {
+    const list = summarizeVehicles([
+      row({ id: 1, at: "2026-09-15T06:00:00Z", plate: "А123АВ01", vin }),
+      row({ id: 2, at: "2026-09-01T06:00:00Z", plate: "А123АВ01", vin: "XTA21099010000123" }),
+    ]);
+    expect(list).toHaveLength(2);
+  });
+
+  it("машины с VIN, но без номера, у разных клиентов не мешаются", () => {
+    // VIN есть только у нашей записи; у чужой — та же марка и год.
+    const now = row({ id: 100, at: "2026-09-17T06:00:00Z", plate: null, vin, status: "confirmed" });
+    const past = vehiclePast([
+      now,
+      row({ id: 101, at: "2026-04-01T06:00:00Z", plate: null, name: "Мария", phone: "+79409990022" }),
+    ], now);
+    expect(past.visits).toEqual([]);
+  });
+});

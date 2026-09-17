@@ -45,11 +45,17 @@ export async function setRoleViewAction(fd: FormData) {
   back({ ok: `Смотрите как ${STO_ROLE_LABEL[role].toLowerCase()} — кнопки и пути теперь его. Это просмотр: ничего не сохраняется` });
 }
 
-/** Кнопка «вернуться к своей роли» из полосы примерки: работает с любого экрана. */
-export async function clearRoleViewAction() {
+/**
+ * Кнопка «вернуться к своей роли» из полосы примерки: работает с любого
+ * экрана и возвращает на него же. Уводить человека на первый экран роли
+ * значило бы терять то, что он смотрел; а если этот экран его роли закрыт,
+ * гейт сам отправит куда надо.
+ */
+export async function clearRoleViewAction(fd: FormData) {
   const c = await serviceContext();
   if (!c) redirect("/vhod");
   await clearRoleView();
   revalidateShell();
-  redirect("/");
+  const here = String(fd.get("here") ?? "").trim();
+  redirect(here.startsWith("/") && !here.startsWith("//") ? here : "/");
 }

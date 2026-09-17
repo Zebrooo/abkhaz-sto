@@ -13,7 +13,9 @@ import { requireSection } from "@/lib/context";
 import { dayShort, dayTitle, minutesLabel, rub, todayLocal } from "@/lib/format";
 import { bySeverity, countBySeverity, kmLabel } from "@/lib/inspection";
 import { nodeName } from "@/lib/inspection-nodes";
+import { clientKey } from "@/lib/clients";
 import { listServices } from "@/lib/services";
+import { vehicleKey } from "@/lib/vehicles";
 import { localDay, localHHMM } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -130,6 +132,14 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const q = new URLSearchParams({ d: todayLocal(), fromInspection: String(r.inspectionId), defect: String(defectId), fromBooking: String(b.id) });
     const svc = services.find(s => s.title === work);
     if (svc) q.set("s", String(svc.listingId));
+    // Клиент и машина — те же, что в этой записи: форма открывается
+    // заполненной, а не пустой, и админ не набирает номер заново.
+    q.set("client", clientKey(b));
+    const carKey = vehicleKey(b.data.vehicle);
+    if (carKey) q.set("car", carKey);
+    // Возврат — в отчёт, а не в список дня: «Отмена» из формы, открытой
+    // отсюда, обязана вернуть туда, откуда её открыли.
+    q.set("back", self);
     return `/kalendar/novaya?${q.toString()}`;
   };
 

@@ -67,6 +67,13 @@ describe("plateInput", () => {
     expect(plateInput(null)).toBe(null);
   });
 
+  it("слова номером не считаются: иначе они станут ключом карточки машины", () => {
+    expect(plateInput("привезёт вечером")).toBe(null);
+    expect(plateInput("123456")).toBe(null);
+    expect(plateInput("АВСДЕ")).toBe(null);
+    expect(plateProblem("привезёт вечером")).toBe("Госномер — буквы и цифры с таблички, без лишних слов");
+  });
+
   it("problem молчит на пустом и ругается на коротком", () => {
     expect(plateProblem("")).toBe(null);
     expect(plateProblem("А123АВ")).toBe(null);

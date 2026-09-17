@@ -1,6 +1,6 @@
 import { serviceContext } from "@/lib/context";
 import { STO_ROLE_LABEL } from "@/lib/access";
-import { clearRoleViewAction } from "@/app/(app)/view-actions";
+import { ViewBar } from "@/components/ViewBar";
 import { countPending } from "@/lib/bookings";
 import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
@@ -76,12 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* ПРИМЕРКА РОЛИ ВИДНА ВСЕГДА. Хозяин, забывший, что смотрит глазами
           мастера, решит, что половина приложения пропала. Полоса висит над
           всеми экранами и уводит обратно одной кнопкой. */}
-      {ctx.viewing && (
-        <form action={clearRoleViewAction} className="view-bar">
-          <span className="view-bar-t">Вы смотрите как {STO_ROLE_LABEL[role].toLowerCase()}: кнопки и пути его. Это просмотр — ничего не сохраняется</span>
-          <button className="aui-btn aui-btn--ghost aui-btn--sm" type="submit">Вернуться к своей роли</button>
-        </form>
-      )}
+      {ctx.viewing && <ViewBar roleLabel={STO_ROLE_LABEL[role].toLowerCase()} />}
       <div className="app-body">
         <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} inspectHref={inspect} />
         <main className="main">{children}</main>

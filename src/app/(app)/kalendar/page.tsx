@@ -7,10 +7,12 @@ import { CalendarDrag, type DragDay } from "@/components/CalendarDrag";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
+import { DayPick } from "@/components/DayPick";
 import { ScreenHead } from "@/components/ScreenHead";
 import { STATUS_SHORT } from "@/components/Status";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, rangeLabel, rub, todayLocal, weekStart } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
+import { addMonths, monthFirst, monthOf, safeMonth } from "@/lib/month";
 import { busyBlocks, toDragBlock } from "@/lib/drag";
 import { dayOfWeek, freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
 import { canReschedule } from "@/lib/sto/transitions";
@@ -24,9 +26,9 @@ const FILTERS = [["all", "Все"], ["new", "Ждут"], ["confirmed", "Подт
 type Filter = (typeof FILTERS)[number][0];
 const isFilter = (s: string): s is Filter => FILTERS.some(([k]) => k === s);
 
-/** Адрес недели: день, фильтр и незакрытый перенос живут в запросе. */
-const href = (day: string, filter: Filter, move?: number | null) =>
-  `/kalendar?d=${day}${filter === "all" ? "" : `&f=${filter}`}${move ? `&move=${move}` : ""}`;
+/** Адрес недели: день, фильтр, незакрытый перенос и открытый месяц живут в запросе. */
+const href = (day: string, filter: Filter, move?: number | null, month?: string) =>
+  `/kalendar?d=${day}${filter === "all" ? "" : `&f=${filter}`}${move ? `&move=${move}` : ""}${month ? `&m=${month}` : ""}`;
 
 /** Фильтр статусов: стоит и в шапке веба, и в блоке управления телефона. */
 function StatusChips({ day, filter, counts, move }: { day: string; filter: Filter; counts: Record<Filter, number>; move?: number | null }) {
@@ -65,8 +67,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   const f = pick(sp.f);
   const filter: Filter = isFilter(f) ? f : "all";
   const ws = weekStart(day);
-
-  const weekRows = await listBookings(shop.id, localTime(ws, "00:00"), localTime(addDays(ws, 7), "00:00"));
+  // Маленький календарь: месяц в адресе, точки под числами — по записям
+  // месяца. Запрос один и тот же по границам месяца, поэтому точки честные,
+  // а не «есть что-то на этой неделе».
+  // Календарь открыт ровно тогда, когда месяц есть в адресе: закрытый не
+  // стоит экрану ни одного запроса.
+  const month = pick(sp.m) ? safeMonth(pick(sp.m), day) : "";
+  const [weekRows, monthRows] = await Promise.all([
+    listBookings(shop.id, localTime(ws, "00:00"), localTime(addDays(ws, 7), "00:00")),
+    month
+      ? listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00"))
+      : Promise.resolve([]),
+  ]);
+  const monthCounts: Record<string, number> = {};
+  for (const b of monthRows.filter(isLive)) {
+    const d = localDay(new Date(b.starts_at));
+    monthCounts[d] = (monthCounts[d] ?? 0) + 1;
+  }
   const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...weekRows.map(r => r.post_no));
 
@@ -138,6 +155,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
             <Link href={href(today, filter, moving?.id)}>Сегодня</Link>
             <Link className="ico" href={href(addDays(day, 7), filter, moving?.id)} aria-label="Следующая неделя"><Icon name="chevron" size={16} /></Link>
           </div>
+          <DayPick
+            day={day}
+            month={month}
+            label={dayTitle(day)}
+            counts={monthCounts}
+            openHref={href(day, filter, moving?.id, monthOf(day))}
+            closeHref={href(day, filter, moving?.id)}
+            dayHref={d => href(d, filter, moving?.id)}
+            monthHref={m => href(day, filter, moving?.id, m)}
+            isOff={d => dayWindow(shop.schedule, d).off}
+          />
           <div className="head-tail">
             <ModeSeg day={day} />
             <StatusChips day={day} filter={filter} counts={counts} move={moving?.id} />
@@ -155,6 +183,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
             <Link href={href(addDays(day, 7), filter, moving?.id)} aria-label="Следующая неделя"><Icon name="chevron" size={17} /></Link>
           </div>
           <StatusChips day={day} filter={filter} counts={counts} move={moving?.id} />
+          <DayPick
+            day={day}
+            month={month}
+            label={dayTitle(day)}
+            counts={monthCounts}
+            openHref={href(day, filter, moving?.id, monthOf(day))}
+            closeHref={href(day, filter, moving?.id)}
+            dayHref={d => href(d, filter, moving?.id)}
+            monthHref={m => href(day, filter, moving?.id, m)}
+            isOff={d => dayWindow(shop.schedule, d).off}
+          />
         </div>
 
         <Flash ok={pick(sp.ok)} err={pick(sp.err)} />

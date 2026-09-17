@@ -14,6 +14,7 @@ import { fetchReport } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
 import { countPending, getBooking } from "@/lib/bookings";
 import { carBrief } from "@/lib/car-brief";
+import { can } from "@/lib/access";
 import { requireSection } from "@/lib/context";
 import { count, dayTitle, minutesLabel, rub } from "@/lib/format";
 import {
@@ -109,9 +110,14 @@ export default async function InspectionPage({ params, searchParams }: { params:
   ]);
   const prev = brief.prevKm;
   const last = brief.past.visits[0] ?? null;
+  // Номер и VIN из самой записи — по ним мастер сверяет, ту ли машину подали.
+  const carId = [b.data.vehicle?.plate, b.data.vehicle?.vin ? `VIN ${b.data.vehicle.vin}` : null].filter(Boolean).join(" · ");
   const total = report?.ok ? report.data.total : null;
   const starter = isStarterSet(frequent);
-  const finishLabel = defects.length === 0 ? "Всё в норме — закрыть осмотр" : total == null ? "Готово · к отчёту" : `Готово · отчёт на ${rub(total)}`;
+  // Подпись обещает ровно то, что произойдёт: это переход к отчёту, а не
+  // закрытие осмотра — закрывать его приложению пока нечем (маршрута
+  // «завершить осмотр» у сайта нет, см. docs/API-sushchnosti.md).
+  const finishLabel = defects.length === 0 ? "Замечаний нет — к отчёту" : total == null ? "Готово · к отчёту" : `Готово · отчёт на ${rub(total)}`;
 
   // Ошибка формы из шторки должна быть видна в самой шторке: под затемнением
   // карточку «Не сохранилось» никто не прочитает.
@@ -181,9 +187,20 @@ export default async function InspectionPage({ params, searchParams }: { params:
               <div className="card ins-brief">
                 <div className="ins-brief-h">
                   <span className="card-t">Что мы знаем об этой машине</span>
-                  <Link className="ins-brief-more" href={`/mashiny/${brief.past.key}`}>Карточка машины</Link>
+                  {/* Карточка машины лежит в разделе «Клиенты», а мастеру он
+                      закрыт: ссылка, которая молча уводит его на «Мой пост»,
+                      хуже, чем отсутствие ссылки. */}
+                  {can(ctx.role, "clients") && (
+                    <Link className="ins-brief-more" href={`/mashiny/${brief.past.key}`}>Карточка машины</Link>
+                  )}
                 </div>
                 <div className="ins-brief-rows">
+                  {carId && (
+                    <div className="ins-brief-r">
+                      <span className="ins-brief-k">Номер и VIN</span>
+                      <span className="ins-brief-v">{carId}</span>
+                    </div>
+                  )}
                   <div className="ins-brief-r">
                     <span className="ins-brief-k">История</span>
                     <span className="ins-brief-v">

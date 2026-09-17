@@ -7,10 +7,11 @@ import { clientName, vehicleLine } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
+import { Sheet } from "@/components/Sheet";
 import { addDays, count, initials, minutesLabel, shortName, timeRange, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
 import { busyMinutes, jobNow, jobsAfter, jobsDue, minutesLeft, postCount } from "@/lib/mywork";
-import { leavePostAction, takePostAction } from "@/app/(app)/post-actions";
+import { leavePostAction, takePostAction, updateMyMasterAction } from "@/app/(app)/post-actions";
 import { REPORT_BADGE } from "@/lib/reports";
 import { dayWindow } from "@/lib/stats";
 import { localHHMM, localTime } from "@/lib/sto/slots";
@@ -81,6 +82,17 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   // В шапке телефона — только имя: «Пост 2 · Леван», фамилия не влезает.
   const title = postNo ? `Пост ${postNo}${me ? ` · ${me.name.trim().split(/\s+/)[0]}` : ""}` : "Мой пост";
   const self = "/moi-raboty";
+  // «Моя карточка» — единственное место, где мастер правит себя: раздел
+  // «Мастера» ему закрыт (там чужие люди и выручка). Пост в шторке живёт в
+  // адресе, как и на экране «Мастера»: экран серверный.
+  const meOpen = pick(sp.do) === "me" && me !== null;
+  const mePostRaw = Number(pick(sp.post));
+  // После отказа пост берём из адреса, иначе повторное «Сохранить» тихо
+  // вернуло бы прежний подъёмник.
+  const mePost = pick(sp.post) === ""
+    ? (me?.postNo ?? 0)
+    : (Number.isInteger(mePostRaw) && mePostRaw >= 0 ? mePostRaw : 0);
+  const ME_FORM = "my-master";
 
   return (
     <>
@@ -93,7 +105,9 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
 
-        <Flash ok={pick(sp.ok)} err={pick(sp.err)} />
+        {/* Пока открыта шторка, ошибка живёт в ней: одна и та же строка дважды
+            выглядит как две беды. */}
+        <Flash ok={pick(sp.ok)} err={meOpen ? "" : pick(sp.err)} />
 
         <div className="mw-hero">
           <div className="person">
@@ -135,8 +149,15 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
               </form>
             </div>
           )}
-          {ctx.masterId === null && (
-            <p className="hint">Учётка не привязана к мастеру: отметка живёт на этом телефоне, а в отчёте не будет имени. Привязать может хозяин в «Доступах».</p>
+          {me ? (
+            <div className="note-b">
+              <Link className="aui-btn aui-btn--outline aui-btn--sm" href={`${self}?do=me`}>Моя карточка</Link>
+            </div>
+          ) : (
+            <p className="hint">
+              Учётка не привязана к мастеру: отметка живёт на этом телефоне, а в отчёте не будет имени.
+              Привязку учётки к мастеру сайт пока не отдаёт — попросили.
+            </p>
           )}
         </div>
 
@@ -236,6 +257,44 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
       </div>
+
+      {meOpen && me && (
+        <Sheet
+          closeHref={self}
+          title="Моя карточка"
+          sub="имя, специальность и подъёмник по умолчанию"
+          footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={ME_FORM}>Сохранить</button>}
+        >
+          <form id={ME_FORM} action={updateMyMasterAction} className="sheet-stack">
+            {pick(sp.err) && <Flash err={pick(sp.err)} />}
+            {/* Прежние значения — чтобы на сайт уехало только изменённое. */}
+            <input type="hidden" name="wasName" value={me.name} />
+            <input type="hidden" name="wasSpeciality" value={me.speciality ?? ""} />
+            <input type="hidden" name="wasPostNo" value={me.postNo ?? 0} />
+            <label className="fld">
+              <span>Имя</span>
+              <input name="name" defaultValue={me.name} maxLength={80} required autoFocus />
+            </label>
+            <label className="fld">
+              <span>Специальность</span>
+              <input name="speciality" defaultValue={me.speciality ?? ""} placeholder="Двигатель, диагностика" maxLength={80} />
+            </label>
+            <div className="fld">
+              <span>Подъёмник по умолчанию</span>
+              {/* Радиокнопки: выбор не уводит со страницы и не стирает имя. */}
+              <div className="rchips">
+                <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={mePost === 0} />Без поста</label>
+                {Array.from({ length: Math.max(posts, me.postNo ?? 0) }, (_, i) => i + 1).map(p => (
+                  <label key={p} className="chip">
+                    <input type="radio" name="postNo" value={p} defaultChecked={mePost === p} />Пост {p}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <p className="sheet-note">С этого поста начинается ваш день. Когда вы отмечаетесь на подъёмнике кнопкой выше, закрепление обновляется само.</p>
+          </form>
+        </Sheet>
+      )}
     </>
   );
 }

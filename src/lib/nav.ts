@@ -95,7 +95,7 @@ const SIDE_ITEM: Record<NavKey, SideDef> = {
 const SIDE_KEYS: Record<StoRole, readonly NavKey[]> = {
   master: ["inspect", "report", "chats"],
   admin: ["today", "mywork", "inspect", "report", "clients", "chats", "services", "schedule", "notifs"],
-  owner: ["dash", "today", "mywork", "inspect", "report", "masters", "services", "schedule", "notifs", "access"],
+  owner: ["dash", "today", "mywork", "inspect", "report", "clients", "chats", "masters", "services", "schedule", "notifs", "access"],
 };
 
 /** Левое меню рабочего места — в порядке макета. */
@@ -104,7 +104,7 @@ export function sideNav(role: StoRole): readonly SideDef[] {
 }
 
 /** Строки «Ещё»: что не поместилось во вкладки. «shop» — витрина на сайте. */
-export type MenuKey = "mywork" | "inspect" | "report" | "services" | "schedule" | "masters" | "chats" | "notifs" | "access" | "shop";
+export type MenuKey = "mywork" | "inspect" | "report" | "clients" | "services" | "schedule" | "masters" | "chats" | "notifs" | "access" | "shop";
 
 export const MENU: Record<StoRole, readonly MenuKey[]> = {
   master: ["inspect", "report", "chats", "services"],
@@ -112,7 +112,11 @@ export const MENU: Record<StoRole, readonly MenuKey[]> = {
   // «Мой пост» — и хозяину: в сервисе на два подъёмника он сам принимает
   // машину, и отметиться ему больше негде. Готовые отчёты нужны всегда: на
   // телефоне это его единственный путь к ним.
-  owner: ["mywork", "report", "services", "schedule", "masters", "notifs", "access", "shop"],
+  //
+  // «Клиенты» и «Чат» хозяину открыты правами, но ссылок на них у него не
+  // было НИГДЕ: ни во вкладках, ни в левом меню, ни здесь. На телефоне
+  // карточка клиента и переписка были недостижимы — «базы клиентов не вижу».
+  owner: ["mywork", "clients", "report", "chats", "services", "schedule", "masters", "notifs", "access", "shop"],
 };
 
 /**

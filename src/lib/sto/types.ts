@@ -39,6 +39,13 @@ export type StoBookingVehicleSnapshot = {
   model: string | null;
   year: number | null;
   plate: string | null;
+  /**
+   * VIN с кузова — необязательное поле: у старых записей его нет, и у машины
+   * с улицы без документов тоже. Номер перебивают и меняют вместе с
+   * продажей, VIN живёт с машиной, поэтому именно он склеивает историю
+   * ремонта. Миграции не требует — снимок лежит в data jsonb.
+   */
+  vin?: string | null;
 };
 
 export type StoBookingData = {

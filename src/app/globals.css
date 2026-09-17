@@ -192,7 +192,15 @@ svg { display: block; }
 .cli-hints .cli-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Машины выбранного клиента — чипами под полем машины. */
 .cli-cars { margin-top: -4px; }
-.cli-cars .chip[aria-current="true"] { background: var(--warm); border-color: var(--accent); color: var(--accent); }
+.cli-cars .chip[aria-current="true"], .cli-cars .chip[aria-pressed="true"] { background: var(--warm); border-color: var(--accent); color: var(--accent); }
+/* Госномер и VIN — в одну строку: два коротких поля рядом читаются как одно
+   «чем опознаём машину», а на телефоне становятся друг под другом. */
+.fld-row { display: flex; gap: 10px; }
+.fld-row > .fld { flex: 1; min-width: 0; }
+.fld-row input[name="plate"], .fld-row input[name="vin"] { text-transform: uppercase; }
+.fld-row input[name="vin"] { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.cli-vin-hint { padding: 0; margin-top: -2px; }
+@media (max-width: 520px) { .fld-row { flex-direction: column; gap: 12px; } }
 .num { font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--font-mono); }
 
@@ -1675,6 +1683,90 @@ svg { display: block; }
 .m-orphan > span { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--accent); }
 .m-orphan .aui-btn { flex: none; min-height: 32px; }
 .m-add { min-height: 52px; border-radius: 14px; background: #fff; }
+/* Карандаш правки мастера — рядом с переключателем смены, но не вместо
+   него: снять со смены нужно в одно нажатие, а править — редко. */
+.m-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; color: var(--muted); }
+.m-edit:hover { background: var(--bg-2); color: var(--ink); }
+.m-fired .ava { opacity: .6; }
+.m-fired-link { display: inline-block; padding: 4px 0; color: var(--muted); text-decoration: underline; }
+.m-invite { display: inline-block; padding: 2px 0; color: var(--accent); text-decoration: underline; }
+/* «Уволить» внизу шторки и без заливки: это не «сохранить». */
+.m-fire { align-self: flex-start; margin-top: 4px; color: var(--accent); }
+
+
+/* Полоса примерки роли: видна над всеми экранами, пока хозяин смотрит
+   чужими глазами. Тёплый фон, а не красный: это не ошибка, это режим. */
+.view-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; background: var(--warm); border-bottom: 1px solid var(--line);
+}
+.view-bar-t { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); text-wrap: pretty; }
+.view-bar .aui-btn { flex: none; background: #fff; }
+/* На телефоне кнопка уходит под текст: строка из четырёх слов рядом с
+   кнопкой в 390px не читается. */
+@media (max-width: 560px) { .view-bar { flex-direction: column; align-items: flex-start; gap: 8px; } }
+/* Выбор роли в «Ещё» — три чипа в ряд. */
+.mv-roles .card-s { text-wrap: pretty; }
+.mv-chips { margin-top: 12px; }
+.mv-chips form { display: contents; }
+
+/* ─── Маленький календарь ─── */
+/* Открывается обычным <details>, поэтому и работает без единой строчки JS.
+   Всплывает поверх экрана: на телефоне он растянулся бы на пол-страницы и
+   утащил вниз всё, что под ним. */
+.dp { position: relative; }
+.dp-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border-radius: var(--radius-pill); border: .75px solid var(--m-hair); background: #fff;
+  font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; list-style: none; white-space: nowrap;
+}
+.dp.is-open .dp-btn { background: var(--warm); border-color: var(--accent); color: var(--accent); }
+.dp-btn > :last-child { transform: rotate(90deg); opacity: .6; }
+.dp.is-open .dp-btn > :last-child { transform: rotate(-90deg); }
+.dp-box {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; width: 288px; padding: 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg, 0 18px 40px rgba(16, 18, 22, .16));
+}
+.dp-head { display: flex; align-items: center; gap: 8px; }
+.dp-title { flex: 1; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
+.dp-nav {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: 9px; color: var(--muted);
+}
+.dp-nav:hover { background: var(--bg-2); color: var(--ink); }
+.dp-nav > svg { transform: rotate(180deg); }
+.dp-next > svg { transform: none; }
+.dp-week, .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-week { margin-top: 10px; }
+.dp-week > span { text-align: center; font-size: 11px; color: var(--muted-2); padding-bottom: 4px; }
+.dp-day {
+  position: relative; display: flex; align-items: center; justify-content: center; height: 34px;
+  border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--ink);
+}
+.dp-day:hover { background: var(--bg-2); }
+.dp-out { color: var(--muted-2); font-weight: 500; }
+.dp-day.is-off { color: var(--muted-2); }
+.dp-day.is-today { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.dp-day.is-on { background: var(--accent); color: #fff; }
+.dp-day.is-on:hover { background: var(--accent); }
+/* Точка — «в этот день есть живые записи». Не число: в клетку 34px оно не
+   влезает, а взгляду нужно только «густо или пусто». */
+.dp-dot { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+.dp-day.is-on .dp-dot { background: #fff; }
+.dp-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.dp-close { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 4px; }
+.dp-today { font-size: 12.5px; font-weight: 600; color: var(--accent); padding: 4px; }
+/* В форме записи календарь стоит в потоке: карточка формы на вебе обрезает
+   всё, что вылезает за её рамку (.nb-box, overflow: hidden). */
+.dp-inline { display: block; }
+.dp-inline .dp-box {
+  position: static; width: auto; max-width: 320px; margin-top: 8px;
+  box-shadow: none; background: var(--bg-3);
+}
+/* На узком телефоне календарик прижимается к правому краю экрана. */
+@media (max-width: 560px) {
+  .dp-box { left: auto; right: 0; width: min(288px, calc(100vw - 32px)); }
+}
 
 /* ─── Мой пост ─── */
 /* Тёмная карточка мастера — как выручка у хозяина: белым по --ink. */

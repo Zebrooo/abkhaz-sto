@@ -15,10 +15,10 @@ import { redirect } from "next/navigation";
 import { can, HOME_PATH } from "@/lib/access";
 import { updateMaster } from "@/lib/api/masters";
 import { dayBookings } from "@/lib/bookings";
-import { serviceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
 import { postCount } from "@/lib/mywork";
-import { dropPostHold, savePostMark } from "@/lib/post-cookie";
+import { clearPostMarks, savePostMark } from "@/lib/post-cookie";
 
 const MY_POST = "/moi-raboty";
 
@@ -32,6 +32,9 @@ function back(q: Record<string, string | undefined>): never {
 async function ctx() {
   const c = await serviceContext();
   if (!c) redirect("/vhod");
+  // Отметка на подъёмнике в примерке тоже не ставится: она уходит в
+  // справочник сайта настоящим человеком, и хозяин «отметился бы» всерьёз.
+  blockIfViewing(c);
   if (!can(c.role, "bookings")) redirect(HOME_PATH[c.role]);
   return c;
 }
@@ -65,9 +68,54 @@ export async function takePostAction(fd: FormData) {
   });
 }
 
+/**
+ * Мастер правит СВОЮ строку справочника: имя, специальность и пост по
+ * умолчанию. Раздел «Мастера» ему закрыт и открывать его нельзя — там чужие
+ * люди, их смены и выручка, — поэтому своя карточка живёт здесь, на «Моём
+ * посту», и действие физически не умеет тронуть чужой masterId: он берётся
+ * из контекста, а не из формы.
+ *
+ * Патч частичный по той же причине, что и у хозяина (staff-actions.ts):
+ * шлём только изменённое, чтобы не переписать то, чего человек не трогал.
+ */
+export async function updateMyMasterAction(fd: FormData) {
+  const c = await ctx();
+  if (c.masterId === null) back({ err: "Учётка не привязана к мастеру — править нечего" });
+  const name = String(fd.get("name") ?? "").trim().slice(0, 80);
+  const speciality = String(fd.get("speciality") ?? "").trim().slice(0, 80);
+  const postRaw = String(fd.get("postNo") ?? "").trim();
+  // Набранное возвращаем в адрес: отказ не должен стирать то, что человек
+  // только что вписал про себя.
+  const typed = { do: "me", n: name || undefined, sp: speciality || undefined, post: postRaw || undefined };
+  if (!name) back({ ...typed, err: "Имя обязательно" });
+  const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
+  const posts = postCount(c.shop.schedule?.posts ?? undefined, await dayBookings(c.shop.id, todayLocal()));
+  const wasPostRaw = String(fd.get("wasPostNo") ?? "").trim();
+  const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);
+  // Закрепление мастера может стоять и на посту, которого нет в расписании
+  // (его правил хозяин) — не мешаем человеку сохранить свою же карточку.
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > Math.max(posts, wasPost ?? 0))) {
+    back({ ...typed, err: `Такого подъёмника у сервиса нет: их ${posts}` });
+  }
+
+  const patch = {
+    ...(name !== String(fd.get("wasName") ?? "").trim() ? { name } : {}),
+    ...(speciality !== String(fd.get("wasSpeciality") ?? "").trim() ? { speciality } : {}),
+    ...(postNo !== wasPost ? { postNo } : {}),
+  };
+  if (Object.keys(patch).length === 0) back({ ok: "Ничего не изменилось" });
+
+  const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId: c.masterId, ...patch });
+  revalidatePost();
+  back(res.ok ? { ok: "Карточка обновлена" } : { ...typed, err: res.error });
+}
+
 export async function leavePostAction() {
   const c = await ctx();
-  await dropPostHold();
+  // Принятые машины остаются за человеком: он их принял, и если вернётся
+  // после «ушёл со смены», список работ не должен начаться с чистого листа.
+  // Уходит только пост — записи чужого поста этому человеку больше не его.
+  await clearPostMarks(c, todayLocal());
   if (c.masterId !== null) {
     await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId: c.masterId, onShift: false });
   }

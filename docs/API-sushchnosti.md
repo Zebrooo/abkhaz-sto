@@ -85,6 +85,60 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 **Пока маршрута `/members/mine` нет**, в списке только свои витрины и роль у
 всех `owner` — ровно сегодняшнее поведение, прав оно не расширяет.
 
+### Просьба: связать учётку со строкой мастера
+
+`StoMember.masterId` в ответе есть, а поставить его нечем: `POST /members/invite`
+принимает только телефон и роль, `POST /masters` — только имя, специальность и
+пост (`userId?` в теле есть, но экран его не шлёт, потому что выбрать учётку
+хозяину негде). Из-за этого `ctx.masterId` у всех `null`, и приглашённый мастер
+работает (отметка на подъёмнике, осмотр, отчёт), но в отчёте остаётся без имени,
+а привязки записи к мастеру ему не достаются.
+
+Нужен один из двух маршрутов — любой, какой сайту удобнее:
+
+| Маршрут | Кому | Что |
+|---|---|---|
+| `POST /members/master` | `owner` | `{ shopId, actorUserId, userId, masterId \| null }` → `StoMember` |
+| или поле `masterId` в `POST /members/role` | `owner` | тем же телом, что и роль |
+
+Требования: одна учётка — не больше одной строки мастера в сервисе, и наоборот;
+`masterId: null` связь снимает; чужую строку мастера (другого сервиса) сайт не
+принимает. Приложение тогда покажет в «Доступах» выбор «кто это из мастеров», а
+в «Мастерах» — чья это учётка.
+
+---
+
+## Снимок машины в записи: VIN
+
+`StoBookingVehicleSnapshot` получил необязательное поле `vin`:
+
+```ts
+StoBookingVehicleSnapshot = { brand, model, year, plate, vin? }
+```
+
+Миграция не нужна — снимок лежит в уже существующем `data` jsonb. Но
+`src/lib/sto/types.ts` — **копия модуля сайта**, и та же правка обязана
+уехать в `abkhaz-auto` тем же текстом, иначе виджет записи и приложение
+начнут писать разные снимки.
+
+**Зачем.** Номер перебивают и меняют вместе с продажей, а «Лада Веста 2021»
+в городе не одна: без VIN история ремонта собирается по марке и году, то есть
+ненадёжно. Приложение спрашивает VIN и госномер отдельными полями при ручной
+записи и сравнивает машины сначала по VIN, потом по номеру
+(`src/lib/vehicle-input.ts`, `src/lib/vehicles.ts`).
+
+**Просьба к виджету записи на сайте:** когда клиент выбрал машину из гаража,
+класть в снимок `plate` и `vin` так же. Иначе у записей с сайта VIN будет
+виден только через `vehicle_id`, а у ручных — только из своего поля, и две
+записи одной машины не склеятся.
+
+**Просьба к `/api/sto/booking-event`:** при `event: "created"` и `source: "app"`
+сайт может сам достроить строке `client_id` по `data.client.phone` и
+`vehicle_id` по `data.vehicle.vin` (иначе по номеру) внутри гаража найденной
+учётки. Тело события расширять не нужно — снимок уже лежит в строке, сайт
+читает её по `bookingId`. Так приложению не нужен маршрут «найди учётку по
+телефону», то есть не появляется новый способ достать чужие данные.
+
 ---
 
 ## Мастера
@@ -97,7 +151,7 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 | `GET /masters?shopId&actorUserId` | `admin`, `owner` | `StoMaster[]` |
 | `GET /masters/load?shopId&actorUserId&from&to` | `admin`, `owner` | `MasterLoad[]` |
 | `POST /masters` | `owner` | создать |
-| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin`; свою строку (`postNo`, `onShift`) — сам мастер, см. ниже | патч → `{ master, orphaned }` |
+| `POST /masters/update` | `owner`; имя, специальность, пост и смену — и `admin`; свою строку (`postNo`, `onShift`, имя, специальность) — сам мастер, см. ниже | патч → `{ master, orphaned }` |
 | `GET /masters/bookings?shopId&actorUserId&from&to` | любому своему | `{ bookingId, masterId }[]` |
 | `POST /masters/assign` | `admin`, `owner` | `{ …, bookingId, masterId \| null }` |
 
@@ -125,6 +179,17 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 
 Автор отчёта — мастер **записи**, а не тот, кто сегодня стоит на посту: за
 день на посту могут смениться двое.
+
+### Просьба: правку мастера — и админу
+
+Сейчас всё, кроме `onShift`, правит только `owner`. За стойкой это мешает:
+опечатку в имени и перестановку человека на другой подъёмник делает админ,
+и дёргать ради этого хозяина незачем. Просьба разрешить `admin` патчить
+`name`, `speciality` и `postNo`.
+
+`active` (уволить и вернуть в штат) остаётся за `owner` — это решение о
+человеке, а не о сегодняшней смене. Приложение уже так и показывает: кнопка
+«Уволить» видна только хозяину, остальное — обоим.
 
 ### Мастер отмечается сам
 
@@ -241,6 +306,17 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 отправлять клиенту — он передаёт администратору, и `POST /reports/send`
 решает по роли `actorUserId`, какой это шаг.
 
+**Хозяин работает наравне.** В сервисе на два подъёмника он сам осматривает
+машину, сам правит смету и сам отправляет отчёт клиенту, поэтому `owner`
+назван в `/reports/item` и `/reports/send` явно. Приложение показывает ему эти
+кнопки (`src/lib/access.ts`) — если сайт возьмёт список ролей буквально без
+`owner`, сломается ровно та роль, под которой сегодня работают все.
+
+**Записывать на найденную работу мастеру нельзя.** `POST /reports/book-item`
+остаётся за стойкой (`admin`, `owner`), поэтому приложение и кнопку «Записать
+на эту работу» мастеру не показывает: иначе он создал бы запись, которая не
+привязалась бы к пункту отчёта, и в календаре осталось бы лишнее окно.
+
 **Смету считает сайт.** Приложение не складывает цены: сумма уходит клиенту и
 в деньги сервиса, а две реализации одного сложения рано или поздно разойдутся.
 
@@ -248,9 +324,9 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 |---|---|---|
 | `GET /reports?shopId&actorUserId&inspectionId` | `master`, `admin`, `owner` | `Report` |
 | `GET /reports/list?shopId&actorUserId&from&to&masterId?` | те же | `ReportBrief[]` |
-| `POST /reports/item` | `master`, `admin` | `{ …, defectId, included }` → **весь** `Report` |
+| `POST /reports/item` | `master`, `admin`, `owner` | `{ …, defectId, included }` → **весь** `Report` |
 | `POST /reports/book-item` | `admin`, `owner` | `{ …, defectId, bookingId }` → `Report` |
-| `POST /reports/send` | `master` → админу, `admin` → клиенту | `Report` |
+| `POST /reports/send` | `master` → админу, `admin` и `owner` → клиенту | `Report` |
 | `GET /reports/pdf?shopId&actorUserId&inspectionId` | те же | `{ url, expiresAt }` |
 
 ```ts

@@ -13,7 +13,9 @@ import { requireSection } from "@/lib/context";
 import { dayShort, dayTitle, minutesLabel, rub, todayLocal } from "@/lib/format";
 import { bySeverity, countBySeverity, kmLabel } from "@/lib/inspection";
 import { nodeName } from "@/lib/inspection-nodes";
+import { clientKey } from "@/lib/clients";
 import { listServices } from "@/lib/services";
+import { vehicleKey } from "@/lib/vehicles";
 import { localDay, localHHMM } from "@/lib/sto/slots";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -130,10 +132,21 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const q = new URLSearchParams({ d: todayLocal(), fromInspection: String(r.inspectionId), defect: String(defectId), fromBooking: String(b.id) });
     const svc = services.find(s => s.title === work);
     if (svc) q.set("s", String(svc.listingId));
+    // Клиент и машина — те же, что в этой записи: форма открывается
+    // заполненной, а не пустой, и админ не набирает номер заново.
+    q.set("client", clientKey(b));
+    const carKey = vehicleKey(b.data.vehicle);
+    if (carKey) q.set("car", carKey);
+    // Возврат — в отчёт, а не в список дня: «Отмена» из формы, открытой
+    // отсюда, обязана вернуть туда, откуда её открыли.
+    q.set("back", self);
     return `/kalendar/novaya?${q.toString()}`;
   };
 
   const sendLabel = can(ctx.role, "sendReport") ? "Отправить клиенту" : "Передать администратору";
+  // Записать клиента на найденную работу может тот, кто вообще ведёт записи
+  // за стойкой: у мастера прав на привязку пункта к записи нет.
+  const canBook = can(ctx.role, "closeBooking");
   const pdfErr = pick(sp.pdf);
   const points = r.defects.length === 1 ? "пункта" : "пунктов";
 
@@ -193,13 +206,21 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               </div>
               <div className="rp-price">{priceText(item ? item.price : d.price)}</div>
             </div>
-            {on && (
+            {/* «Записан: …» видно и у исключённого пункта: клиент на работу
+                записан, и прятать это вместе с галочкой сметы нельзя. А пустой
+                рамки под пунктом быть не должно — у мастера кнопки нет.
+                Запись на работу ставит стойка: привязать пункт к записи
+                (reports/book-item) мастеру сайт не даст, и кнопка увела бы его
+                в форму, из которой вышла бы запись-сирота. */}
+            {item?.nextBookingId != null ? (
               <div className="rp-book">
-                {item?.nextBookingId != null
-                  ? <span className="rp-booked"><Icon name="check" size={14} />Записан{when ? `: ${when}` : ` · запись № ${item.nextBookingId}`}</span>
-                  : <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>}
+                <span className="rp-booked"><Icon name="check" size={14} />Записан{when ? `: ${when}` : ` · запись № ${item.nextBookingId}`}</span>
               </div>
-            )}
+            ) : on && canBook ? (
+              <div className="rp-book">
+                <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>
+              </div>
+            ) : null}
           </div>
         );
       })}

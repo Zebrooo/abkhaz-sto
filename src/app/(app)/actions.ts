@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/supabase/server";
 import { accessibleServiceShop } from "@/lib/shop";
-import { roleIn } from "@/lib/context";
+import { blockIfViewing, roleIn } from "@/lib/context";
+import { readRoleView } from "@/lib/role-cookie";
+import { narrowRole } from "@/lib/role-view";
 import { can, HOME_PATH, type Section } from "@/lib/access";
 import { createManualBooking, rescheduleBooking, transitionBooking } from "@/lib/bookings";
 import { listServices, toBookingService, updateService } from "@/lib/services";
@@ -16,16 +18,24 @@ import {
 } from "@/lib/sto/schedule";
 import type { StoTransition } from "@/lib/sto/transitions";
 import { normalizePhone } from "@/lib/phone";
+import { plateProblem, vinProblem } from "@/lib/vehicle-input";
 import { linkItemBooking } from "@/lib/api/reports";
 
-/** Назад на экран: запрос адреса возврата сохраняем, свой итог дописываем вместо прошлых ok/err. */
-function back(path: string, q: Record<string, string | undefined>): never {
+/**
+ * Назад на экран: запрос адреса возврата сохраняем, свой итог дописываем
+ * вместо прошлых ok/err. null в значении — «убрать этот параметр»: после
+ * переноса экран не должен вернуться в режим переноса.
+ */
+function back(path: string, q: Record<string, string | undefined | null>): never {
   const i = path.indexOf("?");
   const base = i === -1 ? path : path.slice(0, i);
   const sp = new URLSearchParams(i === -1 ? "" : path.slice(i + 1));
   sp.delete("ok");
   sp.delete("err");
-  for (const [k, v] of Object.entries(q)) if (v) sp.set(k, v);
+  for (const [k, v] of Object.entries(q)) {
+    if (v === null) sp.delete(k);
+    else if (v) sp.set(k, v);
+  }
   const s = sp.toString();
   redirect(s ? `${base}?${s}` : base);
 }
@@ -48,9 +58,16 @@ async function ctx(fd: FormData, section: Section) {
   const shopId = Number(fd.get("shopId"));
   const shop = Number.isInteger(shopId) ? await accessibleServiceShop(shopId) : null;
   if (!shop) redirect("/");
-  const { role } = roleIn(shop);
+  // Примерка роли действует и здесь: хозяин, который смотрит глазами
+  // мастера, не должен получить админское действие в обход интерфейса —
+  // иначе кнопка и действие разъедутся (lib/role-view.ts).
+  const { role: realRole } = roleIn(shop);
+  const role = narrowRole(realRole, await readRoleView({ shopId: shop.id, userId: user.id }));
+  // В примерке роли ничего не меняем: сайт всё равно решает по настоящему
+  // actorUserId, и действие вышло бы не тем, что обещает кнопка.
+  blockIfViewing({ viewing: role !== realRole });
   if (!can(role, section)) redirect(HOME_PATH[role]);
-  return { user, shop };
+  return { user, shop, role };
 }
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -65,16 +82,32 @@ function revalidateBookings() {
 }
 
 export async function transitionAction(fd: FormData) {
-  const { user, shop } = await ctx(fd, "bookings");
+  const { user, shop, role } = await ctx(fd, "bookings");
   const ret = returnTo(fd, "/segodnya");
   const t = str(fd, "transition") as StoTransition;
   if (!["confirm", "done", "no_show", "cancel"].includes(t)) back(ret, { err: "Неизвестное действие" });
+  // Кнопки мастеру не показываем, но проверка нужна и здесь: экран — не
+  // граница, адрес действия можно позвать и мимо него.
+  if ((t === "cancel" || t === "no_show") && !can(role, "closeBooking")) {
+    back(ret, { err: "Отменить запись и отметить неявку может админ или хозяин" });
+  }
   const bookingId = Number(str(fd, "bookingId"));
   const res = await transitionBooking({ shopId: shop.id, bookingId, transition: t, actorUserId: user.id, reason: str(fd, "reason") || undefined });
   revalidateBookings();
   revalidatePath(`/zapis/${bookingId}`);
-  const done = ({ confirm: "Запись подтверждена — клиент получил пуш", done: "Готово. Предоплата ушла сервису", no_show: "Отмечено: клиент не приехал", cancel: "Запись отменена, клиент уведомлён" } as const)[t];
-  back(ret, res.ok ? { ok: done } : { err: res.error });
+  // ЧЕСТНО ПРО УВЕДОМЛЕНИЕ. Пуш, Telegram и предоплату делает сайт; молчит
+  // он — админ должен это понять и позвонить клиенту сам, а не прочитать
+  // «клиент уведомлён» и успокоиться.
+  const done = ({ confirm: "Запись подтверждена", done: "Готово", no_show: "Отмечено: клиент не приехал", cancel: "Запись отменена" } as const)[t];
+  const told = ({ confirm: " — клиент получил уведомление", done: ". Предоплата ушла сервису", no_show: "", cancel: " — клиент уведомлён" } as const)[t];
+  if (!res.ok) back(ret, { err: res.error });
+  const mute = ({
+    confirm: ". Сайт не ответил — клиента предупредите сами",
+    done: ". Сайт не ответил — предоплата и уведомление зависли, проверьте на сайте",
+    no_show: ". Сайт не ответил",
+    cancel: ". Сайт не ответил — клиента предупредите сами",
+  } as const)[t];
+  back(ret, { ok: res.told ? `${done}${told}` : `${done}${mute}` });
 }
 
 export async function rescheduleAction(fd: FormData) {
@@ -90,11 +123,20 @@ export async function rescheduleAction(fd: FormData) {
   const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), postNo, actorUserId: user.id });
   revalidateBookings();
   if (!res.ok) back(ret, { err: res.error });
-  back("/segodnya", { d: day, ok: "Запись перенесена — клиент уведомлён" });
+  // Возвращаем туда, откуда переносили: перетащили запись в недельной сетке —
+  // остаёмся в неделе. Раньше любой перенос выбрасывал в день.
+  back(ret, {
+    d: day,
+    // Режим переноса закончился — убираем его из адреса, иначе экран
+    // возвращается с той же записью «в руках».
+    move: null,
+    do: null,
+    ok: res.told ? "Запись перенесена — клиент уведомлён" : "Запись перенесена. Сайт не ответил — клиента предупредите сами",
+  });
 }
 
 export async function createManualAction(fd: FormData) {
-  const { user, shop } = await ctx(fd, "bookings");
+  const { user, shop, role } = await ctx(fd, "bookings");
   const day = str(fd, "day");
   const listingId = Number(str(fd, "listingId"));
   const postRaw = Number(str(fd, "postNo"));
@@ -104,27 +146,51 @@ export async function createManualAction(fd: FormData) {
   // иначе повторная попытка потеряет связь.
   const fromInspection = Number(str(fd, "fromInspection")), fromDefect = Number(str(fd, "defect")), fromBooking = Number(str(fd, "fromBooking"));
   const fromReport = [fromInspection, fromDefect, fromBooking].every(n => Number.isInteger(n) && n > 0);
+  const backTo = str(fd, "back");
   const keep = {
     d: day, s: String(listingId), post: postNo ? String(postNo) : undefined, t: hhmm || undefined,
+    back: backTo.startsWith("/") && !backTo.startsWith("//") ? backTo : undefined,
     ...(fromReport ? { fromInspection: String(fromInspection), defect: String(fromDefect), fromBooking: String(fromBooking) } : {}),
   };
   const ret = "/kalendar/novaya";
   if (!shop.schedule) back(ret, { ...keep, err: "Сначала задайте расписание" });
   const services = await listServices(shop.id);
   const svc = services.find(s => s.listingId === listingId);
-  if (!svc) back(ret, { d: day, err: "Выберите услугу" });
+  if (!svc) back(ret, { ...keep, err: "Выберите услугу" });
+  // Право на запись из отчёта проверяем ДО создания: иначе мастер получал бы
+  // отказ уже после того, как окно в календаре занято, и сирота оставалась бы
+  // висеть. Экран кнопку прячет — здесь граница.
+  if (fromReport && !can(role, "closeBooking")) {
+    back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
+  }
   const name = str(fd, "name");
-  if (!name) back(ret, { ...keep, step: "2", err: "Имя клиента обязательно" });
   const phoneRaw = str(fd, "phone");
+  const vehicle = str(fd, "vehicle");
+  const plateRaw = str(fd, "plate");
+  const vinRaw = str(fd, "vin");
+  // Набранное возвращаем в адрес при любом отказе: поля формы живут в
+  // браузере, и без этого опечатка в VIN стирала бы имя, телефон и машину,
+  // которые человек только что набирал при клиенте.
+  const typed = {
+    n: name || undefined, ph: phoneRaw || undefined, v: vehicle || undefined,
+    pl: plateRaw || undefined, vin: vinRaw || undefined,
+  };
+  const step2 = { ...keep, ...typed, step: "2" };
+  if (!name) back(ret, { ...step2, err: "Имя клиента обязательно" });
   const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
-  if (phoneRaw && !phone) back(ret, { ...keep, step: "2", err: "Телефон не разобран — укажите в формате +7…" });
-  if (!/^\d{2}:\d{2}$/.test(hhmm)) back(ret, { ...keep, step: "1", err: "Выберите время" });
+  if (phoneRaw && !phone) back(ret, { ...step2, err: "Телефон не разобран — укажите в формате +7…" });
+  const plateBad = plateProblem(plateRaw);
+  if (plateBad) back(ret, { ...step2, err: plateBad });
+  const vinBad = vinProblem(vinRaw);
+  if (vinBad) back(ret, { ...step2, err: vinBad });
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) back(ret, { ...keep, ...typed, step: "1", err: "Выберите время" });
   const res = await createManualBooking({
     shopId: shop.id, schedule: shop.schedule, day, hhmm, service: toBookingService(svc), listingId: svc.listingId,
-    postNo, client: { name: name.slice(0, 80), phone }, vehicle: str(fd, "vehicle"), comment: str(fd, "comment"), actorUserId: user.id,
+    postNo, client: { name: name.slice(0, 80), phone }, vehicle, plate: plateRaw, vin: vinRaw,
+    comment: str(fd, "comment"), actorUserId: user.id,
   });
   revalidateBookings();
-  if (!res.ok) back(ret, { ...keep, step: "1", err: res.error });
+  if (!res.ok) back(ret, { ...keep, ...typed, step: "1", err: res.error });
   if (fromReport) {
     // Запись уже есть; связь с пунктом сметы — на сайте. Не связалось — запись
     // всё равно создана, и об этом честно в отчёте.
@@ -134,7 +200,10 @@ export async function createManualAction(fd: FormData) {
       ? { d: day, ok: `Записан: ${svc.title}, ${hhmm}` }
       : { d: day, err: `Запись создана, но к пункту отчёта не привязалась: ${link.error}` });
   }
-  back("/segodnya", { d: day, ok: `Записан: ${svc.title}, ${hhmm}` });
+  // Ведём в карточку созданной записи, а не в список дня: за стойкой сразу
+  // после «Записать» смотрят, что получилось, и оттуда же переносят или
+  // отменяют. Раньше запись приходилось искать в сетке глазами.
+  back(`/zapis/${res.id}`, { d: day, ok: `Записан: ${svc.title}, ${hhmm}` });
 }
 
 /** Часы приёма одного дня: один интервал правится своей шторкой и сохраняется сразу. */

@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { matchClient } from "@/lib/clients";
 import { count, formatPhone } from "@/lib/format";
+import type { ClientCar } from "@/lib/vehicles";
 
 /** Клиент из свода по записям — только то, что нужно строке поиска. */
 export type KnownClient = {
@@ -20,18 +21,34 @@ export type KnownClient = {
   name: string;
   phone: string | null;
   car: string | null;
+  /** Госномер и VIN последней машины — по ним тоже ищут. */
+  plate: string | null;
+  vin: string | null;
+  /** Все его номера и VIN: клиента ищут и по машине, которую он продал. */
+  plates: string[];
+  vins: string[];
   visits: number;
   /** Все его машины, свежие сверху: человек приезжает не всегда на одной. */
-  cars: string[];
+  cars: ClientCar[];
+};
+
+/** Чем заполнить поля сразу: возврат из ошибки или запись «этого же клиента». */
+export type ClientPickInitial = {
+  name?: string; phone?: string; vehicle?: string; plate?: string; vin?: string;
 };
 
 /** Больше горсти подсказок в строку не помещается, да и выбирать из них тяжело. */
 const MAX_HINTS = 6;
 
-export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [vehicle, setVehicle] = useState("");
+export function ClientPick({ clients, initial }: { clients: readonly KnownClient[]; initial?: ClientPickInitial }) {
+  // Начальные значения приходят из адреса: так форма переживает отказ
+  // («VIN — 17 знаков») и так же открывается запись знакомого клиента из его
+  // карточки. Дальше поле живёт своей жизнью, перетирать набранное нельзя.
+  const [name, setName] = useState(initial?.name ?? "");
+  const [phone, setPhone] = useState(initial?.phone ?? "");
+  const [vehicle, setVehicle] = useState(initial?.vehicle ?? "");
+  const [plate, setPlate] = useState(initial?.plate ?? "");
+  const [vin, setVin] = useState(initial?.vin ?? "");
   const [open, setOpen] = useState(false);
   /** Выбранный клиент: под полем машины показываем именно его машины. */
   const [picked, setPicked] = useState<KnownClient | null>(null);
@@ -59,9 +76,14 @@ export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
     setName(c.name);
     setPhone(formatPhone(c.phone));
     setPicked(c);
-    // Машину подставляем, только если поле пустое: человек мог уже написать,
+    // Машину подставляем, только если поля пустые: человек мог уже написать,
     // на чём клиент приехал в этот раз, и затирать это нельзя.
-    if (c.car && !vehicle.trim()) setVehicle(c.car);
+    // Название, номер и VIN берём У ОДНОЙ машины — свежей. Иначе марка была
+    // бы от одной, а номер от другой, и в запись уехала бы химера.
+    const car = c.cars[0] ?? null;
+    if (!vehicle.trim() && (car?.name || c.car)) setVehicle(car?.name ?? c.car ?? "");
+    if (car?.plate && !plate.trim()) setPlate(car.plate);
+    if (car?.vin && !vin.trim()) setVin(car.vin);
     setOpen(false);
     setCursor(-1);
   }
@@ -152,30 +174,69 @@ export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
         <input
           name="vehicle"
           maxLength={80}
-          placeholder="Toyota Camry 2015, А123АВ"
+          placeholder="Toyota Camry 2015"
           autoComplete="off"
           value={vehicle}
           onChange={e => setVehicle(e.target.value)}
         />
       </label>
       {/* Машины выбранного клиента: у человека их бывает несколько, и
-          приезжает он не всегда на той, что была в прошлый раз. Новую
-          вписывают руками в то же поле. */}
-      {picked && picked.cars.length > 1 && (
+          приезжает он не всегда на той, что была в прошлый раз. Чип ставит
+          сразу и название, и номер, и VIN — перенабирать их незачем. */}
+      {picked && picked.cars.length > 0 && (
         <div className="chips cli-cars">
           {picked.cars.map(c => (
             <button
-              key={c}
+              key={`${c.name}-${c.plate ?? ""}`}
               type="button"
               className="chip"
-              aria-current={c === vehicle.trim() ? "true" : undefined}
-              onClick={() => setVehicle(c)}
+              aria-pressed={c.name === vehicle.trim()}
+              onClick={() => {
+                setVehicle(c.name);
+                setPlate(c.plate ?? "");
+                setVin(c.vin ?? "");
+              }}
             >
-              {c}
+              {[c.name, c.plate].filter(Boolean).join(" · ")}
             </button>
           ))}
         </div>
       )}
+      {/* НОМЕР И VIN — ОТДЕЛЬНЫМИ ПОЛЯМИ, а не внутри строки «Машина». По ним
+          машина узнаётся в следующий визит: номер перебивают и меняют при
+          продаже, VIN живёт с кузовом. Оба необязательны — машина с улицы
+          приезжает и без документов, — но без них история будет собираться
+          по марке и году, то есть ненадёжно. */}
+      <div className="fld-row">
+        <label className="fld">
+          <span>Госномер</span>
+          <input
+            name="plate"
+            maxLength={12}
+            placeholder="А 123 АВ 01"
+            autoComplete="off"
+            autoCapitalize="characters"
+            value={plate}
+            onChange={e => setPlate(e.target.value)}
+          />
+        </label>
+        <label className="fld">
+          <span>VIN</span>
+          <input
+            name="vin"
+            // Вставляют VIN и с пробелами, и с дефисами: режем по факту на
+            // сервере, а не обрезаем на 17-м знаке прямо в поле.
+            maxLength={25}
+            placeholder="17 знаков"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            value={vin}
+            onChange={e => setVin(e.target.value)}
+          />
+        </label>
+      </div>
+      <p className="hint cli-vin-hint">VIN — на табличке под лобовым стеклом или в техпаспорте. По нему машина узнаётся, даже когда сменили номер.</p>
     </>
   );
 }

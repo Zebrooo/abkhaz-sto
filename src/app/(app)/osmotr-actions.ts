@@ -20,10 +20,11 @@ import {
 } from "@/lib/api/inspections";
 import type { ApiResult } from "@/lib/api/site-api";
 import { fetchReportPdf, sendReport, setEstimateItem } from "@/lib/api/reports";
-import { serviceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
 import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } from "@/lib/inspection";
 import { isNodeKey } from "@/lib/inspection-nodes";
+import { VIEW_ONLY_MESSAGE } from "@/lib/role-view";
 import { saveAccepted } from "@/lib/post-cookie";
 import { listServices } from "@/lib/services";
 
@@ -64,6 +65,7 @@ const int = (fd: FormData, k: string) => {
 async function ctx() {
   const c = await serviceContext();
   if (!c) redirect("/vhod");
+  blockIfViewing(c);
   if (!can(c.role, "inspect")) redirect(HOME_PATH[c.role]);
   return c;
 }
@@ -226,6 +228,7 @@ export type ClientResult<T = undefined> = { ok: true; data: T } | { ok: false; e
 export async function createPhotoUploadAction(contentType: string): Promise<ClientResult<PhotoUpload>> {
   const c = await serviceContext();
   if (!c || !can(c.role, "inspect")) return { ok: false, error: "Нет доступа" };
+  if (c.viewing) return { ok: false, error: VIEW_ONLY_MESSAGE };
   const type = /^image\/[\w.+-]+$/.test(contentType) ? contentType : "image/jpeg";
   const res = await createPhotoUpload({ shopId: c.shop.id, actorUserId: c.userId, contentType: type });
   return res.ok ? { ok: true, data: res.data } : { ok: false, error: res.error };
@@ -239,6 +242,7 @@ export async function createPhotoUploadAction(contentType: string): Promise<Clie
 export async function attachPhotoAction(input: { bookingId: number; defectId: number; photoId: string }): Promise<ClientResult> {
   const c = await serviceContext();
   if (!c || !can(c.role, "inspect")) return { ok: false, error: "Нет доступа" };
+  if (c.viewing) return { ok: false, error: VIEW_ONLY_MESSAGE };
   const [photoId] = photoIdsFrom([input.photoId]);
   if (!photoId || !Number.isInteger(input.bookingId) || !Number.isInteger(input.defectId)) return { ok: false, error: "Кадр не опознан" };
   const insp = await fetchInspection({ shopId: c.shop.id, actorUserId: c.userId, bookingId: input.bookingId });

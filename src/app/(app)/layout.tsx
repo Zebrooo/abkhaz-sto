@@ -1,4 +1,6 @@
 import { serviceContext } from "@/lib/context";
+import { STO_ROLE_LABEL } from "@/lib/access";
+import { ViewBar } from "@/components/ViewBar";
 import { countPending } from "@/lib/bookings";
 import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
@@ -71,6 +73,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app">
       <TopBar shopName={shop.name} role={role} newHref={newHref} unread={pending} />
+      {/* ПРИМЕРКА РОЛИ ВИДНА ВСЕГДА. Хозяин, забывший, что смотрит глазами
+          мастера, решит, что половина приложения пропала. Полоса висит над
+          всеми экранами и уводит обратно одной кнопкой. */}
+      {ctx.viewing && <ViewBar roleLabel={STO_ROLE_LABEL[role].toLowerCase()} />}
       <div className="app-body">
         <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} inspectHref={inspect} />
         <main className="main">{children}</main>

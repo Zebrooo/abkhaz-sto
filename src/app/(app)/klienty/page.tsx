@@ -74,6 +74,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
             <div className="head-t">Клиенты</div>
             <div className="head-s">
               {count(all.length, "карточка", "карточки", "карточек")} · {regular} {plural(regular, "постоянный", "постоянных", "постоянных")}
+              {" · "}карточка собирается из записей сервиса и живёт, пока есть хотя бы одна
             </div>
           </div>
           <div className="head-tail">
@@ -84,7 +85,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
         <div className="cli-ctl">
           <form className="search" method="get" action="/klienty">
             <Icon name="search" size={18} />
-            <input name="q" defaultValue={q} placeholder="Имя, телефон или номер машины" aria-label="Поиск клиента" />
+            <input name="q" defaultValue={q} placeholder="Имя, телефон, номер или VIN" aria-label="Поиск клиента" />
             {filter !== "all" && <input type="hidden" name="f" value={filter} />}
           </form>
           <Chips q={q} filter={filter} counts={counts} />
@@ -97,7 +98,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
             <div className="empty-s">
               {all.length === 0
                 ? "Карточка заводится сама: как только человек запишется с сайта или вы запишете его вручную, он появится здесь."
-                : "Поиск идёт по имени, телефону и машине. Попробуйте короче — например, три цифры номера."}
+                : "Поиск идёт по имени, телефону, машине, госномеру и VIN. Попробуйте короче — например, три цифры номера."}
             </div>
             {all.length > 0 && <Link className="aui-btn aui-btn--outline aui-btn--md" href="/klienty">Показать всех</Link>}
           </div>
@@ -109,7 +110,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
                   <span className="ava">{initials(c.name)}</span>
                   <div className="row-main">
                     <div className="row-t">{c.name}</div>
-                    <div className="row-s">{[c.car, formatPhone(c.phone)].filter(Boolean).join(" · ") || "ни машины, ни телефона"}</div>
+                    <div className="row-s">{[c.car, c.plate, formatPhone(c.phone)].filter(Boolean).join(" · ") || "ни машины, ни телефона"}</div>
                   </div>
                   <div className="cli-tail">
                     <div className="cli-n">{count(c.visits, "запись", "записи", "записей")}</div>

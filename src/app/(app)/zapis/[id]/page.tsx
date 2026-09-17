@@ -76,7 +76,11 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
   const pending = await countPending(shop.id);
 
-  const trans = shopTransitions(b.status);
+  // Отмена и «не приехал» — разговор с клиентом, и ведёт его стойка: мастеру
+  // эти кнопки не показываем (access.ts, closeBooking). «Выполнено» и
+  // «Подтвердить» у него остаются — это про работу, а не про клиента.
+  const mayClose = can(ctx.role, "closeBooking");
+  const trans = shopTransitions(b.status).filter(t => mayClose || (t !== "cancel" && t !== "no_show"));
   const canMove = canReschedule(b.status);
   const hasActions = canMove || trans.includes("no_show") || trans.includes("cancel");
   const primary: { label: string; transition: StoTransition } | null =
@@ -109,8 +113,22 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const visits = (await recentBookings(shop.id)).filter(r => clientKey(r) === key).length;
   const car = vehicleLine(b);
   const plate = b.data.vehicle?.plate ?? null;
+  // Номер и VIN — под названием машины: по ним сверяют, ту ли машину приняли,
+  // и их же называют по телефону. VIN показываем целиком: половина VIN не
+  // опознаёт ничего.
+  const carSub = [plate, b.data.vehicle?.vin ? `VIN ${b.data.vehicle.vin}` : null].filter(Boolean).join(" · ");
   // У машины своя карточка: что ей делали, на сколько и кто на ней ездил.
   const carKey = vehicleKey(b.data.vehicle);
+  // «Записать снова» открывает форму с тем же человеком, той же машиной и той
+  // же услугой: этот клиент только что стоял перед вами, набирать его заново
+  // незачем.
+  const againHref = (() => {
+    const q = new URLSearchParams({ d: day, client: key });
+    if (carKey) q.set("car", carKey);
+    if (b.listing_id) q.set("s", String(b.listing_id));
+    return `/kalendar/novaya?${q.toString()}`;
+  })();
+
 
   // За ящиком на вебе — сетка того же дня: запись видно в контексте смены,
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
@@ -204,17 +222,21 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 </a>
               </div>
             )}
-            <Link className="person-link" href={`/klienty/${key}`}>
-              Карточка клиента и машины <Icon name="arrowRight" size={15} />
-            </Link>
+            {/* Карточка клиента лежит в закрытом мастеру разделе: ссылка,
+                которая молча уводит его на «Мой пост», хуже, чем её отсутствие. */}
+            {can(ctx.role, "clients") && (
+              <Link className="person-link" href={`/klienty/${key}`}>
+                Карточка клиента и машины <Icon name="arrowRight" size={15} />
+              </Link>
+            )}
           </div>
 
-          {car && (carKey ? (
+          {car && (carKey && can(ctx.role, "clients") ? (
             <Link className="card thing" href={`/mashiny/${carKey}`}>
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">
                 <div className="thing-n">{car}</div>
-                {plate && <div className="thing-s">{plate}</div>}
+                {carSub && <div className="thing-s">{carSub}</div>}
               </div>
               <Icon name="chevron" size={16} />
             </Link>
@@ -223,7 +245,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <span className="sq"><Icon name="car" size={24} /></span>
               <div className="row-main">
                 <div className="thing-n">{car}</div>
-                {plate && <div className="thing-s">{plate}</div>}
+                {carSub && <div className="thing-s">{carSub}</div>}
               </div>
             </div>
           ))}
@@ -266,7 +288,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit">{primary.label}</button>
               </form>
             ) : (
-              <Link className="aui-btn aui-btn--primary aui-btn--lg" href="/kalendar/novaya">Записать снова</Link>
+              <Link className="aui-btn aui-btn--primary aui-btn--lg" href={againHref}>Записать снова</Link>
             )}
             {hasActions && (
               <Link className="aui-btn aui-btn--outline aui-btn--lg btn-sq" href={self("&do=1")} aria-label="Другие действия">

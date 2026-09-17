@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { requireSection } from "@/lib/context";
-import { countPending, dayBookings } from "@/lib/bookings";
+import { countPending, dayBookings, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
+import { DayPick } from "@/components/DayPick";
 import { ScreenHead } from "@/components/ScreenHead";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
 import { Timeline } from "@/components/Timeline";
 import { addDays, count, dayLabel, dayOfWeekLabel, dayTitle, todayLocal } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
+import { localDay, localTime } from "@/lib/sto/slots";
+import { addMonths, monthFirst, monthOf, safeMonth } from "@/lib/month";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -19,7 +22,8 @@ const FILTERS = [["all", "Все"], ["new", "Ждут"], ["confirmed", "Подт
 type Filter = (typeof FILTERS)[number][0];
 const isFilter = (s: string): s is Filter => FILTERS.some(([k]) => k === s);
 
-const href = (day: string, filter: Filter) => `/segodnya?d=${day}${filter === "all" ? "" : `&f=${filter}`}`;
+const href = (day: string, filter: Filter, month?: string) =>
+  `/segodnya?d=${day}${filter === "all" ? "" : `&f=${filter}`}${month ? `&m=${month}` : ""}`;
 
 /** Сегмент «День | Неделя»: на телефоне над стрелками, на вебе справа в шапке. */
 function ModeSeg({ day }: { day: string }) {
@@ -58,7 +62,22 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
   const f = pick(sp.f);
   const filter: Filter = isFilter(f) ? f : "all";
 
-  const rows = await dayBookings(shop.id, day);
+  // Маленький календарь: месяц из адреса и точки под числами по записям
+  // месяца — видно, где густо, не листая дни по одному.
+  // Календарь открыт ровно тогда, когда месяц есть в адресе: закрытый не
+  // стоит экрану ни одного запроса.
+  const month = pick(sp.m) ? safeMonth(pick(sp.m), day) : "";
+  const [rows, monthRows] = await Promise.all([
+    dayBookings(shop.id, day),
+    month
+      ? listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00"))
+      : Promise.resolve([]),
+  ]);
+  const monthCounts: Record<string, number> = {};
+  for (const b of monthRows.filter(isLive)) {
+    const d = localDay(new Date(b.starts_at));
+    monthCounts[d] = (monthCounts[d] ?? 0) + 1;
+  }
   const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const live = rows.filter(isLive);
@@ -94,6 +113,17 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
             <Link className="ico" href={href(addDays(day, 1), filter)} aria-label="Следующий день"><Icon name="chevron" size={16} /></Link>
           </div>
           <div className="head-tail">
+          <DayPick
+            day={day}
+            month={month}
+            label={dayTitle(day)}
+            counts={monthCounts}
+            openHref={href(day, filter, monthOf(day))}
+            closeHref={href(day, filter)}
+            dayHref={d => href(d, filter)}
+            monthHref={mm => href(day, filter, mm)}
+            isOff={d => dayWindow(shop.schedule, d).off}
+          />
             <ModeSeg day={day} />
             <StatusChips day={day} filter={filter} counts={counts} />
           </div>
@@ -110,6 +140,17 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
             <Link href={href(addDays(day, 1), filter)} aria-label="Следующий день"><Icon name="chevron" size={17} /></Link>
           </div>
           <StatusChips day={day} filter={filter} counts={counts} />
+          <DayPick
+            day={day}
+            month={month}
+            label={dayTitle(day)}
+            counts={monthCounts}
+            openHref={href(day, filter, monthOf(day))}
+            closeHref={href(day, filter)}
+            dayHref={d => href(d, filter)}
+            monthHref={mm => href(day, filter, mm)}
+            isOff={d => dayWindow(shop.schedule, d).off}
+          />
         </div>
 
         <Flash ok={pick(sp.ok)} err={pick(sp.err)} />

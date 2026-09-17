@@ -67,11 +67,11 @@ export default async function VehiclePage({ params }: { params: Promise<{ key: s
           <div>
             <div className="hero-n">{card.name}</div>
             <div className="hero-s">
-              {[card.plate, `последний визит ${relativeAt(card.lastAt)}`].filter(Boolean).join(" · ")}
+              {[card.plate, card.vin ? `VIN ${card.vin}` : null, `последний визит ${relativeAt(card.lastAt)}`].filter(Boolean).join(" · ")}
             </div>
           </div>
           <div className="hero-actions">
-            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}`}>Записать</Link>
+            <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/kalendar/novaya?d=${todayLocal()}${card.owners[0] ? `&client=${encodeURIComponent(card.owners[0].key)}` : ""}&car=${encodeURIComponent(card.key)}`}>Записать</Link>
           </div>
         </div>
 

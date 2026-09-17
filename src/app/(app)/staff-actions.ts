@@ -9,10 +9,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { can, isStoRole, type Section } from "@/lib/access";
-import { serviceContext, type ServiceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext, type ServiceContext } from "@/lib/context";
 import { assignBookingMaster, createMaster, updateMaster } from "@/lib/api/masters";
 import { inviteMember, setMemberActive, setMemberRole } from "@/lib/api/members";
-import { count } from "@/lib/format";
+import { count, todayLocal } from "@/lib/format";
+import { dayBookings } from "@/lib/bookings";
+import { postCount } from "@/lib/mywork";
 import { normalizePhone } from "@/lib/phone";
 
 function back(path: string, q: Record<string, string | undefined>): never {
@@ -40,6 +42,7 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 async function ctx(section: Section, ret: string): Promise<ServiceContext> {
   const c = await serviceContext();
   if (!c) redirect("/");
+  blockIfViewing(c);
   if (!can(c.role, section)) back(bare(ret), { err: section === "access" ? "Это может только хозяин сервиса" : "Это может админ или хозяин сервиса" });
   return c;
 }
@@ -124,6 +127,87 @@ export async function toggleMasterShiftAction(fd: FormData) {
   const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
   back("/mastera", {
     ok: `${res.data.master.name} снят со смены`,
+    m: orphaned.length ? String(masterId) : undefined,
+    orphaned: orphaned.length ? orphaned.join(",") : undefined,
+  });
+}
+
+/**
+ * Правка мастера хозяином: имя, специальность, пост, увольнение и возврат в
+ * штат.
+ *
+ * ПАТЧ СТРОГО ЧАСТИЧНЫЙ, и это не аккуратность, а необходимость. Пост мастера
+ * пишет не только хозяин: утром мастер сам отмечается на подъёмнике
+ * (post-actions.ts) и заодно обновляет postNo в справочнике. Если форма
+ * правки отправит все поля разом, хозяин, поправивший опечатку в имени, молча
+ * вернёт человека на вчерашний пост. Поэтому форма несёт прежние значения
+ * (was*), а на сайт уезжает только то, что действительно изменилось.
+ *
+ * Смена поста и увольнение оставляют записи на местах — сайт отвечает их
+ * номерами (orphaned), и мы несём их в адрес так же, как переключатель смены.
+ */
+export async function updateMasterAction(fd: FormData) {
+  // Раздел «Мастера» открыт админу и хозяину — правят оба: админ за стойкой
+  // исправляет опечатку в имени и переставляет человека на другой подъёмник,
+  // не дёргая хозяина. А вот уволить и вернуть в штат может только хозяин:
+  // это решение о человеке, а не о сегодняшней смене (проверка ниже).
+  const c = await ctx("masters", "/mastera");
+  const masterId = Number(str(fd, "masterId"));
+  if (!Number.isInteger(masterId) || masterId <= 0) back("/mastera", { err: "Мастер не указан" });
+  // Отказ возвращает в ту же шторку, а не на общий экран: иначе набранное
+  // имя пропадёт, и человек будет гадать, что не понравилось.
+  const sheet = { do: "edit", edit: String(masterId) };
+
+  const fire = str(fd, "fire");
+  if (fire === "1" || fire === "0") {
+    const active = fire === "0";
+    // Отказ по увольнению возвращаем в СПИСОК, а не в шторку правки: после
+    // «Вернуть в штат» шторка открылась бы с кнопкой «Уволить» — ровно
+    // наоборот тому, что человек делал.
+    const fireBack = active ? { all: "1" } : sheet;
+    if (c.role !== "owner") back("/mastera", { ...fireBack, err: "Уволить и вернуть в штат может только хозяин сервиса" });
+    const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, active });
+    revalidateMasters();
+    if (!res.ok) back("/mastera", { ...fireBack, err: res.error });
+    const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
+    back("/mastera", {
+      ok: active ? `${res.data.master.name} снова в штате` : `${res.data.master.name} уволен — записи остались на постах`,
+      // Уволенного в общем списке не видно, поэтому и плашку «передайте
+      // записи» вешать не на кого: показываем список уволенных.
+      all: active ? undefined : "1",
+      m: orphaned.length ? String(masterId) : undefined,
+      orphaned: orphaned.length ? orphaned.join(",") : undefined,
+    });
+  }
+
+  const name = str(fd, "name").slice(0, 80);
+  const speciality = str(fd, "speciality").slice(0, 80);
+  // Набранное несём обратно в адрес: отказ сайта не должен стирать
+  // исправленное имя — человек правил его при мастере, а не по памяти.
+  const typed = { ...sheet, n: name || undefined, sp: speciality || undefined, post: str(fd, "postNo") || undefined };
+  if (!name) back("/mastera", { ...typed, err: "Имя мастера обязательно" });
+  const postRaw = str(fd, "postNo");
+  const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
+  const posts = postCount(c.shop.schedule?.posts ?? undefined, await dayBookings(c.shop.id, todayLocal()));
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > posts)) {
+    back("/mastera", { ...typed, err: `Такого поста у сервиса нет: их ${posts}` });
+  }
+
+  const wasPostRaw = str(fd, "wasPostNo");
+  const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);
+  const patch = {
+    ...(name !== str(fd, "wasName") ? { name } : {}),
+    ...(speciality !== str(fd, "wasSpeciality") ? { speciality } : {}),
+    ...(postNo !== wasPost ? { postNo } : {}),
+  };
+  if (Object.keys(patch).length === 0) back("/mastera", { ok: "Ничего не изменилось" });
+
+  const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId, ...patch });
+  revalidateMasters();
+  if (!res.ok) back("/mastera", { ...typed, err: res.error });
+  const orphaned = res.data.orphaned.filter(id => Number.isInteger(id) && id > 0);
+  back("/mastera", {
+    ok: `Сохранено: ${res.data.master.name}`,
     m: orphaned.length ? String(masterId) : undefined,
     orphaned: orphaned.length ? orphaned.join(",") : undefined,
   });

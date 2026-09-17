@@ -5,9 +5,9 @@ import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
-import { addDays, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, todayLocal } from "@/lib/format";
+import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
-import { nextStep, pickService } from "@/lib/booking-form";
+import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
 
@@ -86,13 +86,18 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
 
   const busy = await busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
   const now = new Date();
+  const startsAt = time ? localTime(day, time) : null;
   // Услуга по умолчанию — та, что влезает в окно, пришедшее с сетки
   // (booking-form.ts): иначе первая в списке оказывается длиннее окна, время
   // молча слетает, и человек выбирает его заново.
-  const svc = pickService({
-    services, chosenId: Number(pick(sp.s)), schedule,
-    startsAt: time ? localTime(day, time) : null, postNo, busy, now,
-  })!;
+  const svc = pickService({ services, chosenId: Number(pick(sp.s)), schedule, startsAt, postNo, busy, now })!;
+  // В выбранное окно длинная услуга не встанет — из списка её убираем, чтобы
+  // человек не выбирал то, что форма потом отвергнет. Ссылка «показать все»
+  // возвращает полный список: иначе длинную услугу нельзя было бы и выбрать,
+  // чтобы поискать под неё окно подлиннее.
+  const showAll = pick(sp.all) === "1";
+  const { list: fitting, hidden } = fittingServices({ services, schedule, startsAt, postNo, busy, now, keepId: svc.listingId });
+  const pickable = showAll ? services : fitting;
   // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots
   // отдаёт первый свободный из всех, а нужен именно этот.
   const slots = freeSlots({
@@ -120,13 +125,14 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const fromBooking = /^\d+$/.test(pick(sp.fromBooking)) ? pick(sp.fromBooking) : "";
   const fromReport = !!(fromInspection && fromDefect && fromBooking);
 
-  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null };
+  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null; all?: boolean };
   const href = (over: Over) => {
-    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, ...over };
+    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, all: showAll, ...over };
     const q = new URLSearchParams({ d: v.d, s: String(v.s) });
     if (v.step) q.set("step", String(v.step));
     if (v.post) q.set("post", String(v.post));
     if (v.t) q.set("t", v.t);
+    if (v.all) q.set("all", "1");
     if (fromReport) { q.set("fromInspection", fromInspection); q.set("defect", fromDefect); q.set("fromBooking", fromBooking); }
     return `/kalendar/novaya?${q.toString()}`;
   };
@@ -168,7 +174,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
           <div className="nb-cols">
             <div className="nb-svc">
               <div className="nb-lab">Услуга</div>
-              {services.map(s => (
+              {pickable.map(s => (
                 <Link key={s.listingId} className="pick" href={href({ s: s.listingId })} aria-pressed={s.listingId === svc.listingId}>
                   <div className="pick-main">
                     <div className="pick-t">{s.title}</div>
@@ -177,6 +183,18 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                   {s.listingId === svc.listingId && <span className="pick-on"><Icon name="check" size={15} /></span>}
                 </Link>
               ))}
+              {hidden > 0 && !showAll && (
+                <p className="hint">
+                  {count(hidden, "услуга", "услуги", "услуг")} {plural(hidden, "не влезает", "не влезают", "не влезают")} в окно {time} —{" "}
+                  <Link href={href({ all: true })}>показать все</Link>
+                </p>
+              )}
+              {showAll && hidden > 0 && (
+                <p className="hint">
+                  Показаны все услуги, включая те, что в окно {time} не влезают —{" "}
+                  <Link href={href({ all: false })}>оставить подходящие</Link>
+                </p>
+              )}
             </div>
 
             <div className="nb-right">

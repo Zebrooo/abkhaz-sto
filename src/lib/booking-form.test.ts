@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextStep, pickService } from "@/lib/booking-form";
+import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import type { StoSchedule } from "@/lib/sto/schedule";
 import { localTime } from "@/lib/sto/slots";
 
@@ -68,5 +68,43 @@ describe("nextStep", () => {
   it("дальше третьего шага мастер не уходит", () => {
     expect(nextStep(1, false)).toBe(2);
     expect(nextStep(2, true)).toBe(2);
+  });
+});
+
+describe("fittingServices", () => {
+  const fit = (over: Partial<Parameters<typeof fittingServices>[0]> = {}) => fittingServices({
+    services, schedule, startsAt: null, postNo: null, busy: [], now, ...over,
+  });
+  // Оба поста заняты с 11:00 — в окно 10:00 влезают только часовая и получасовая.
+  const busyFrom11 = [1, 2].map(postNo => ({ postNo, startsAt: at("11:00"), endsAt: at("13:00") }));
+
+  it("времени нет — список как есть", () => {
+    expect(fit()).toEqual({ list: services, hidden: 0 });
+  });
+
+  it("длинные услуги пропадают из списка", () => {
+    const res = fit({ startsAt: at("10:00"), busy: busyFrom11 });
+    expect(res.list.map(s => s.listingId)).toEqual([2, 3]);
+    expect(res.hidden).toBe(1);
+  });
+
+  it("выбранная услуга остаётся, даже если не влезает", () => {
+    const res = fit({ startsAt: at("10:00"), busy: busyFrom11, keepId: 1 });
+    expect(res.list.map(s => s.listingId)).toEqual([1, 2, 3]);
+    expect(res.hidden).toBe(0);
+  });
+
+  it("окно свободно на весь день — не прячем ничего", () => {
+    expect(fit({ startsAt: at("10:00") })).toEqual({ list: services, hidden: 0 });
+  });
+
+  it("не влезает ни одна — показываем все, список не пустеет", () => {
+    const busy = [1, 2].map(postNo => ({ postNo, startsAt: at("10:15"), endsAt: at("18:00") }));
+    expect(fit({ startsAt: at("10:00"), busy })).toEqual({ list: services, hidden: 0 });
+  });
+
+  it("порядок списка сохраняется", () => {
+    const res = fit({ startsAt: at("10:00"), busy: busyFrom11 });
+    expect(res.list).toEqual([services[1], services[2]]);
   });
 });

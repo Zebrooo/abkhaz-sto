@@ -1,6 +1,7 @@
-// Мастер ручной записи: две развилки, на которых окно, выбранное прямо на
-// сетке, теряется молча, — какая услуга стоит по умолчанию и куда ведёт
-// «Далее». Обе чистые и под тестами (booking-form.test.ts).
+// Мастер ручной записи: развилки, на которых окно, выбранное прямо на сетке,
+// теряется молча, — какая услуга стоит по умолчанию, какие услуги вообще
+// показывать и куда ведёт «Далее». Все чистые и под тестами
+// (booking-form.test.ts).
 //
 // Откуда взялось: на сетке дня человек жмёт свободное окно («10:00, пост 2»),
 // и адрес несёт день, пост и время. Услуги в нём нет — её выбирают здесь, и
@@ -55,4 +56,41 @@ export function pickService<T extends FormService>(input: {
 export function nextStep(step: number, hasSlot: boolean): number {
   if (step <= 0) return hasSlot ? 2 : 1;
   return Math.min(2, step + 1);
+}
+
+/**
+ * Услуги, которые влезают в выбранное окно, — остальные из списка убираем:
+ * предлагать трёхчасовую работу в часовое окно значит звать человека в
+ * ошибку, которую он увидит только на кнопке «Записать».
+ *
+ * Две оговорки, обе намеренные:
+ *  - времени в адресе нет — показываем всё: во что мерить, ещё не выбрано;
+ *  - не влезает ни одна — тоже показываем всё, иначе экран остаётся с пустым
+ *    списком и человеку нечего нажать; про само окно скажет подсказка.
+ * Выбранная услуга (keepId) остаётся в списке всегда: её и запишет форма,
+ * а прятать то, что вот-вот отправится, — врать про своё же состояние.
+ */
+export function fittingServices<T extends FormService>(input: {
+  services: readonly T[];
+  schedule: StoSchedule;
+  startsAt: Date | null;
+  postNo: number | null;
+  busy: readonly BusyInterval[];
+  now: Date;
+  /** Выбранная услуга: остаётся, даже если в окно не влезает. */
+  keepId?: number;
+}): { list: T[]; hidden: number } {
+  const { services, startsAt } = input;
+  if (!startsAt) return { list: [...services], hidden: 0 };
+  const fits = services.filter(s => isSlotFree({
+    schedule: input.schedule,
+    startsAt,
+    durationMin: s.durationMin,
+    busy: input.busy,
+    postNo: input.postNo ?? undefined,
+    now: input.now,
+  }).ok);
+  if (fits.length === 0) return { list: [...services], hidden: 0 };
+  const list = services.filter(s => s.listingId === input.keepId || fits.includes(s));
+  return { list, hidden: services.length - list.length };
 }

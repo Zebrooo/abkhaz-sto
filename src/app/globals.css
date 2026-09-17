@@ -57,7 +57,10 @@
 /* ─────────── База ─────────── */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-html { -webkit-text-size-adjust: 100%; }
+/* Оттяжку у верха страницы забирает себе своя «потяни — обновится»
+   (components/PullRefresh.tsx): без этого Chrome показывал бы сверху свой
+   кружок поверх нашего, а перетяг страницы уводил бы экран из-под пальца. */
+html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: contain; }
 body {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -74,6 +77,8 @@ input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, p { margin: 0; }
 svg { display: block; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Текст только для чтения с экрана: глазами не видно, голосом слышно. */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @keyframes fadeSlide { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -82,6 +87,7 @@ svg { display: block; }
 @keyframes toastIn { from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes nowPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: .35; } }
 @keyframes barGrow { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
@@ -650,6 +656,29 @@ svg { display: block; }
 .notif-t { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
 .notif-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; text-wrap: pretty; }
 .notif-at { font-size: 11.5px; color: var(--muted-2); margin-top: 4px; }
+
+/* ─────────── «Потяни — обновится» ─────────── */
+/* Кружок выезжает из-под шапки вслед за пальцем и остаётся на отметке, пока
+   сервер отвечает. Поверх шапки (z выше .app-top и .topbar), но под
+   шторкой: обновление не должно прятаться за заголовком экрана. */
+.pull { position: fixed; top: 0; left: 0; right: 0; z-index: 6; display: flex; justify-content: center; pointer-events: none; }
+.pull-i {
+  margin-top: calc(var(--sa-top) + 2px); width: 34px; height: 34px; border-radius: var(--radius-pill);
+  background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
+  /* -44px — кружок стоит выше края экрана: пока не тянут, его нет. */
+  translate: 0 -44px;
+  transition: transform .22s var(--ease-out), opacity .22s, color .15s;
+}
+/* Палец на экране — кружок идёт за ним без сглаживания, иначе отстаёт. */
+.pull-i.held { transition: opacity .12s, color .15s; }
+.pull-i.ready { color: var(--accent); border-color: var(--danger-line); }
+.pull-i svg { transition: transform .18s var(--ease-out); }
+.pull .spin {
+  width: 16px; height: 16px; border-radius: var(--radius-pill);
+  border: 2px solid var(--warm); border-top-color: var(--accent);
+  animation: spin .7s linear infinite;
+}
 
 /* ─────────── Телефон: мелочи ─────────── */
 .foot-note { text-align: center; font-size: 11.5px; color: var(--muted-2); padding: 14px 0; }

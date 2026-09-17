@@ -7,6 +7,7 @@ import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
 import { SideNav } from "@/components/SideNav";
 import { TopBar } from "@/components/TopBar";
+import { PullRefresh } from "@/components/PullRefresh";
 import { Icon } from "@/components/Icon";
 import { formatPhone, todayLocal } from "@/lib/format";
 import { siteUrl, shopStorefrontUrl } from "@/lib/site";
@@ -79,6 +80,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const inspect = await inspectHref(ctx, day, new Date());
   return (
     <div className="app">
+      {/* Жест «потяни вниз» — на всех экранах приложения разом: он про
+          свежесть данных, а не про конкретный экран. */}
+      <PullRefresh />
       <TopBar shopName={shop.name} role={role} newHref={newHref} unread={pending} />
       {/* ПРИМЕРКА РОЛИ ВИДНА ВСЕГДА. Хозяин, забывший, что смотрит глазами
           мастера, решит, что половина приложения пропала. Полоса висит над

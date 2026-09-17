@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { can } from "@/lib/access";
 import { requireSection } from "@/lib/context";
 import { busyIntervals, countPending, recentBookings } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
@@ -103,7 +104,13 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // как на экране «Клиенты»: своей базы клиентов у приложения нет. Берём
   // хвост истории, а не всё подряд: строка ищет тех, кто ездит, а не тех,
   // кто был один раз три года назад, и в браузер уезжает список, а не архив.
-  const history = await recentBookings(shop.id, 400);
+  // БАЗА КЛИЕНТОВ УЕЗЖАЕТ В БРАУЗЕР, поэтому её отдаём только тому, кому
+  // раздел «Клиенты» открыт. Мастеру он закрыт — и подсказки в строке имени
+  // ему не положены: иначе на его телефоне оказался бы список всех клиентов
+  // сервиса с телефонами, номерами и VIN. Записывать он по-прежнему может,
+  // просто без поиска по прежним.
+  const mayPick = can(ctx.role, "clients");
+  const history = mayPick ? await recentBookings(shop.id, 400) : [];
   const cars = carsByClient(history);
   const known = summarizeClients(history).slice(0, 200).map(c => ({
     key: c.key, name: c.name, phone: c.phone, car: c.car, plate: c.plate, vin: c.vin, visits: c.visits,

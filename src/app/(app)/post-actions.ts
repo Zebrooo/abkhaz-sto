@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 import { can, HOME_PATH } from "@/lib/access";
 import { updateMaster } from "@/lib/api/masters";
 import { dayBookings } from "@/lib/bookings";
-import { serviceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
 import { postCount } from "@/lib/mywork";
 import { clearPostMarks, savePostMark } from "@/lib/post-cookie";
@@ -32,6 +32,9 @@ function back(q: Record<string, string | undefined>): never {
 async function ctx() {
   const c = await serviceContext();
   if (!c) redirect("/vhod");
+  // Отметка на подъёмнике в примерке тоже не ставится: она уходит в
+  // справочник сайта настоящим человеком, и хозяин «отметился бы» всерьёз.
+  blockIfViewing(c);
   if (!can(c.role, "bookings")) redirect(HOME_PATH[c.role]);
   return c;
 }

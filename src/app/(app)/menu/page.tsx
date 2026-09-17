@@ -152,7 +152,8 @@ export default async function MorePage({ searchParams }: { searchParams: Promise
             <div className="card-t">Посмотреть глазами</div>
             <div className="card-s">
               Проверьте, что видит мастер или админ: вкладки, кнопки и адреса станут его.
-              Права при этом ваши — сайт по-прежнему знает, что это вы.
+              Это просмотр: пока вы в чужой роли, ничего не сохраняется — сайт всё равно знает, что это вы,
+              и сделал бы по-вашему, а не по примеренной роли.
             </div>
             <div className="chips mv-chips">
               {(["owner", "admin", "master"] as StoRole[]).map(r => (

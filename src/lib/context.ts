@@ -11,7 +11,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
 import { readRoleView } from "@/lib/role-cookie";
-import { narrowRole } from "@/lib/role-view";
+import { narrowRole, VIEW_ONLY_MESSAGE } from "@/lib/role-view";
 import { currentServiceShop, type ServiceShop } from "@/lib/shop";
 import { getServerUser } from "@/lib/supabase/server";
 
@@ -59,6 +59,15 @@ export const serviceContext = cache(async (): Promise<ServiceContext | null> => 
   const role = narrowRole(realRole, view);
   return { shop, userId: user.id, role, realRole, viewing: role !== realRole, masterId };
 });
+
+/**
+ * Гейт серверных действий: в примерке роли (lib/role-view.ts) не меняем
+ * ничего. Уводим в «Ещё» — там же, рядом с сообщением, стоят чипы ролей и
+ * дорога назад к себе.
+ */
+export function blockIfViewing(ctx: { viewing: boolean }): void {
+  if (ctx.viewing) redirect(`/menu?err=${encodeURIComponent(VIEW_ONLY_MESSAGE)}`);
+}
 
 /**
  * Гейт экрана: раздел закрыт роли — уводим на её первый экран, а не

@@ -9,7 +9,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { can, isStoRole, type Section } from "@/lib/access";
-import { serviceContext, type ServiceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext, type ServiceContext } from "@/lib/context";
 import { assignBookingMaster, createMaster, updateMaster } from "@/lib/api/masters";
 import { inviteMember, setMemberActive, setMemberRole } from "@/lib/api/members";
 import { count } from "@/lib/format";
@@ -40,6 +40,7 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 async function ctx(section: Section, ret: string): Promise<ServiceContext> {
   const c = await serviceContext();
   if (!c) redirect("/");
+  blockIfViewing(c);
   if (!can(c.role, section)) back(bare(ret), { err: section === "access" ? "Это может только хозяин сервиса" : "Это может админ или хозяин сервиса" });
   return c;
 }

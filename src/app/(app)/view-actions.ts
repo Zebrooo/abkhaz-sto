@@ -42,7 +42,7 @@ export async function setRoleViewAction(fd: FormData) {
   if (!isViewableRole(role)) back({ err: "Такой роли нет" });
   await saveRoleView({ shopId: c.shop.id, userId: c.userId }, role);
   revalidateShell();
-  back({ ok: `Смотрите как ${STO_ROLE_LABEL[role].toLowerCase()} — кнопки и пути теперь его` });
+  back({ ok: `Смотрите как ${STO_ROLE_LABEL[role].toLowerCase()} — кнопки и пути теперь его. Это просмотр: ничего не сохраняется` });
 }
 
 /** Кнопка «вернуться к своей роли» из полосы примерки: работает с любого экрана. */

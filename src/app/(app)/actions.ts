@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/supabase/server";
 import { accessibleServiceShop } from "@/lib/shop";
-import { roleIn } from "@/lib/context";
+import { blockIfViewing, roleIn } from "@/lib/context";
 import { readRoleView } from "@/lib/role-cookie";
 import { narrowRole } from "@/lib/role-view";
 import { can, HOME_PATH, type Section } from "@/lib/access";
@@ -56,6 +56,9 @@ async function ctx(fd: FormData, section: Section) {
   // иначе кнопка и действие разъедутся (lib/role-view.ts).
   const { role: realRole } = roleIn(shop);
   const role = narrowRole(realRole, await readRoleView({ shopId: shop.id, userId: user.id }));
+  // В примерке роли ничего не меняем: сайт всё равно решает по настоящему
+  // actorUserId, и действие вышло бы не тем, что обещает кнопка.
+  blockIfViewing({ viewing: role !== realRole });
   if (!can(role, section)) redirect(HOME_PATH[role]);
   return { user, shop, role };
 }

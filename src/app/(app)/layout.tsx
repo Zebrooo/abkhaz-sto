@@ -78,7 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           всеми экранами и уводит обратно одной кнопкой. */}
       {ctx.viewing && (
         <form action={clearRoleViewAction} className="view-bar">
-          <span className="view-bar-t">Вы смотрите как {STO_ROLE_LABEL[role].toLowerCase()}: кнопки и пути его, права остались ваши</span>
+          <span className="view-bar-t">Вы смотрите как {STO_ROLE_LABEL[role].toLowerCase()}: кнопки и пути его. Это просмотр — ничего не сохраняется</span>
           <button className="aui-btn aui-btn--ghost aui-btn--sm" type="submit">Вернуться к своей роли</button>
         </form>
       )}

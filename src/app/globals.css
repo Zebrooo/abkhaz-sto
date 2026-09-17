@@ -1689,6 +1689,7 @@ svg { display: block; }
 .m-edit:hover { background: var(--bg-2); color: var(--ink); }
 .m-fired .ava { opacity: .6; }
 .m-fired-link { display: inline-block; padding: 4px 0; color: var(--muted); text-decoration: underline; }
+.m-invite { display: inline-block; padding: 2px 0; color: var(--accent); text-decoration: underline; }
 /* «Уволить» внизу шторки и без заливки: это не «сохранить». */
 .m-fire { align-self: flex-start; margin-top: 4px; color: var(--accent); }
 

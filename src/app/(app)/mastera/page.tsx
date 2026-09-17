@@ -192,6 +192,14 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
         )}
 
         <p className="hint m-note">Мастер привязывается к посту: запись на пост 2 сразу показывает, кто её делает. Выключенный мастер не занимает окна.</p>
+        {/* ЗАВЕСТИ МАСТЕРА И ПУСТИТЬ ЕГО В ПРИЛОЖЕНИЕ — РАЗНЫЕ ДЕЛА, и дорогу
+            ко второму ищут здесь, а не в «Доступах»: человек пришёл на экран
+            «Мастера», чтобы позвать мастера. */}
+        {role === "owner" && (
+          <Link className="hint m-invite" href="/dostupy?do=invite&role=master">
+            Пустить мастера в приложение по номеру телефона — в «Доступах»
+          </Link>
+        )}
         {role === "owner" && active.length > 0 && (
           <Link className="aui-btn aui-btn--outline aui-btn--lg m-add" href={addHref(0)}>Добавить мастера</Link>
         )}
@@ -225,7 +233,11 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
               </div>
             </div>
             <input type="hidden" name="postNo" value={newPost} />
-            <p className="sheet-note">Мастер без учётки в приложение не входит, но стоит в расписании и в отчётах. Привязку учётки к мастеру сайт пока не отдаёт — до неё мастер отмечается на подъёмнике со своего телефона, а в отчёте остаётся без имени.</p>
+            <p className="sheet-note">
+              Это строка справочника: она стоит в расписании и в отчётах, входить в приложение по ней нельзя.
+              Чтобы мастер вошёл, пригласите его по номеру телефона в «Доступах» — роль включится, когда он войдёт этим номером.
+            </p>
+            <Link className="sheet-note m-invite" href="/dostupy?do=invite&role=master">Пригласить по номеру телефона →</Link>
           </form>
         </Sheet>
       )}

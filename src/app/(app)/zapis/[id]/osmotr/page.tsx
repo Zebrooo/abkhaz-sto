@@ -12,9 +12,10 @@ import {
 } from "@/lib/api/inspections";
 import { fetchReport } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
-import { countPending, getBooking, recentBookings } from "@/lib/bookings";
+import { countPending, getBooking } from "@/lib/bookings";
+import { carBrief } from "@/lib/car-brief";
 import { requireSection } from "@/lib/context";
-import { dayTitle, minutesLabel, rub } from "@/lib/format";
+import { count, dayTitle, minutesLabel, rub } from "@/lib/format";
 import {
   chipTitle, customWorks, inspectionState, isStarterSet, kmLabel, nodesLabel, photoIdsFrom, untouchedNodeKeys,
 } from "@/lib/inspection";
@@ -34,13 +35,6 @@ const BADGE: Record<Severity, string> = { bad: "aui-badge", warn: "aui-badge is-
 
 /** null — «договорная»: работы нет в прайсе, цену согласует админ. */
 const priceText = (p: number | null) => (p == null ? "договорная" : rub(p));
-
-/** Та же машина, что в записи: по id из гаража или по номеру снимка. */
-function sameCar(a: StoBookingRow, b: StoBookingRow): boolean {
-  if (a.vehicle_id != null && a.vehicle_id === b.vehicle_id) return true;
-  const plate = a.data.vehicle?.plate;
-  return !!plate && plate === b.data.vehicle?.plate;
-}
 
 /** Скрытые поля, которые ждёт addDefectAction от каждой формы шторки. */
 function DefectFields({ b, inspectionId, nodeKey, back, photoIds }: { b: StoBookingRow; inspectionId: number; nodeKey: string; back: string; photoIds: string[] }) {
@@ -103,21 +97,18 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const presetOpen = !!inspection && act === "preset" && !!node;
   const photoIds = photoIdsFrom(many(sp.photo));
 
-  // Прошлый пробег — только подсказка под полем: сайт всё равно сверит. Ищем
-  // прошлую запись той же машины и её осмотр; нет — подписи нет.
-  let prev: { day: string; km: number } | null = null;
-  if (kmOpen && !inspection) {
-    const before = (await recentBookings(shop.id)).find(r => r.id !== b.id && r.starts_at < b.starts_at && sameCar(b, r));
-    const pi = before ? await fetchInspection({ ...actor, bookingId: before.id }) : null;
-    if (before && pi?.ok) prev = { day: localDay(new Date(before.starts_at)), km: pi.data.odometerKm };
-  }
-
+  // Досье машины — то, ради чего мастеру не нужно ничего вспоминать: была ли
+  // она у нас, что делали, какой был пробег и что тогда нашли (lib/car-brief.ts).
+  // Идёт в одной пачке с остальными запросами, поэтому экран от него не ждёт.
   // Сумму сметы считает сайт — берём её из отчёта, а не складываем цены.
-  const [frequent, presets, report] = await Promise.all([
+  const [brief, frequent, presets, report] = await Promise.all([
+    carBrief(ctx, b),
     inspection ? fetchFrequentPresets({ ...actor, limit: 6 }).then(r => listOr(r)) : [],
     presetOpen && node ? fetchPresets({ ...actor, nodeKey: node }).then(r => listOr(r)) : [],
     inspection && defects.length > 0 ? fetchReport({ ...actor, inspectionId: inspection.id }) : null,
   ]);
+  const prev = brief.prevKm;
+  const last = brief.past.visits[0] ?? null;
   const total = report?.ok ? report.data.total : null;
   const starter = isStarterSet(frequent);
   const finishLabel = defects.length === 0 ? "Всё в норме — закрыть осмотр" : total == null ? "Готово · к отчёту" : `Готово · отчёт на ${rub(total)}`;
@@ -181,6 +172,67 @@ export default async function InspectionPage({ params, searchParams }: { params:
                 {inspection?.masterName && <span className="ins-master">мастер {inspection.masterName}</span>}
               </div>
             </div>
+
+            {/* ЧТО МЫ ЗНАЕМ ОБ ЭТОЙ МАШИНЕ — чтобы мастер у подъёмника ничего
+                не вспоминал и никого не переспрашивал. Всё берём из своих
+                записей и прошлых осмотров; чего не знаем — о том и пишем, а
+                не выдаём молчание за «машина у нас впервые». */}
+            {brief.past.key && (
+              <div className="card ins-brief">
+                <div className="ins-brief-h">
+                  <span className="card-t">Что мы знаем об этой машине</span>
+                  <Link className="ins-brief-more" href={`/mashiny/${brief.past.key}`}>Карточка машины</Link>
+                </div>
+                <div className="ins-brief-rows">
+                  <div className="ins-brief-r">
+                    <span className="ins-brief-k">История</span>
+                    <span className="ins-brief-v">
+                      {last
+                        ? `${brief.past.done > 0 ? `обслуживали ${count(brief.past.done, "раз", "раза", "раз")}, ` : ""}последний визит ${dayTitle(localDay(new Date(last.starts_at)))} — ${last.service.title.toLowerCase()}`
+                        : "у нас впервые"}
+                    </span>
+                  </div>
+                  {prev && (
+                    <div className="ins-brief-r">
+                      <span className="ins-brief-k">Прошлый пробег</span>
+                      <span className="ins-brief-v">{kmLabel(prev.km)} · {dayTitle(prev.day)}</span>
+                    </div>
+                  )}
+                  {brief.garage && (
+                    <div className="ins-brief-r">
+                      <span className="ins-brief-k">В гараже клиента</span>
+                      <span className="ins-brief-v">
+                        {[brief.garage.plate, brief.garage.vin && `VIN ${brief.garage.vin}`].filter(Boolean).join(" · ") || "машина заведена на сайте"}
+                      </span>
+                    </div>
+                  )}
+                  {brief.past.otherOwners.length > 0 && (
+                    <div className="ins-brief-r">
+                      <span className="ins-brief-k">Прежний владелец</span>
+                      <span className="ins-brief-v">{brief.past.otherOwners.map(o => o.name).join(", ")}</span>
+                    </div>
+                  )}
+                </div>
+                {brief.prevDefects.length > 0 && (
+                  <div className="ins-brief-def">
+                    <div className="ins-brief-k">В прошлый раз нашли — проверьте, что с этим сейчас</div>
+                    <div className="ins-brief-chips">
+                      {brief.prevDefects.map((d, i) => (
+                        <span key={`${d.day}-${i}`} className="ins-brief-chip">
+                          <span className={`ins-dot ${d.severity}`} />{d.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {brief.past.byName && (
+                  <div className="ins-small">Номера в записи нет: историю берём только по машинам этого клиента — марка, модель и год совпали.</div>
+                )}
+                {brief.siteDown && (
+                  <div className="ins-small">Прошлые осмотры не подгрузились — пробег и замечания могли быть, мы их сейчас не видим.</div>
+                )}
+              </div>
+            )}
 
             {/* Без осмотра дефект не снять — ведём к пробегу и говорим почему,
                 а не гасим ссылку с живым href. */}
@@ -268,12 +320,23 @@ export default async function InspectionPage({ params, searchParams }: { params:
               <input type="hidden" name="bookingId" value={b.id} />
               <input type="hidden" name="return" value={self()} />
               {(formErr || loadErr) && <Flash err={formErr || loadErr} title={formErr ? undefined : "Осмотр не загрузился"} />}
-              <div className="sheet-note">Один раз за осмотр — пробег попадёт в отчёт и в историю машины.</div>
+              <div className="sheet-note">Один раз за осмотр — пробег попадёт в отчёт и в историю машины. С этого же начинается приёмка: машина станет вашей в списке работ.</div>
               <label className="km-box">
                 <input name="odometer" inputMode="numeric" autoComplete="off" aria-label="Пробег, км" autoFocus />
                 <span>км</span>
               </label>
-              {prev && <div className="km-prev">В прошлый визит, {dayTitle(prev.day)} — {kmLabel(prev.km)}</div>}
+              {/* Подсказка под полем — только правда: прошлый пробег, «не
+                  подгрузилось» или «первый раз». Пустая строка здесь читается
+                  как «истории нет», а это не одно и то же. */}
+              {prev
+                ? <div className="km-prev">В прошлый визит, {dayTitle(prev.day)} — {kmLabel(prev.km)}</div>
+                : brief.siteDown
+                  ? <div className="km-prev">Прошлый пробег не подгрузился — вводите то, что на панели.</div>
+                  : brief.past.byName
+                    ? <div className="km-prev">Машина без номера — прошлый пробег по ней не показываем.</div>
+                    : last
+                      ? <div className="km-prev">Машина у нас была, но осмотров с пробегом по ней нет.</div>
+                      : <div className="km-prev">Эта машина у нас впервые.</div>}
             </form>
           )}
         </Sheet>

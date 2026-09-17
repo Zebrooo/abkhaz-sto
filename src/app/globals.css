@@ -1437,6 +1437,27 @@ svg { display: block; }
 .ins-def .ph-fail { order: 9; margin: -6px 0 0 84px; }
 .ins-note { font-size: 12.5px; color: var(--muted); padding: 6px 4px 0; text-wrap: pretty; }
 .ins-small { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+
+/* Досье машины при приёмке: строки «ключ — значение» и чипы прошлых
+   замечаний. Читается сверху вниз одним взглядом, пока клиент выходит. */
+.ins-brief-h { display: flex; align-items: baseline; gap: 10px; }
+.ins-brief-more { margin-left: auto; flex: none; font-size: 12px; font-weight: 600; color: var(--accent); }
+.ins-brief-rows { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.ins-brief-r { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.ins-brief-k { flex: none; width: 116px; font-size: 11.5px; color: var(--muted); }
+.ins-brief-v { flex: 1; min-width: 0; text-wrap: pretty; }
+.ins-brief-def { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ins-brief-def .ins-brief-k { width: auto; display: block; }
+.ins-brief-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ins-brief-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border-radius: var(--radius-pill); background: var(--bg-2); font-size: 12px; font-weight: 600;
+}
+.ins-brief .ins-small { display: block; margin-top: 10px; }
+@media (max-width: 520px) {
+  .ins-brief-r { flex-direction: column; gap: 1px; }
+  .ins-brief-k { width: auto; }
+}
 /* Кнопки блока «Осмотр при приёмке» в карточке записи. */
 .ins-bk-b { display: flex; gap: 8px; margin-top: 12px; }
 .ins-bk-b .aui-btn { min-height: 44px; }
@@ -1683,6 +1704,16 @@ svg { display: block; }
 .mw-report-no { flex: none; font-size: 11.5px; color: var(--muted); }
 .mw-report-car { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mw-reports .card-t { font-size: 13.5px; }
+
+/* Отметка на подъёмнике — первое, что делает мастер, придя на смену.
+   Чипы постов живут в одной строке и прокручиваются: постов бывает шесть. */
+.mw-post .card-s { text-wrap: pretty; }
+.mw-posts { margin-top: 12px; flex-wrap: nowrap; }
+.mw-posts form { display: contents; }
+.mw-post .hint { padding: 10px 0 0; }
+/* Машина подошла по времени — карточка-призыв над «сейчас в работе»:
+   акцентная рамка и та же раскладка, что у текущей записи. */
+.mw-due + .mw-due { margin-top: -4px; }
 
 @media (min-width: 881px) {
   /* Доступы — колонка в 760px, строки в одной рамке, как таблица. */

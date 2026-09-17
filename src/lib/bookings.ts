@@ -46,8 +46,14 @@ export async function countPending(shopId: number): Promise<number> {
   return count ?? 0;
 }
 
-/** Все записи сервиса, новые сверху — для клиентов и ленты уведомлений. */
-export async function recentBookings(shopId: number, limit = 1000): Promise<StoBookingRow[]> {
+/**
+ * Все записи сервиса, новые сверху — для клиентов, машин и ленты
+ * уведомлений. cache() на запрос: за одной и той же историей в одном рендере
+ * приходят карточка записи, досье машины и свод клиентов, а это тысяча
+ * строк со снимками — читать её трижды незачем. Ключ кэша — аргументы,
+ * поэтому вызов с другим limit ходит в базу отдельно.
+ */
+export const recentBookings = cache(async (shopId: number, limit = 1000): Promise<StoBookingRow[]> => {
   const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
     .eq("shop_id", shopId).order("starts_at", { ascending: false }).limit(limit).returns<StoBookingRow[]>();
   if (error) {
@@ -55,7 +61,7 @@ export async function recentBookings(shopId: number, limit = 1000): Promise<StoB
     return [];
   }
   return data ?? [];
-}
+});
 
 export async function getBooking(shopId: number, id: number): Promise<StoBookingRow | null> {
   const { data } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)

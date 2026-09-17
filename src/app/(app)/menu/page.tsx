@@ -71,7 +71,10 @@ export default async function MorePage() {
   // Цифры с сайта — только для строк, которые эта роль увидит: незачем
   // спрашивать непрочитанные у хозяина, у которого чата нет.
   const unread = keys.includes("chats") ? await fetchUnread(shop.id, ctx.userId) : null;
-  const masters = keys.includes("masters") ? (await masterDay(ctx, day)).masters : [];
+  // Один поход за днём мастера кормит две строки: «Мастера» (кто на смене) и
+  // «Мой пост» (где стоите вы сами).
+  const mday = keys.includes("masters") || keys.includes("mywork") ? await masterDay(ctx, day) : null;
+  const masters = mday?.masters ?? [];
   // Ровно то же окно, что откроется по нажатию (экран «Готовые отчёты»
   // стартует с недели): число в подписи обязано совпасть со списком, иначе
   // строка врёт. Мастеру — только его отчёты, как и на самом экране.
@@ -93,6 +96,10 @@ export default async function MorePage() {
     : `${masters.filter(m => m.active && m.onShift).length} на смене из ${masters.filter(m => m.active).length}`;
 
   const ITEMS: Record<MenuKey, Item> = {
+    mywork: {
+      key: "mywork", href: "/moi-raboty", icon: "list", title: "Мой пост",
+      sub: mday?.postNo ? `вы на посту ${mday.postNo} · ${count(mday.mine.length, "запись", "записи", "записей")}` : "отметьтесь, какой подъёмник заняли",
+    },
     inspect: { key: "inspect", href: inspect, icon: "camera", title: "Осмотр и отчёты", sub: "фото дефекта, узел — и он в отчёте" },
     report: role === "master"
       ? { key: "report", href: "/otchety", icon: "list", title: "Мои отчёты", sub: `${reports.length} за 7 дней` }

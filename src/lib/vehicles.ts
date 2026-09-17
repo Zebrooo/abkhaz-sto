@@ -14,6 +14,7 @@
 // одного сервиса без номеров в одну карточку и сольются, и это честнее, чем
 // заводить карточку на каждую запись.
 import type { StoBookingRow, StoBookingVehicleSnapshot } from "@/lib/sto/types";
+import { isLive } from "@/lib/stats";
 import { clientKey } from "@/lib/clients";
 import { normalizePhone } from "@/lib/phone";
 
@@ -138,4 +139,72 @@ export function carsByClient(rows: readonly StoBookingRow[]): Map<string, string
     }
   }
   return out;
+}
+
+/**
+ * Та же машина, что в записи? Сначала id гаража (он точный), иначе общий
+ * ключ. Ключа нет — «не та же»: иначе все записи без машины слиплись бы в
+ * одну и мастер увидел бы на приёмке чужую историю.
+ */
+export function sameVehicle(a: StoBookingRow, b: StoBookingRow): boolean {
+  if (a.vehicle_id != null && a.vehicle_id === b.vehicle_id) return true;
+  const key = vehicleKey(a.data.vehicle);
+  return key !== null && key === vehicleKey(b.data.vehicle);
+}
+
+/** Прошлое машины к моменту записи — то, что показывают мастеру на приёмке. */
+export type VehiclePast = {
+  /** Ключ машины; null — машины в записи нет и показывать нечего. */
+  key: string | null;
+  /**
+   * Машина без номера: ключ склеен из марки, модели и года. Две «Лады Весты
+   * 2021» разных клиентов дали бы общую историю, поэтому такую историю берём
+   * только внутри одного клиента и подписываем оговоркой.
+   */
+  byName: boolean;
+  /** Прошлые состоявшиеся визиты, свежие сверху. */
+  visits: StoBookingRow[];
+  /** Сколько раз машину уже обслуживали (выполненные визиты до этой записи). */
+  done: number;
+  /** Прежние владельцы — машину продают, и мастеру полезно это видеть. */
+  otherOwners: VehicleOwner[];
+};
+
+const EMPTY_PAST: VehiclePast = { key: null, byName: false, visits: [], done: 0, otherOwners: [] };
+
+/**
+ * Что этой машине у нас уже делали — к моменту записи b.
+ *
+ * Считаем честно: только визиты ДО этой записи (будущие не «прошлое»), без
+ * отменённых и неявок (машина не приезжала — работы не было), саму запись
+ * исключаем. «Сколько раз была» — по выполненным: подтверждённая, но ещё не
+ * закрытая запись — это не визит, а обещание.
+ */
+export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, limit = 5): VehiclePast {
+  const key = vehicleKey(b.data.vehicle);
+  if (!key) return EMPTY_PAST;
+  const byName = key.startsWith("m");
+  const mine = clientKey(b);
+  const past = rows
+    .filter(r => r.id !== b.id
+      && r.starts_at < b.starts_at
+      && (isLive(r) || r.status === "done")
+      && vehicleKey(r.data.vehicle) === key
+      // Без номера машину узнаём только у того же клиента — чужую «Весту
+      // 2021» выдавать за эту нельзя.
+      && (!byName || clientKey(r) === mine))
+    .sort((a, c) => c.starts_at.localeCompare(a.starts_at));
+  const owners = new Map<string, VehicleOwner>();
+  for (const r of past) {
+    const o = ownerOf(r);
+    if (o.key === mine || owners.has(o.key)) continue;
+    owners.set(o.key, o);
+  }
+  return {
+    key,
+    byName,
+    visits: past.slice(0, Math.max(0, limit)),
+    done: past.filter(r => r.status === "done").length,
+    otherOwners: [...owners.values()],
+  };
 }

@@ -77,8 +77,11 @@ const SIDE_ITEM: Record<NavKey, SideDef> = {
   notifs: { key: "notifs", label: "Уведомления", icon: "bell" },
   access: { key: "access", label: "Доступы", icon: "cog" },
   report: { key: "report", label: "Готовые отчёты", icon: "list" },
-  // В левом меню макета этих пунктов нет — они здесь ради полноты словаря.
+  // «Мой пост» в макете был только у мастера. Он нужен всем, кто сам стоит у
+  // подъёмника: в маленьком сервисе это хозяин, и без пункта ему негде
+  // отметиться, какой подъёмник он занял.
   mywork: { key: "mywork", label: "Мой пост", icon: "list" },
+  // В левом меню макета этого пункта нет — он здесь ради полноты словаря.
   smena: { key: "smena", label: "Смена", icon: "chart" },
   more: { key: "more", label: "Ещё", icon: "menu" },
 };
@@ -91,8 +94,8 @@ const SIDE_ITEM: Record<NavKey, SideDef> = {
  */
 const SIDE_KEYS: Record<StoRole, readonly NavKey[]> = {
   master: ["inspect", "report", "chats"],
-  admin: ["today", "inspect", "report", "clients", "chats", "services", "schedule", "notifs"],
-  owner: ["dash", "today", "inspect", "report", "masters", "services", "schedule", "notifs", "access"],
+  admin: ["today", "mywork", "inspect", "report", "clients", "chats", "services", "schedule", "notifs"],
+  owner: ["dash", "today", "mywork", "inspect", "report", "masters", "services", "schedule", "notifs", "access"],
 };
 
 /** Левое меню рабочего места — в порядке макета. */
@@ -101,14 +104,15 @@ export function sideNav(role: StoRole): readonly SideDef[] {
 }
 
 /** Строки «Ещё»: что не поместилось во вкладки. «shop» — витрина на сайте. */
-export type MenuKey = "inspect" | "report" | "services" | "schedule" | "masters" | "chats" | "notifs" | "access" | "shop";
+export type MenuKey = "mywork" | "inspect" | "report" | "services" | "schedule" | "masters" | "chats" | "notifs" | "access" | "shop";
 
 export const MENU: Record<StoRole, readonly MenuKey[]> = {
   master: ["inspect", "report", "chats", "services"],
-  admin: ["inspect", "report", "services", "schedule", "masters", "chats", "notifs", "shop"],
-  // Хозяину «Осмотр» не нужен — он не стоит у подъёмника, — а готовые
-  // отчёты нужны: на телефоне это его единственный путь к ним.
-  owner: ["report", "services", "schedule", "masters", "notifs", "access", "shop"],
+  admin: ["mywork", "inspect", "report", "services", "schedule", "masters", "chats", "notifs", "shop"],
+  // «Мой пост» — и хозяину: в сервисе на два подъёмника он сам принимает
+  // машину, и отметиться ему больше негде. Готовые отчёты нужны всегда: на
+  // телефоне это его единственный путь к ним.
+  owner: ["mywork", "report", "services", "schedule", "masters", "notifs", "access", "shop"],
 };
 
 /**

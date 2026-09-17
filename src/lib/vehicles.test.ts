@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { carsByClient, clientVehicles, normalizePlate, summarizeVehicles, vehicleCard, vehicleKey, vehicleName } from "@/lib/vehicles";
+import {
+  carsByClient, clientVehicles, normalizePlate, sameVehicle, summarizeVehicles,
+  vehicleCard, vehicleKey, vehicleName, vehiclePast,
+} from "@/lib/vehicles";
 import type { StoBookingRow, StoBookingStatus } from "@/lib/sto/types";
 
 type Make = {
@@ -147,5 +150,87 @@ describe("carsByClient", () => {
 
   it("записи без машины ничего не добавляют", () => {
     expect(carsByClient([row({ id: 1, at: "2026-09-15T06:00:00Z", brand: undefined, plate: undefined })]).size).toBe(0);
+  });
+});
+
+describe("sameVehicle", () => {
+  const a = row({ id: 1, at: "2026-09-15T06:00:00Z", plate: "А123АВ01" });
+
+  it("тот же номер в другом написании — та же машина", () => {
+    expect(sameVehicle(a, row({ id: 2, at: "2026-08-01T06:00:00Z", plate: "а 123 ав 01" }))).toBe(true);
+  });
+
+  it("другая машина — не та же", () => {
+    expect(sameVehicle(a, row({ id: 2, at: "2026-08-01T06:00:00Z", plate: "Б222ВВ01" }))).toBe(false);
+  });
+
+  it("записи без машины не слипаются в одну", () => {
+    const x = row({ id: 3, at: "2026-09-01T06:00:00Z", brand: undefined, plate: undefined });
+    const y = row({ id: 4, at: "2026-09-02T06:00:00Z", brand: undefined, plate: undefined });
+    expect(sameVehicle(x, y)).toBe(false);
+  });
+
+  it("id машины из гаража важнее снимка", () => {
+    const g1 = { ...row({ id: 5, at: "2026-09-01T06:00:00Z", plate: "А123АВ01" }), vehicle_id: 42 };
+    const g2 = { ...row({ id: 6, at: "2026-09-02T06:00:00Z", brand: "Kia", model: "Rio", year: 2014, plate: "Б222ВВ01" }), vehicle_id: 42 };
+    expect(sameVehicle(g1, g2)).toBe(true);
+  });
+});
+
+describe("vehiclePast — что машине уже делали", () => {
+  const now = row({ id: 100, at: "2026-09-17T06:00:00Z", plate: "А123АВ01", status: "confirmed" });
+
+  it("берёт только прошлые визиты этой машины, свежие сверху", () => {
+    const past = vehiclePast([
+      now,
+      row({ id: 1, at: "2026-09-10T06:00:00Z", plate: "А123АВ01" }),
+      row({ id: 2, at: "2026-06-10T06:00:00Z", plate: "а123ав01" }),
+      row({ id: 3, at: "2026-09-20T06:00:00Z", plate: "А123АВ01", status: "confirmed" }),
+      row({ id: 4, at: "2026-09-12T06:00:00Z", plate: "Б222ВВ01" }),
+    ], now);
+    expect(past.visits.map(v => v.id)).toEqual([1, 2]);
+    expect(past.done).toBe(2);
+  });
+
+  it("отменённые и неявки визитами не считаются", () => {
+    const past = vehiclePast([
+      now,
+      row({ id: 1, at: "2026-09-10T06:00:00Z", plate: "А123АВ01", status: "cancelled" }),
+      row({ id: 2, at: "2026-09-11T06:00:00Z", plate: "А123АВ01", status: "no_show" }),
+      row({ id: 3, at: "2026-09-12T06:00:00Z", plate: "А123АВ01", status: "confirmed" }),
+    ], now);
+    expect(past.visits.map(v => v.id)).toEqual([3]);
+    expect(past.done).toBe(0);
+  });
+
+  it("машина без номера: чужую историю не подмешиваем", () => {
+    const anon = row({ id: 200, at: "2026-09-17T06:00:00Z", plate: null, status: "confirmed" });
+    const past = vehiclePast([
+      anon,
+      row({ id: 1, at: "2026-09-10T06:00:00Z", plate: null }),
+      row({ id: 2, at: "2026-09-11T06:00:00Z", plate: null, name: "Мария", phone: "+79409990022" }),
+    ], anon);
+    expect(past.byName).toBe(true);
+    expect(past.visits.map(v => v.id)).toEqual([1]);
+  });
+
+  it("машины в записи нет — и прошлого нет", () => {
+    const empty = row({ id: 300, at: "2026-09-17T06:00:00Z", brand: undefined, plate: undefined });
+    expect(vehiclePast([empty, row({ id: 1, at: "2026-09-10T06:00:00Z", brand: undefined, plate: undefined })], empty).key).toBeNull();
+  });
+
+  it("прежний владелец виден, нынешний в этот список не попадает", () => {
+    const past = vehiclePast([
+      now,
+      row({ id: 1, at: "2026-09-10T06:00:00Z", plate: "А123АВ01", name: "Мария", phone: "+79409990022" }),
+      row({ id: 2, at: "2026-08-10T06:00:00Z", plate: "А123АВ01" }),
+    ], now);
+    expect(past.otherOwners.map(o => o.name)).toEqual(["Мария"]);
+  });
+
+  it("список визитов ограничен", () => {
+    const rows = Array.from({ length: 8 }, (_, i) => row({ id: i + 1, at: `2026-09-0${i + 1}T06:00:00Z`, plate: "А123АВ01" }));
+    expect(vehiclePast([now, ...rows], now, 3).visits).toHaveLength(3);
+    expect(vehiclePast([now, ...rows], now, 3).done).toBe(8);
   });
 });

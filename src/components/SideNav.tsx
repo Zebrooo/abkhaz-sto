@@ -28,6 +28,10 @@ export function SideNav({ role, siteUrl, unread, inspectHref }: { role: StoRole;
       <div className="side-foot">
         <p>Записи с сайта приходят сюда сразу. Вход — общий с abkhaz-auto.ru.</p>
         <a href={siteUrl} target="_blank" rel="noreferrer">Витрина на сайте <Icon name="arrowRight" size={14} /></a>
+        {/* Вкладки «Ещё» на вебе нет, и выход за стойкой было негде найти.
+            Ведёт на ту же шторку подтверждения, что и на телефоне: путь
+            выхода один, а не два. */}
+        <Link className="side-exit" href="/menu?do=vyhod">Выйти <Icon name="arrowRight" size={14} /></Link>
       </div>
     </nav>
   );

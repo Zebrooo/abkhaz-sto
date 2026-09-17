@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { logoutAction } from "@/app/auth-actions";
 import { Icon } from "@/components/Icon";
 import { formatPhone } from "@/lib/format";
 import { getServerUser } from "@/lib/supabase/server";
@@ -21,7 +22,15 @@ export default async function VhodPage() {
         {user ? (
           <>
             <div className="empty-s">Вы вошли как {formatPhone(user.phone) || user.email || user.id}.</div>
-            <Link className="aui-btn aui-btn--primary aui-btn--md" href="/segodnya">Открыть записи</Link>
+            <div className="hero-actions">
+              <Link className="aui-btn aui-btn--primary aui-btn--md" href="/segodnya">Открыть записи</Link>
+              {/* Не тот номер — выход прямо здесь: это единственный экран,
+                  который видит человек, попавший в приложение чужой
+                  учёткой, и отправлять его за кнопкой на сайт нечестно. */}
+              <form action={logoutAction}>
+                <button className="aui-btn aui-btn--ghost aui-btn--md" type="submit">Выйти</button>
+              </form>
+            </div>
           </>
         ) : (
           <>

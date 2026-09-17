@@ -72,14 +72,17 @@ export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[
     prev.visits += 1;
     prev.spent += spent;
     // rows приходят свежими сверху, но функция чистая — сравниваем честно.
+    // Машина, номер и VIN — ИЗ ОДНОГО СНИМКА: иначе в строке списка марка от
+    // сегодняшней машины, а номер от позапрошлой. На поиск работают plates и
+    // vins, там собраны все.
     if (b.starts_at > prev.lastAt) {
       prev.lastAt = b.starts_at;
-      prev.car = carLine(b) ?? prev.car;
-      prev.plate = b.data.vehicle?.plate ?? prev.plate;
-      prev.vin = b.data.vehicle?.vin ?? prev.vin;
+      if (carLine(b)) {
+        prev.car = carLine(b);
+        prev.plate = b.data.vehicle?.plate ?? null;
+        prev.vin = b.data.vehicle?.vin ?? null;
+      }
     }
-    prev.plate = prev.plate ?? b.data.vehicle?.plate ?? null;
-    prev.vin = prev.vin ?? b.data.vehicle?.vin ?? null;
     const p = b.data.vehicle?.plate, v = b.data.vehicle?.vin;
     if (p && !prev.plates.includes(p)) prev.plates.push(p);
     if (v && !prev.vins.includes(v)) prev.vins.push(v);

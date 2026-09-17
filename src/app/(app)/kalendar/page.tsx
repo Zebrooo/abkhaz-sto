@@ -12,7 +12,7 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { STATUS_SHORT } from "@/components/Status";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, rangeLabel, rub, todayLocal, weekStart } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
-import { addMonths, monthFirst, monthOf, safeMonth } from "@/lib/month";
+import { monthGrid, monthOf, safeMonth } from "@/lib/month";
 import { busyBlocks, toDragBlock } from "@/lib/drag";
 import { dayOfWeek, freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
 import { canReschedule } from "@/lib/sto/transitions";
@@ -73,10 +73,16 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   // Календарь открыт ровно тогда, когда месяц есть в адресе: закрытый не
   // стоит экрану ни одного запроса.
   const month = pick(sp.m) ? safeMonth(pick(sp.m), day) : "";
+  const grid = month ? monthGrid(month) : [];
+  const gridFrom = grid[0]?.day ?? day;
+  const gridTo = grid[grid.length - 1]?.day ?? day;
   const [weekRows, monthRows] = await Promise.all([
     listBookings(shop.id, localTime(ws, "00:00"), localTime(addDays(ws, 7), "00:00")),
     month
-      ? listBookings(shop.id, localTime(monthFirst(month), "00:00"), localTime(`${addMonths(month, 1)}-01`, "00:00"))
+      // Границы — по СЕТКЕ, а не по месяцу: в ней видны и последние дни
+      // прошлого месяца, и первые полторы недели следующего, и по ним можно
+      // ткнуть. Без точек они читались бы как свободные.
+      ? listBookings(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
       : Promise.resolve([]),
   ]);
   const monthCounts: Record<string, number> = {};

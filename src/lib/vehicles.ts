@@ -159,7 +159,17 @@ function groupVehicles(rows: readonly StoBookingRow[]): VehicleGroup[] {
         groups.splice(groups.indexOf(other), 1);
       }
     }
-    for (const id of ids) { group.ids.add(id); byId.set(id, group); }
+    for (const id of ids) {
+      // ПРИЗНАК ПРИНАДЛЕЖИТ ОДНОЙ МАШИНЕ. Номер, который уже занят машиной с
+      // другим VIN, мы не отбираем: табличку перевесили, и носит её та, что
+      // заняла номер раньше по ходу обхода, то есть самая свежая (записи
+      // отсортированы). Иначе номер остался бы в двух группах, и карточка по
+      // нему открывалась бы наугад.
+      const owner = byId.get(id);
+      if (owner && owner !== group) continue;
+      group.ids.add(id);
+      byId.set(id, group);
+    }
     group.rows.push(b);
   }
   return groups;

@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, todayLocal } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
+import { nextStep, pickService } from "@/lib/booking-form";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
 
@@ -76,7 +77,6 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
 
   const stepRaw = Number(pick(sp.step));
   const step = stepRaw === 1 || stepRaw === 2 ? stepRaw : 0;
-  const svc = services.find(s => s.listingId === Number(pick(sp.s))) ?? services[0];
   const postRaw = Number(pick(sp.post));
   const postNo = Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= schedule.posts ? postRaw : null;
   // Таймлайн ведёт сюда со своим hhmm — принимаем оба имени, иначе выбранное
@@ -85,6 +85,14 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const time = /^\d{2}:\d{2}$/.test(timeRaw) ? timeRaw : "";
 
   const busy = await busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  const now = new Date();
+  // Услуга по умолчанию — та, что влезает в окно, пришедшее с сетки
+  // (booking-form.ts): иначе первая в списке оказывается длиннее окна, время
+  // молча слетает, и человек выбирает его заново.
+  const svc = pickService({
+    services, chosenId: Number(pick(sp.s)), schedule,
+    startsAt: time ? localTime(day, time) : null, postNo, busy, now,
+  })!;
   // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots
   // отдаёт первый свободный из всех, а нужен именно этот.
   const slots = freeSlots({
@@ -92,7 +100,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
     day,
     durationMin: svc.durationMin,
     busy: postNo ? busy.filter(b => b.postNo === postNo).map(b => ({ ...b, postNo: 1 })) : busy,
-    now: new Date(),
+    now,
   }).map(s => ({ hhmm: localHHMM(s.startsAt), postNo: postNo ?? s.postNo }));
 
   const chosen = slots.find(s => s.hhmm === time) ?? null;
@@ -161,7 +169,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
             <div className="nb-svc">
               <div className="nb-lab">Услуга</div>
               {services.map(s => (
-                <Link key={s.listingId} className="pick" href={href({ s: s.listingId, t: null })} aria-pressed={s.listingId === svc.listingId}>
+                <Link key={s.listingId} className="pick" href={href({ s: s.listingId })} aria-pressed={s.listingId === svc.listingId}>
                   <div className="pick-main">
                     <div className="pick-t">{s.title}</div>
                     <div className="pick-s">{formatRub(s.price)} · {minutesLabel(s.durationMin)}</div>
@@ -203,6 +211,9 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                       {schedule.bufferMin > 0 && ` · с буфером ${schedule.bufferMin} мин`}
                     </span>
                   </div>
+                  {time && !chosen && (
+                    <p className="hint">Окно {time} для услуги «{svc.title}» ({minutesLabel(svc.durationMin)}) не подходит — выберите другое.</p>
+                  )}
                   {slots.length === 0 ? (
                     <p className="hint">Свободных окон в этот день нет.</p>
                   ) : (
@@ -244,7 +255,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
               </Link>
             )}
             <Link className="aui-btn aui-btn--outline aui-btn--md nb-cancel" href={`/segodnya?d=${day}`}>Отмена</Link>
-            <Link className="aui-btn aui-btn--primary aui-btn--lg nb-next" href={href({ step: Math.min(2, step + 1) })}>Далее</Link>
+            <Link className="aui-btn aui-btn--primary aui-btn--lg nb-next" href={href({ step: nextStep(step, chosen !== null) })}>Далее</Link>
             <button className="aui-btn aui-btn--primary aui-btn--lg nb-submit" type="submit">Записать</button>
           </div>
         </form>

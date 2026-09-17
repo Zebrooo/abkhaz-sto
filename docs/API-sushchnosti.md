@@ -245,6 +245,8 @@ best-effort шлёт `masters/update`, чтобы хозяин видел, кт�
 | `GET /inspections?shopId&actorUserId&bookingId` | `master`, `admin`, `owner` | `Inspection` |
 | `GET /inspections/summary?shopId&actorUserId&from&to` | те же | `InspectionSummary[]` |
 | `POST /inspections/start` | `master`, `admin`, `owner` | идемпотентно: повтор отдаёт начатый |
+| `POST /inspections/finish` | `master`, `admin`, `owner` | `{ …, inspectionId }` → `Inspection` со `status: "finished"` |
+| `POST /inspections/odometer` | `master`, `admin`, `owner` | `{ …, inspectionId, odometerKm }` → `Inspection` |
 | `POST /inspections/defects` | `master`, `admin`, `owner` | `Defect` |
 | `POST /inspections/defects/update` | `master`, `admin`, `owner` | `Defect` |
 | `POST /inspections/defects/remove` | `master`, `admin`, `owner` | `{ removed: true }` |
@@ -261,6 +263,33 @@ best-effort шлёт `masters/update`, чтобы хозяин видел, кт�
 здесь значит «поля может не быть», а не «поле со значением `null`». Осмотр
 начал админ или хозяин — своего поста у него нет, и приложение ключ не
 кладёт вовсе; сайт обязан принять такой запрос и записать осмотр без мастера.
+
+### Завершение осмотра — отдельной кнопкой
+
+`status: "finished"` ставит **только** `POST /inspections/finish`, и зовёт его
+кнопка «Завершить осмотр» у мастера. Не отправка отчёта и не «само закроется»:
+мастеру нужен момент, после которого список дефектов застыл, — отчёт клиенту
+уезжает ровно тот, который он собрал.
+
+- Идемпотентно: повтор отдаёт уже завершённый осмотр, а не `conflict`. Кнопку
+  жмут дважды с телефона в яме.
+- После завершения `POST /inspections/defects`, `/defects/update`,
+  `/defects/remove` и `/inspections/odometer` отвечают `409 conflict` —
+  приложение эти кнопки и не показывает, но граница на сайте.
+- `finishedAt` — момент завершения; он попадает в отчёт как «дата осмотра».
+- Отправка отчёта завершённым осмотром не управляет: `with_admin` и
+  `with_client` живут своей жизнью.
+
+### Правка пробега
+
+`POST /inspections/odometer` — исправить цифру, вписанную на приёмке в спешке.
+Она уезжает клиенту в отчёт и в историю машины, поэтому исправлять её можно,
+**пока осмотр не завершён**; у завершённого — `409 conflict`.
+
+- Проверка та же, что при старте: пробег, уехавший назад по этой машине, —
+  `validation_error`.
+- Сайт пишет в историю осмотра, **кто и когда** поправил: это «исправлено», а
+  не «как было». Клиенту в отчёте — только итоговое число.
 
 **Пробег обязателен и спрашивается в начале каждого осмотра.** Не тянется из
 прошлого отчёта: между визитами машина ездит, подставленный пробег сделал бы
@@ -327,7 +356,19 @@ InspectionSummary = { bookingId, inspectionId, status, badCount, warnCount, tota
 | `POST /reports/item` | `master`, `admin`, `owner` | `{ …, defectId, included }` → **весь** `Report` |
 | `POST /reports/book-item` | `admin`, `owner` | `{ …, defectId, bookingId }` → `Report` |
 | `POST /reports/send` | `master` → админу, `admin` и `owner` → клиенту | `Report` |
-| `GET /reports/pdf?shopId&actorUserId&inspectionId` | те же | `{ url, expiresAt }` |
+| `GET /reports/pdf?shopId&actorUserId&inspectionId` | те же | `{ url, expiresAt }` либо `{ ready: false, retryAfterMs? }` |
+
+**PDF собирается дольше, чем экран ждёт.** Читающие вызовы приложение
+обрывает на трёх секундах, а документ со шрифтами и фотографиями в них не
+укладывается. Поэтому `/reports/pdf` отвечает одним из двух:
+
+- `{ url, expiresAt }` — готов, приложение уводит по ссылке;
+- `{ ready: false, retryAfterMs? }` — собирается. Экран показывает «PDF
+  собирается» и кнопку «Проверить ещё раз»; краснеть тут нечему, это не отказ.
+
+Отдавать `202` вместе с `{ ready: false }` можно — приложение смотрит на тело,
+а не на код. Чего делать НЕЛЬЗЯ: держать соединение до готовности документа
+(приложение оборвёт его и покажет «Сайт сейчас недоступен») или отвечать `500`.
 
 ```ts
 Report = { inspectionId, bookingId, no, status, car, plate, odometerKm, masterName,

@@ -148,8 +148,22 @@ export function linkItemBooking(input: {
  *
  * GET /api/sto/reports/pdf?shopId&actorUserId&inspectionId → { url, expiresAt }
  */
+/**
+ * PDF отчёта. Сборка со шрифтами и фотографиями — самый долгий вызов в
+ * системе, и в три секунды чтения она не укладывается. Поэтому сайт отвечает
+ * одним из двух: готовой ссылкой или «собирается» — и тогда экран честно
+ * говорит «собирается, подождите» и предлагает повторить, а не выдаёт долгую
+ * сборку за поломку сайта.
+ */
+export type ReportPdf = { url: string; expiresAt: string } | { ready: false; retryAfterMs?: number };
+
+/** Готов ли PDF — сужение типа для экрана и действия. */
+export function pdfReady(p: ReportPdf): p is { url: string; expiresAt: string } {
+  return "url" in p && typeof p.url === "string" && p.url !== "";
+}
+
 export function fetchReportPdf(input: {
   shopId: number; actorUserId: string; inspectionId: number;
-}): Promise<ApiResult<{ url: string; expiresAt: string }>> {
-  return siteGet<{ url: string; expiresAt: string }>("reports/pdf", input);
+}): Promise<ApiResult<ReportPdf>> {
+  return siteGet<ReportPdf>("reports/pdf", input);
 }

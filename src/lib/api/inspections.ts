@@ -145,6 +145,45 @@ export function startInspection(input: {
 }
 
 /**
+ * ЗАВЕРШИТЬ ОСМОТР. Мастер обошёл машину, снял всё, что нашёл, и закрывает
+ * осмотр кнопкой — отдельным действием, а не «само закроется, когда отправим
+ * отчёт». Так у мастера есть момент, после которого список дефектов не
+ * меняется: отчёт клиенту уезжает ровно тот, который он собрал.
+ *
+ * Идемпотентно: повтор отдаёт уже завершённый осмотр, а не ошибку — кнопку
+ * нажимают дважды с телефона в яме. Осмотр без пробега завершить нельзя, но
+ * такого и не бывает: пробег спрашивается первым.
+ *
+ * После завершения дефекты не правятся (сайт отвечает conflict) — и это
+ * ровно то, ради чего кнопка нужна.
+ *
+ * POST /api/sto/inspections/finish { shopId, actorUserId, inspectionId }
+ */
+export function finishInspection(input: {
+  shopId: number; actorUserId: string; inspectionId: number;
+}): Promise<ApiResult<Inspection>> {
+  return sitePost<Inspection>("inspections/finish", input);
+}
+
+/**
+ * ИСПРАВИТЬ ПРОБЕГ. Ошиблись на приёмке — цифра уезжает в отчёт клиенту и в
+ * историю машины, поэтому исправить её можно, пока осмотр не завершён.
+ * Сайт проверяет то же, что и при старте (пробег не едет назад), и пишет в
+ * историю осмотра, кто и когда поправил: это не «как было», а «исправлено».
+ *
+ * Завершённый осмотр уже не правится — сайт отвечает conflict. Отчёт с
+ * неверным пробегом придётся переделывать, и это честнее тихой подмены
+ * числа в документе, который клиент уже прочитал.
+ *
+ * POST /api/sto/inspections/odometer { shopId, actorUserId, inspectionId, odometerKm }
+ */
+export function updateOdometer(input: {
+  shopId: number; actorUserId: string; inspectionId: number; odometerKm: number;
+}): Promise<ApiResult<Inspection>> {
+  return sitePost<Inspection>("inspections/odometer", input);
+}
+
+/**
  * Добавить дефект. Либо по готовой формулировке (presetId — работа и цена
  * приезжают из прайса), либо своими словами (тогда title, severity и work
  * обязательны, а сайт сохраняет формулировку в каталог узла, чтобы в

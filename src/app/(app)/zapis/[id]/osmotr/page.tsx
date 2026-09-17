@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addDefectAction, removeDefectAction, startInspectionAction } from "@/app/(app)/osmotr-actions";
+import {
+  addDefectAction, finishInspectionAction, removeDefectAction, startInspectionAction, updateOdometerAction,
+} from "@/app/(app)/osmotr-actions";
 import { vehicleLine } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -89,13 +91,18 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const state = inspectionState(defects.length);
   const rest = untouchedNodeKeys(defects).length;
 
+  // Осмотр завершён — дефекты больше не добавляются и не убираются: это и
+  // есть смысл кнопки «Завершить».
+  const done = inspection?.status === "finished";
+
   const act = pick(sp.do);
   // Отказ сайта — не «осмотра ещё нет»: шторку пробега с кнопкой, которая
   // гарантированно упадёт, насильно не открываем, а показываем ошибку на экране.
   const kmOpen = act === "km" || (!inspection && !loadErr);
-  const captureOpen = !!inspection && act === "capture";
+  // У завершённого осмотра дефекты не трогаем — сайт всё равно откажет.
+  const captureOpen = !!inspection && !done && act === "capture";
   const node = isNodeKey(pick(sp.node)) ? pick(sp.node) : null;
-  const presetOpen = !!inspection && act === "preset" && !!node;
+  const presetOpen = !!inspection && !done && act === "preset" && !!node;
   const photoIds = photoIdsFrom(many(sp.photo));
 
   // Досье машины — то, ради чего мастеру не нужно ничего вспоминать: была ли
@@ -104,7 +111,7 @@ export default async function InspectionPage({ params, searchParams }: { params:
   // Сумму сметы считает сайт — берём её из отчёта, а не складываем цены.
   const [brief, frequent, presets, report] = await Promise.all([
     carBrief(ctx, b),
-    inspection ? fetchFrequentPresets({ ...actor, limit: 6 }).then(r => listOr(r)) : [],
+    inspection && inspection.status !== "finished" ? fetchFrequentPresets({ ...actor, limit: 6 }).then(r => listOr(r)) : [],
     presetOpen && node ? fetchPresets({ ...actor, nodeKey: node }).then(r => listOr(r)) : [],
     inspection && defects.length > 0 ? fetchReport({ ...actor, inspectionId: inspection.id }) : null,
   ]);
@@ -114,10 +121,11 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const carId = [b.data.vehicle?.plate, b.data.vehicle?.vin ? `VIN ${b.data.vehicle.vin}` : null].filter(Boolean).join(" · ");
   const total = report?.ok ? report.data.total : null;
   const starter = isStarterSet(frequent);
-  // Подпись обещает ровно то, что произойдёт: это переход к отчёту, а не
-  // закрытие осмотра — закрывать его приложению пока нечем (маршрута
-  // «завершить осмотр» у сайта нет, см. docs/API-sushchnosti.md).
-  const finishLabel = defects.length === 0 ? "Замечаний нет — к отчёту" : total == null ? "Готово · к отчёту" : `Готово · отчёт на ${rub(total)}`;
+  const finishLabel = done
+    ? (total == null ? "К отчёту" : `К отчёту на ${rub(total)}`)
+    : defects.length === 0
+      ? "Замечаний нет — завершить осмотр"
+      : total == null ? "Завершить осмотр" : `Завершить осмотр · ${rub(total)}`;
 
   // Ошибка формы из шторки должна быть видна в самой шторке: под затемнением
   // карточку «Не сохранилось» никто не прочитает.
@@ -253,15 +261,25 @@ export default async function InspectionPage({ params, searchParams }: { params:
 
             {/* Без осмотра дефект не снять — ведём к пробегу и говорим почему,
                 а не гасим ссылку с живым href. */}
-            <Link className="ins-cta" href={inspection ? self("&do=capture") : self("&do=km")}>
-              <span className="sq"><Icon name="camera" size={24} /></span>
-              <span className="row-main">
-                <span className="ins-cta-t">Снять дефект</span>
-                <span className="ins-cta-s">{inspection ? "фото, узел, и он уже в отчёте" : "сначала пробег — без него осмотра нет"}</span>
-              </span>
-            </Link>
+            {done ? (
+              <div className="ins-cta is-done">
+                <span className="sq"><Icon name="check" size={24} /></span>
+                <span className="row-main">
+                  <span className="ins-cta-t">Осмотр завершён</span>
+                  <span className="ins-cta-s">дефекты больше не меняются — дальше отчёт клиенту</span>
+                </span>
+              </div>
+            ) : (
+              <Link className="ins-cta" href={inspection ? self("&do=capture") : self("&do=km")}>
+                <span className="sq"><Icon name="camera" size={24} /></span>
+                <span className="row-main">
+                  <span className="ins-cta-t">Снять дефект</span>
+                  <span className="ins-cta-s">{inspection ? "фото, узел, и он уже в отчёте" : "сначала пробег — без него осмотра нет"}</span>
+                </span>
+              </Link>
+            )}
 
-            {inspection && frequent.length > 0 && (
+            {inspection && !done && frequent.length > 0 && (
               <>
                 <div className="ins-freq-h">
                   <span className="eyebrow">{starter ? "Стартовый набор — частое в автосервисах" : "Вы добавляете чаще всего"}</span>
@@ -292,14 +310,16 @@ export default async function InspectionPage({ params, searchParams }: { params:
                       <div className="ins-def-t">{d.title}</div>
                       <div className="ins-def-s">{d.work} · {priceText(d.price)}</div>
                     </div>
-                    <form action={removeDefectAction}>
-                      <input type="hidden" name="bookingId" value={b.id} />
-                      <input type="hidden" name="defectId" value={d.id} />
-                      <input type="hidden" name="return" value={self()} />
-                      <button className="ins-def-x" type="submit" aria-label="Убрать из отчёта">
-                        <span><Icon name="plus" size={16} /></span>
-                      </button>
-                    </form>
+                    {!done && (
+                      <form action={removeDefectAction}>
+                        <input type="hidden" name="bookingId" value={b.id} />
+                        <input type="hidden" name="defectId" value={d.id} />
+                        <input type="hidden" name="return" value={self()} />
+                        <button className="ins-def-x" type="submit" aria-label="Убрать из отчёта">
+                          <span><Icon name="plus" size={16} /></span>
+                        </button>
+                      </form>
+                    )}
                   </div>
                 ))}
               </div>
@@ -309,10 +329,26 @@ export default async function InspectionPage({ params, searchParams }: { params:
               Ничего не отмечать не нужно: всё, что не в отчёте, уходит в «проверено и в норме». Остальные {nodesLabel(rest)} закроются одной кнопкой.
             </div>
 
-            <div className="sticky-actions">
-              {inspection
-                ? <Link className="aui-btn aui-btn--primary aui-btn--lg" href={reportHref}>{finishLabel}</Link>
-                : <Link className="aui-btn aui-btn--primary aui-btn--lg" href={self("&do=km")}>Начать с пробега</Link>}
+            <div className="sticky-actions ins-finish">
+              {!inspection ? (
+                <Link className="aui-btn aui-btn--primary aui-btn--lg" href={self("&do=km")}>Начать с пробега</Link>
+              ) : done ? (
+                // Осмотр закрыт: дефекты больше не меняются, остаётся отчёт.
+                <Link className="aui-btn aui-btn--primary aui-btn--lg" href={reportHref}>{finishLabel}</Link>
+              ) : (
+                <>
+                  {/* ЗАВЕРШИТЬ — ОТДЕЛЬНОЕ ДЕЙСТВИЕ, а не «само закроется при
+                      отправке отчёта»: мастер сам говорит, что обошёл машину
+                      целиком, и после этого список дефектов застывает. */}
+                  <form action={finishInspectionAction}>
+                    <input type="hidden" name="bookingId" value={b.id} />
+                    <input type="hidden" name="inspectionId" value={inspection.id} />
+                    <input type="hidden" name="return" value={self()} />
+                    <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit">{finishLabel}</button>
+                  </form>
+                  <Link className="aui-btn aui-btn--outline aui-btn--lg" href={reportHref}>Посмотреть отчёт</Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -323,15 +359,38 @@ export default async function InspectionPage({ params, searchParams }: { params:
           closeHref={inspection ? self() : bookingHref}
           title="Пробег сейчас"
           sub={`${car} · ${plate}`}
-          footer={inspection
+          footer={inspection && done
             ? <Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href={self()}>Закрыть</Link>
-            : <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={KM_FORM}>Сохранить пробег</button>}
+            : <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={KM_FORM}>
+              {inspection ? "Исправить пробег" : "Сохранить пробег"}
+            </button>}
         >
-          {inspection ? (
+          {inspection && done ? (
             <div className="sheet-stack">
               <div className="km-box"><span className="km-v">{inspection.odometerKm.toLocaleString("ru-RU")}</span><span>км</span></div>
-              <div className="sheet-note">Пробег записан в начале осмотра и в отчёте останется таким: между визитами машина ездит, и подставлять другое число нельзя.</div>
+              <div className="sheet-note">Осмотр завершён — пробег в нём уже не меняется. Если цифра неверная, отчёт придётся собирать заново: клиент читает именно её.</div>
             </div>
+          ) : inspection ? (
+            // ОШИБИТЬСЯ В ПРОБЕГЕ НА ПРИЁМКЕ ЛЕГКО, а цифра уезжает клиенту в
+            // отчёт и в историю машины. Пока осмотр не завершён — правим.
+            <form id={KM_FORM} action={updateOdometerAction} className="sheet-stack">
+              <input type="hidden" name="bookingId" value={b.id} />
+              <input type="hidden" name="inspectionId" value={inspection.id} />
+              <input type="hidden" name="return" value={self()} />
+              {formErr && <Flash err={formErr} />}
+              <label className="km-box">
+                <input
+                  name="odometer"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  aria-label="Пробег, км"
+                  defaultValue={inspection.odometerKm}
+                />
+                <span>км</span>
+              </label>
+              <div className="sheet-note">Пробег записан в начале осмотра. Исправить можно, пока осмотр не завершён — сайт запомнит, кто и когда поправил.</div>
+              {prev && <div className="km-prev">В прошлый визит, {dayTitle(prev.day)} — {kmLabel(prev.km)}</div>}
+            </form>
           ) : (
             <form id={KM_FORM} action={startInspectionAction} className="sheet-stack">
               <input type="hidden" name="bookingId" value={b.id} />

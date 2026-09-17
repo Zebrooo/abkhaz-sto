@@ -15,11 +15,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { can, HOME_PATH } from "@/lib/access";
 import {
-  addDefect, createPhotoUpload, fetchInspection, fetchPresets, isSeverity, removeDefect, startInspection, updateDefect,
+  addDefect, createPhotoUpload, fetchInspection, fetchPresets, finishInspection, isSeverity, removeDefect,
+  startInspection, updateDefect, updateOdometer,
   type Defect, type PhotoUpload,
 } from "@/lib/api/inspections";
 import type { ApiResult } from "@/lib/api/site-api";
-import { fetchReportPdf, sendReport, setEstimateItem } from "@/lib/api/reports";
+import { fetchReportPdf, pdfReady, sendReport, setEstimateItem } from "@/lib/api/reports";
 import { blockIfViewing, serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
 import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } from "@/lib/inspection";
@@ -111,6 +112,46 @@ export async function startInspectionAction(fd: FormData) {
     d: dayOf(ret),
     ok: same ? `Пробег: ${kmLabel(res.data.odometerKm)}` : `Осмотр уже начат, пробег в нём: ${kmLabel(res.data.odometerKm)}`,
   });
+}
+
+/**
+ * Завершить осмотр. Отдельная кнопка, а не «само закроется при отправке
+ * отчёта»: мастер сам говорит, что обошёл машину целиком, — и после этого
+ * список дефектов уже не меняется.
+ *
+ * Идемпотентно на стороне сайта, поэтому двойное нажатие в яме не страшно.
+ */
+export async function finishInspectionAction(fd: FormData) {
+  const c = await ctx();
+  const bookingId = int(fd, "bookingId");
+  const inspectionId = int(fd, "inspectionId");
+  if (!bookingId || !inspectionId) redirect("/segodnya");
+  const ret = returnTo(fd, `/zapis/${bookingId}/osmotr`);
+  const res = await finishInspection({ shopId: c.shop.id, actorUserId: c.userId, inspectionId });
+  revalidateInspection(bookingId);
+  if (!res.ok) back(bare(ret), { d: dayOf(ret), err: res.error });
+  // Ведём в отчёт: осмотр закрыт, дальше человек отправляет его клиенту.
+  back(`/zapis/${bookingId}/otchet`, { d: dayOf(ret), ok: "Осмотр завершён — дефекты больше не меняются" });
+}
+
+/**
+ * Исправить пробег. Цифру спрашивают на приёмке в спешке, и ошибиться в ней
+ * легко; она же уезжает клиенту в отчёт и в историю машины. Правим, пока
+ * осмотр не завершён, — после этого сайт отвечает отказом, и переделывать
+ * придётся отчёт целиком.
+ */
+export async function updateOdometerAction(fd: FormData) {
+  const c = await ctx();
+  const bookingId = int(fd, "bookingId");
+  const inspectionId = int(fd, "inspectionId");
+  if (!bookingId || !inspectionId) redirect("/segodnya");
+  const ret = returnTo(fd, `/zapis/${bookingId}/osmotr`);
+  const km = parseOdometer(str(fd, "odometer"));
+  if (!km.ok) back(bare(ret), { d: dayOf(ret), do: "km", err: km.error });
+  const res = await updateOdometer({ shopId: c.shop.id, actorUserId: c.userId, inspectionId, odometerKm: km.km });
+  revalidateInspection(bookingId);
+  if (!res.ok) back(bare(ret), { d: dayOf(ret), do: "km", err: res.error });
+  back(bare(ret), { d: dayOf(ret), ok: `Пробег исправлен: ${kmLabel(res.data.odometerKm)}` });
 }
 
 /**
@@ -214,7 +255,12 @@ export async function reportPdfAction(fd: FormData) {
   if (!bookingId || !inspectionId) redirect("/segodnya");
   const ret = returnTo(fd, `/zapis/${bookingId}/otchet`);
   const res = await fetchReportPdf({ shopId: c.shop.id, actorUserId: c.userId, inspectionId });
-  if (!res.ok || !/^https?:\/\//.test(res.data.url)) back(bare(ret), { d: dayOf(ret), pdf: res.ok ? "Сайт не дал ссылку на PDF" : res.error });
+  if (!res.ok) back(bare(ret), { d: dayOf(ret), pdf: res.error });
+  // Сборка со шрифтами и фото идёт дольше, чем экран готов ждать. Сайт в этом
+  // случае отвечает «собирается» — и мы говорим это словами, а не выдаём
+  // долгую работу за поломку.
+  if (!pdfReady(res.data)) back(bare(ret), { d: dayOf(ret), pdf: "wait" });
+  if (!/^https?:\/\//.test(res.data.url)) back(bare(ret), { d: dayOf(ret), pdf: "Сайт не дал ссылку на PDF" });
   redirect(res.data.url);
 }
 

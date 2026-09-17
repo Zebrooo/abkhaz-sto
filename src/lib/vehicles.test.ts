@@ -386,3 +386,24 @@ describe("порядок записей ничего не решает", () => {
     expect(card?.history.map(b => b.id)).toEqual([3, 2]);
   });
 });
+
+describe("номер принадлежит одной машине", () => {
+  const vinA = "JN1TCNT31U0012345", vinB = "XTA21099010000123";
+  const may = row({ id: 1, at: "2026-05-01T06:00:00Z", plate: "А123АВ01", vin: vinA });
+  const jun = row({ id: 2, at: "2026-06-01T06:00:00Z", plate: "А123АВ01" });
+  const jul = row({ id: 3, at: "2026-07-01T06:00:00Z", plate: "А123АВ01", vin: vinB });
+
+  it("карточка по номеру одна и та же, в каком бы порядке ни пришли записи", () => {
+    const a = vehicleCard([jul, jun, may], "pA123AB01");
+    const b = vehicleCard([may, jun, jul], "pA123AB01");
+    expect(a?.key).toBe(b?.key);
+    expect(a?.history.map(r => r.id).sort()).toEqual(b?.history.map(r => r.id).sort());
+  });
+
+  it("номер остаётся у машины, которая носит его сейчас", () => {
+    // Табличку перевесили в июле: июньский визит без VIN — уже её.
+    expect(vehicleCard([jul, jun, may], "pA123AB01")?.key).toBe(`v${vinB}`);
+    // А прежняя машина находится по своему VIN и не растеряла визитов.
+    expect(vehicleCard([jul, jun, may], `v${vinA}`)?.history.map(r => r.id)).toEqual([1]);
+  });
+});

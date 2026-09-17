@@ -147,13 +147,34 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   // Записать клиента на найденную работу может тот, кто вообще ведёт записи
   // за стойкой: у мастера прав на привязку пункта к записи нет.
   const canBook = can(ctx.role, "closeBooking");
-  const pdfErr = pick(sp.pdf);
+  // «wait» — сайт сказал «собирается»: это не отказ, и краснеть тут нечему.
+  const pdfRaw = pick(sp.pdf);
+  const pdfWait = pdfRaw === "wait";
+  const pdfErr = pdfWait ? "" : pdfRaw;
   const points = r.defects.length === 1 ? "пункта" : "пунктов";
 
   return (
     <Frame sub={`${r.no} · ${r.car}`} back={inspectHref} unread={pending}>
       {/* Ошибка PDF — карточкой, а не тостом: тост гаснет через 2,7 с, а причину надо прочитать. ok/err/pdf из действий взаимно исключены. */}
       <Flash ok={pick(sp.ok)} err={pick(sp.err) || pdfErr} title={pick(sp.err) ? undefined : "PDF не открылся"} />
+
+      {/* PDF собирается со шрифтами и фотографиями — это дольше, чем экран
+          готов ждать. Говорим как есть и даём повторить, а не выдаём долгую
+          работу за поломку сайта. */}
+      {pdfWait && (
+        <div className="card card-accent">
+          <div className="note-t">PDF собирается</div>
+          <div className="note-s">Документ со снимками готовится на сайте — обычно это несколько секунд. Нажмите ещё раз, он откроется.</div>
+          <div className="note-b">
+            <form action={reportPdfAction}>
+              <input type="hidden" name="bookingId" value={b.id} />
+              <input type="hidden" name="inspectionId" value={r.inspectionId} />
+              <input type="hidden" name="return" value={self} />
+              <button className="aui-btn aui-btn--outline aui-btn--sm" type="submit">Проверить ещё раз</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="rp-h">

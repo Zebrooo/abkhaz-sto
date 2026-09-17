@@ -184,7 +184,7 @@ export async function updateMasterAction(fd: FormData) {
   const speciality = str(fd, "speciality").slice(0, 80);
   // Набранное несём обратно в адрес: отказ сайта не должен стирать
   // исправленное имя — человек правил его при мастере, а не по памяти.
-  const typed = { ...sheet, n: name || undefined, sp: speciality || undefined };
+  const typed = { ...sheet, n: name || undefined, sp: speciality || undefined, post: str(fd, "postNo") || undefined };
   if (!name) back("/mastera", { ...typed, err: "Имя мастера обязательно" });
   const postRaw = str(fd, "postNo");
   const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { countPending } from "@/lib/bookings";
+import { countPending, dayBookings } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
 import { fetchMastersLoad, type MasterLoad, type StoMaster } from "@/lib/api/masters";
 import { listOr } from "@/lib/api/site-api";
@@ -9,6 +9,7 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { addDays, count, initials, rub, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
+import { postCount } from "@/lib/mywork";
 import { localTime } from "@/lib/sto/slots";
 import { createMasterAction, handoffAction, toggleMasterShiftAction, updateMasterAction } from "@/app/(app)/staff-actions";
 
@@ -62,7 +63,12 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const handoffFrom = masters.find(m => m.id === handoffId) ?? null;
 
   const act = pick(sp.do);
-  const posts = shop.schedule?.posts ?? 1;
+  // Постов столько же, сколько знает действие (mywork.ts, postCount), плюс
+  // пост самого мастера: если в расписании их два, а человек закреплён за
+  // третьим, чипов на его пост не было бы — и «Сохранить» молча снял бы его
+  // с подъёмника.
+  const dayRows = await dayBookings(shop.id, day);
+  const posts = postCount(shop.schedule?.posts ?? undefined, dayRows);
   const postRaw = Number(pick(sp.post));
   const newPost = Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0;
   const addHref = (post: number) => `/mastera?do=add${post ? `&post=${post}` : ""}`;
@@ -73,8 +79,10 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const editId = Number(pick(sp.edit));
   const editing = masters.find(m => m.id === editId) ?? null;
   const postParam = pick(sp.post);
+  // Пост после отказа берём из адреса: иначе повторное «Сохранить» вернуло бы
+  // человека на старый подъёмник, ничего не сказав.
   const editPost = editing
-    ? (postParam === "" ? (editing.postNo ?? 0) : (Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0))
+    ? (postParam === "" ? (editing.postNo ?? 0) : (Number.isInteger(postRaw) && postRaw >= 0 ? postRaw : 0))
     : 0;
   const listHref = showFired ? "/mastera?all=1" : "/mastera";
 
@@ -287,7 +295,7 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
                   страницы и стирать набранное имя. */}
               <div className="rchips">
                 <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={editPost === 0} />Без поста</label>
-                {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
+                {Array.from({ length: Math.max(posts, editing.postNo ?? 0) }, (_, i) => i + 1).map(p => (
                   <label key={p} className="chip">
                     <input type="radio" name="postNo" value={p} defaultChecked={editPost === p} />Пост {p}
                   </label>

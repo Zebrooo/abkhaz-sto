@@ -4,11 +4,15 @@
 // текущего адреса не видит (middleware заголовков не ставит).
 //
 // Всё остальное здесь обычное: одна форма, одно серверное действие.
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { clearRoleViewAction } from "@/app/(app)/view-actions";
 
 export function ViewBar({ roleLabel }: { roleLabel: string }) {
-  const here = usePathname();
+  // Возвращаем не только путь, но и запрос: на экране мог быть выбран день,
+  // фильтр или открытая шторка — терять их незачем.
+  const path = usePathname();
+  const q = useSearchParams().toString();
+  const here = q ? `${path}?${q}` : path;
   return (
     <form action={clearRoleViewAction} className="view-bar">
       <input type="hidden" name="here" value={here} />

@@ -207,19 +207,20 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               <div className="rp-price">{priceText(item ? item.price : d.price)}</div>
             </div>
             {/* «Записан: …» видно и у исключённого пункта: клиент на работу
-                записан, и прятать это вместе с галочкой сметы нельзя. */}
-            {(on || item?.nextBookingId != null) && (
+                записан, и прятать это вместе с галочкой сметы нельзя. А пустой
+                рамки под пунктом быть не должно — у мастера кнопки нет.
+                Запись на работу ставит стойка: привязать пункт к записи
+                (reports/book-item) мастеру сайт не даст, и кнопка увела бы его
+                в форму, из которой вышла бы запись-сирота. */}
+            {item?.nextBookingId != null ? (
               <div className="rp-book">
-                {item?.nextBookingId != null
-                  ? <span className="rp-booked"><Icon name="check" size={14} />Записан{when ? `: ${when}` : ` · запись № ${item.nextBookingId}`}</span>
-                  // Запись на работу ставит стойка: привязать пункт к записи
-                  // (reports/book-item) мастеру сайт не даст, и кнопка увела
-                  // бы его в форму, из которой вышла бы запись-сирота.
-                  : canBook && on
-                    ? <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>
-                    : null}
+                <span className="rp-booked"><Icon name="check" size={14} />Записан{when ? `: ${when}` : ` · запись № ${item.nextBookingId}`}</span>
               </div>
-            )}
+            ) : on && canBook ? (
+              <div className="rp-book">
+                <Link className="aui-btn aui-btn--outline aui-btn--sm" href={bookHref(d.id, item?.work ?? d.work)}>Записать на эту работу</Link>
+              </div>
+            ) : null}
           </div>
         );
       })}

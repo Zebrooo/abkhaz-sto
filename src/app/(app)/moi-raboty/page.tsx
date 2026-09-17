@@ -87,9 +87,11 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   // адресе, как и на экране «Мастера»: экран серверный.
   const meOpen = pick(sp.do) === "me" && me !== null;
   const mePostRaw = Number(pick(sp.post));
+  // После отказа пост берём из адреса, иначе повторное «Сохранить» тихо
+  // вернуло бы прежний подъёмник.
   const mePost = pick(sp.post) === ""
     ? (me?.postNo ?? 0)
-    : (Number.isInteger(mePostRaw) && mePostRaw >= 1 && mePostRaw <= posts ? mePostRaw : 0);
+    : (Number.isInteger(mePostRaw) && mePostRaw >= 0 ? mePostRaw : 0);
   const ME_FORM = "my-master";
 
   return (
@@ -282,7 +284,7 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
               {/* Радиокнопки: выбор не уводит со страницы и не стирает имя. */}
               <div className="rchips">
                 <label className="chip"><input type="radio" name="postNo" value="0" defaultChecked={mePost === 0} />Без поста</label>
-                {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
+                {Array.from({ length: Math.max(posts, me.postNo ?? 0) }, (_, i) => i + 1).map(p => (
                   <label key={p} className="chip">
                     <input type="radio" name="postNo" value={p} defaultChecked={mePost === p} />Пост {p}
                   </label>

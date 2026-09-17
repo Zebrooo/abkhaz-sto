@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/access";
 import { saveClientNote } from "@/lib/api/client-notes";
-import { serviceContext } from "@/lib/context";
+import { blockIfViewing, serviceContext } from "@/lib/context";
 
 /** Заметка — пара строк за стойкой, а не досье; длиннее не читается в карточке. */
 const MAX_TEXT = 1000;
@@ -24,6 +24,8 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 export async function saveClientNoteAction(fd: FormData) {
   const ctx = await serviceContext();
   if (!ctx) redirect("/");
+  // В примерке роли ничего не сохраняем — заметка ушла бы на сайт всерьёз.
+  blockIfViewing(ctx);
   const clientKey = str(fd, "clientKey");
   if (!clientKey) redirect("/klienty");
   // Ключ в адресе — тот же, что пришёл со страницы: она умеет читать и

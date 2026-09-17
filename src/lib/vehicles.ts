@@ -128,7 +128,12 @@ type VehicleGroup = { ids: Set<string>; rows: StoBookingRow[] };
 function groupVehicles(rows: readonly StoBookingRow[]): VehicleGroup[] {
   const groups: VehicleGroup[] = [];
   const byId = new Map<string, VehicleGroup>();
-  for (const b of rows) {
+  // СВЕЖИЕ ПЕРВЫМИ, и не ради скорости. Когда один номер побывал на двух
+  // машинах (табличку перевесили), запись без VIN может подойти обеим — и
+  // достаётся той группе, что заняла номер раньше по ходу обхода. Сортировка
+  // делает этот выбор однозначным и осмысленным: такая запись уходит к
+  // машине, которая носит номер СЕЙЧАС, а не к той, что носила его когда-то.
+  for (const b of [...rows].sort((a, c) => c.starts_at.localeCompare(a.starts_at))) {
     const ids = vehicleIds(b.data.vehicle);
     if (ids.length === 0) continue;
     const vin = vehicleVin(b.data.vehicle);

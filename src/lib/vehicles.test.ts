@@ -365,3 +365,24 @@ describe("история машины: сильный признак проти�
     expect(card!.history.every(b => b.data.vehicle?.vin !== vin)).toBe(true);
   });
 });
+
+describe("порядок записей ничего не решает", () => {
+  const vinA = "JN1TCNT31U0012345", vinB = "XTA21099010000123";
+  // Один номер побывал на двух машинах, между ними — визит без VIN.
+  const may = row({ id: 1, at: "2026-05-01T06:00:00Z", plate: "А123АВ01", vin: vinA });
+  const jun = row({ id: 2, at: "2026-06-01T06:00:00Z", plate: "А123АВ01" });
+  const jul = row({ id: 3, at: "2026-07-01T06:00:00Z", plate: "А123АВ01", vin: vinB });
+
+  const shape = (rows: StoBookingRow[]) =>
+    summarizeVehicles(rows).map(v => `${v.key}:${v.visits}`).sort();
+
+  it("свод одинаков, в каком бы порядке ни пришли записи", () => {
+    expect(shape([jul, jun, may])).toEqual(shape([may, jun, jul]));
+    expect(shape([jun, may, jul])).toEqual(shape([jul, may, jun]));
+  });
+
+  it("визит без VIN достаётся машине, которая носит номер сейчас", () => {
+    const card = vehicleCard([jul, jun, may], `v${vinB}`);
+    expect(card?.history.map(b => b.id)).toEqual([3, 2]);
+  });
+});

@@ -82,17 +82,22 @@ export async function updateMyMasterAction(fd: FormData) {
   const c = await ctx();
   if (c.masterId === null) back({ err: "Учётка не привязана к мастеру — править нечего" });
   const name = String(fd.get("name") ?? "").trim().slice(0, 80);
-  if (!name) back({ do: "me", err: "Имя обязательно" });
   const speciality = String(fd.get("speciality") ?? "").trim().slice(0, 80);
   const postRaw = String(fd.get("postNo") ?? "").trim();
+  // Набранное возвращаем в адрес: отказ не должен стирать то, что человек
+  // только что вписал про себя.
+  const typed = { do: "me", n: name || undefined, sp: speciality || undefined, post: postRaw || undefined };
+  if (!name) back({ ...typed, err: "Имя обязательно" });
   const postNo = postRaw === "" || postRaw === "0" ? null : Number(postRaw);
   const posts = postCount(c.shop.schedule?.posts ?? undefined, await dayBookings(c.shop.id, todayLocal()));
-  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > posts)) {
-    back({ do: "me", err: `Такого подъёмника у сервиса нет: их ${posts}` });
-  }
-
   const wasPostRaw = String(fd.get("wasPostNo") ?? "").trim();
   const wasPost = wasPostRaw === "" || wasPostRaw === "0" ? null : Number(wasPostRaw);
+  // Закрепление мастера может стоять и на посту, которого нет в расписании
+  // (его правил хозяин) — не мешаем человеку сохранить свою же карточку.
+  if (postNo !== null && (!Number.isInteger(postNo) || postNo < 1 || postNo > Math.max(posts, wasPost ?? 0))) {
+    back({ ...typed, err: `Такого подъёмника у сервиса нет: их ${posts}` });
+  }
+
   const patch = {
     ...(name !== String(fd.get("wasName") ?? "").trim() ? { name } : {}),
     ...(speciality !== String(fd.get("wasSpeciality") ?? "").trim() ? { speciality } : {}),
@@ -102,7 +107,7 @@ export async function updateMyMasterAction(fd: FormData) {
 
   const res = await updateMaster({ shopId: c.shop.id, actorUserId: c.userId, masterId: c.masterId, ...patch });
   revalidatePost();
-  back(res.ok ? { ok: "Карточка обновлена" } : { do: "me", err: res.error });
+  back(res.ok ? { ok: "Карточка обновлена" } : { ...typed, err: res.error });
 }
 
 export async function leavePostAction() {

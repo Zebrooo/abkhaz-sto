@@ -101,7 +101,13 @@ export async function transitionAction(fd: FormData) {
   const done = ({ confirm: "Запись подтверждена", done: "Готово", no_show: "Отмечено: клиент не приехал", cancel: "Запись отменена" } as const)[t];
   const told = ({ confirm: " — клиент получил уведомление", done: ". Предоплата ушла сервису", no_show: "", cancel: " — клиент уведомлён" } as const)[t];
   if (!res.ok) back(ret, { err: res.error });
-  back(ret, { ok: res.told ? `${done}${told}` : `${done}. Сайт не ответил — клиента предупредите сами` });
+  const mute = ({
+    confirm: ". Сайт не ответил — клиента предупредите сами",
+    done: ". Сайт не ответил — предоплата и уведомление зависли, проверьте на сайте",
+    no_show: ". Сайт не ответил",
+    cancel: ". Сайт не ответил — клиента предупредите сами",
+  } as const)[t];
+  back(ret, { ok: res.told ? `${done}${told}` : `${done}${mute}` });
 }
 
 export async function rescheduleAction(fd: FormData) {
@@ -150,7 +156,13 @@ export async function createManualAction(fd: FormData) {
   if (!shop.schedule) back(ret, { ...keep, err: "Сначала задайте расписание" });
   const services = await listServices(shop.id);
   const svc = services.find(s => s.listingId === listingId);
-  if (!svc) back(ret, { d: day, err: "Выберите услугу" });
+  if (!svc) back(ret, { ...keep, err: "Выберите услугу" });
+  // Право на запись из отчёта проверяем ДО создания: иначе мастер получал бы
+  // отказ уже после того, как окно в календаре занято, и сирота оставалась бы
+  // висеть. Экран кнопку прячет — здесь граница.
+  if (fromReport && !can(role, "closeBooking")) {
+    back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
+  }
   const name = str(fd, "name");
   const phoneRaw = str(fd, "phone");
   const vehicle = str(fd, "vehicle");
@@ -180,12 +192,6 @@ export async function createManualAction(fd: FormData) {
   revalidateBookings();
   if (!res.ok) back(ret, { ...keep, ...typed, step: "1", err: res.error });
   if (fromReport) {
-    // Право то же, что у кнопки «Записать на эту работу»: привязку пункта к
-    // записи сайт даёт стойке, а не мастеру. Экран кнопку прячет — здесь
-    // проверяем ещё раз, потому что экран не граница.
-    if (!can(role, "closeBooking")) {
-      back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
-    }
     // Запись уже есть; связь с пунктом сметы — на сайте. Не связалось — запись
     // всё равно создана, и об этом честно в отчёте.
     const link = await linkItemBooking({ shopId: shop.id, actorUserId: user.id, inspectionId: fromInspection, defectId: fromDefect, bookingId: res.id });

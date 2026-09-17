@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireSection } from "@/lib/context";
 import { busyIntervals, countPending, getBooking, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
+import { CalendarDrag, type DragDay } from "@/components/CalendarDrag";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -10,7 +11,8 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { STATUS_SHORT } from "@/components/Status";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, rangeLabel, rub, todayLocal, weekStart } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
-import { freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
+import { busyBlocks, toDragBlock } from "@/lib/drag";
+import { dayOfWeek, freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
 import { canReschedule } from "@/lib/sto/transitions";
 import { rescheduleAction } from "@/app/(app)/actions";
 
@@ -98,13 +100,32 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
       .map(s => ({ hhmm: localHHMM(s.startsAt), postNo: s.postNo }));
   }
   const returnTo = href(day, filter, moving?.id);
+  // Неделя для перетаскивания: часы приёма каждого дня и занятые им записи —
+  // ровно то, по чему сервер потом решит, встанет запись или нет.
+  const dragDays: DragDay[] = week.map(w => ({
+    day: w.day,
+    label: dayTitle(w.day),
+    intervals: shop.schedule && !shop.schedule.daysOff.includes(w.day) ? (shop.schedule.days[dayOfWeek(w.day)] ?? []) : [],
+    blocks: busyBlocks(w.rows),
+  }));
+  // Тянуть можно только живую запись выбранного дня — и из списка, и из
+  // блока «ждут ответа» в правой колонке.
+  const movable = live.filter(b => canReschedule(b.status)).map(toDragBlock);
   // Правая колонка на вебе — та же, что у дня: неделя не отменяет смену,
   // которая идёт прямо сейчас.
   const dayRows = week.find(w => w.day === day)?.rows ?? [];
   const now = new Date();
 
   return (
-    <>
+    <CalendarDrag
+      shopId={shop.id}
+      day={day}
+      posts={posts}
+      bufferMin={shop.schedule?.bufferMin ?? 0}
+      days={dragDays}
+      movable={movable}
+      returnTo={returnTo}
+    >
       <ScreenHead title="Записи" sub={rangeLabel(ws, addDays(ws, 6))} unread={pending} />
       <div className="page board stack">
         <div className="head">
@@ -141,7 +162,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
         <div className="card week-card">
           <div className="week-bars">
             {week.map(w => (
-              <Link key={w.day} href={href(w.day, filter, moving?.id)} aria-current={w.day === day ? "date" : undefined}>
+              <Link key={w.day} href={href(w.day, filter, moving?.id)} aria-current={w.day === day ? "date" : undefined} data-drop-day={w.day}>
                 <span className="n">
                   <span className="n-day">{w.n || "—"}</span>
                   <span className="n-web">{w.n ? rub(w.revenue) : "—"}</span>
@@ -153,7 +174,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           </div>
           <div className="week-days">
             {week.map(w => (
-              <Link key={w.day} href={href(w.day, filter, moving?.id)} aria-current={w.day === day ? "date" : undefined}>
+              <Link key={w.day} href={href(w.day, filter, moving?.id)} aria-current={w.day === day ? "date" : undefined} data-drop-day={w.day}>
                 <span className="dow">{dayOfWeekShort(w.day)}</span>
                 <span className="num">{dayNumber(w.day)}</span>
                 <span className="cnt">{w.n > 0 ? count(w.n, "запись", "записи", "записей") : shop.schedule && w.off ? "выходной" : "—"}</span>
@@ -162,7 +183,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           </div>
         </div>
 
-        <p className="hint m-only">Нажмите день — ниже покажутся его записи. Сетка часов со свободными окнами — в «День».</p>
+        <p className="hint">Нажмите день — ниже покажутся его записи. Запись переносится перетаскиванием: тяните её за ручку на другой день недели, и он подсветится — зелёным, если время свободно, красным, если занято. Сетка часов со свободными окнами — в «День».</p>
 
         {moving && (
           <div className="card note">
@@ -222,6 +243,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
         <PendingBlock rows={dayRows} day={day} returnTo={returnTo} />
         <PostsNowBlock rows={dayRows} schedule={shop.schedule} day={day} posts={posts} now={now} />
       </aside>
-    </>
+    </CalendarDrag>
   );
 }

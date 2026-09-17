@@ -125,15 +125,10 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
         )}
 
         <div className="card tl-wrap">
-          <Timeline
-            rows={live}
-            schedule={shop.schedule}
-            posts={posts}
-            day={day}
-            now={now}
-            newHref={(postNo, hhmm) => `/kalendar/novaya?d=${day}&post=${postNo}&hhmm=${hhmm}`}
-          />
+          <Timeline rows={live} schedule={shop.schedule} posts={posts} day={day} now={now} shopId={shop.id} returnTo={returnTo} />
         </div>
+
+        <p className="hint m-only">Запись тянется за ручку в углу блока: наложение по времени подсвечивается красным, и бросить туда нельзя.</p>
 
         <div className="tl-legend m-only">
           <span><i className="l-new" />ждёт</span>

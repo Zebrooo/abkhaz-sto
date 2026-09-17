@@ -130,14 +130,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
       <ScreenHead title={`Запись № ${b.id}`} sub={b.service.title} back={backHref} unread={pending} />
       <div className="page board behind">
         <div className="card tl-wrap">
-          <Timeline
-            rows={dayRows}
-            schedule={shop.schedule}
-            posts={posts}
-            day={day}
-            now={new Date()}
-            newHref={(postNo, hhmm) => `/kalendar/novaya?d=${day}&post=${postNo}&hhmm=${hhmm}`}
-          />
+          <Timeline rows={dayRows} schedule={shop.schedule} posts={posts} day={day} now={new Date()} shopId={shop.id} returnTo={backHref} />
         </div>
       </div>
       <Link className="scrim behind-scrim" href={backHref} aria-label="Закрыть запись" />

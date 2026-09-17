@@ -21,6 +21,8 @@ export type KnownClient = {
   phone: string | null;
   car: string | null;
   visits: number;
+  /** Все его машины, свежие сверху: человек приезжает не всегда на одной. */
+  cars: string[];
 };
 
 /** Больше горсти подсказок в строку не помещается, да и выбирать из них тяжело. */
@@ -31,6 +33,8 @@ export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
   const [phone, setPhone] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [open, setOpen] = useState(false);
+  /** Выбранный клиент: под полем машины показываем именно его машины. */
+  const [picked, setPicked] = useState<KnownClient | null>(null);
   /** Подсвеченная подсказка для стрелок; -1 — ни одной. */
   const [cursor, setCursor] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -54,6 +58,7 @@ export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
   function choose(c: KnownClient) {
     setName(c.name);
     setPhone(formatPhone(c.phone));
+    setPicked(c);
     // Машину подставляем, только если поле пустое: человек мог уже написать,
     // на чём клиент приехал в этот раз, и затирать это нельзя.
     if (c.car && !vehicle.trim()) setVehicle(c.car);
@@ -153,6 +158,24 @@ export function ClientPick({ clients }: { clients: readonly KnownClient[] }) {
           onChange={e => setVehicle(e.target.value)}
         />
       </label>
+      {/* Машины выбранного клиента: у человека их бывает несколько, и
+          приезжает он не всегда на той, что была в прошлый раз. Новую
+          вписывают руками в то же поле. */}
+      {picked && picked.cars.length > 1 && (
+        <div className="chips cli-cars">
+          {picked.cars.map(c => (
+            <button
+              key={c}
+              type="button"
+              className="chip"
+              aria-current={c === vehicle.trim() ? "true" : undefined}
+              onClick={() => setVehicle(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
 }

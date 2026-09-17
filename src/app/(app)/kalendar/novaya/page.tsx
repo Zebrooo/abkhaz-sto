@@ -9,6 +9,7 @@ import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutes
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
+import { carsByClient } from "@/lib/vehicles";
 import { ClientPick } from "@/components/ClientPick";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
@@ -102,8 +103,14 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // как на экране «Клиенты»: своей базы клиентов у приложения нет. Берём
   // хвост истории, а не всё подряд: строка ищет тех, кто ездит, а не тех,
   // кто был один раз три года назад, и в браузер уезжает список, а не архив.
-  const known = summarizeClients(await recentBookings(shop.id, 400)).slice(0, 200)
-    .map(c => ({ key: c.key, name: c.name, phone: c.phone, car: c.car, visits: c.visits }));
+  const history = await recentBookings(shop.id, 400);
+  const cars = carsByClient(history);
+  const known = summarizeClients(history).slice(0, 200).map(c => ({
+    key: c.key, name: c.name, phone: c.phone, car: c.car, visits: c.visits,
+    // Все машины клиента — в форме их показывают чипами: человек приезжает
+    // не всегда на той, что была в прошлый раз.
+    cars: cars.get(c.key)?.slice(0, 4) ?? [],
+  }));
   const { list: fitting, hidden } = fittingServices({ services, schedule, startsAt, postNo, busy, now, keepId: svc.listingId });
   const pickable = showAll ? services : fitting;
   // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots

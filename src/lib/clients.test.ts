@@ -76,9 +76,10 @@ describe("карточка клиента", () => {
     row({ id: 2, at: "2026-06-14T06:00:00Z", name: "Аслан Кове", phone: "+79409211408", brand: "Kia", model: "Rio", year: 2014, plate: "АБ 007 01" }),
   ];
 
-  it("собирает машины без повторов и историю сверху вниз", () => {
+  // Машины клиента считает lib/vehicles.ts (clientVehicles) — здесь только
+  // контакты и история.
+  it("история сверху вниз", () => {
     const card = clientCard(rows, clientKey(rows[0]))!;
-    expect(card.cars.map(c => c.name)).toEqual(["Lada Vesta 2021", "Kia Rio 2014"]);
     expect(card.history.map(h => h.id)).toEqual([3, 2]);
   });
 

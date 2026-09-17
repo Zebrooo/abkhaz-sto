@@ -129,12 +129,19 @@ export function fetchInspectionSummaries(input: {
  * перезаписывается): мастер жмёт «Осмотр» из карточки записи столько раз,
  * сколько нужно, и второго осмотра не появляется.
  *
+ * masterId — только когда осмотр начал мастер. У админа и хозяина своего
+ * поста нет, и masterId у них null: такое поле в запрос НЕ кладём, иначе
+ * сайт отвечает validation_error «masterId — целый id мастера» и пробег не
+ * сохраняется (поймали на тесте 17.09.2026). Необязательное поле — это
+ * «поля нет», а не «поле со значением null».
+ *
  * POST /api/sto/inspections/start { shopId, actorUserId, bookingId, odometerKm, masterId? }
  */
 export function startInspection(input: {
   shopId: number; actorUserId: string; bookingId: number; odometerKm: number; masterId?: number | null;
 }): Promise<ApiResult<Inspection>> {
-  return sitePost<Inspection>("inspections/start", input);
+  const { masterId, ...rest } = input;
+  return sitePost<Inspection>("inspections/start", masterId == null ? rest : { ...rest, masterId });
 }
 
 /**

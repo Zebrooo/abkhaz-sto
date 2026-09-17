@@ -100,4 +100,21 @@ describe("поиск клиента", () => {
   it("чужое не находит", () => {
     expect(matchClient(c, "камри")).toBe(false);
   });
+
+  // Строка «Имя» в ручной записи ищет тем же правилом, но карточки целиком
+  // у неё нет — только имя, телефон и машина.
+  it("хватает трёх полей, без остальной карточки", () => {
+    const lite = { name: c.name, phone: c.phone, car: c.car };
+    expect(matchClient(lite, "940 921")).toBe(true);
+    expect(matchClient(lite, "КОВЕ")).toBe(true);
+    expect(matchClient(lite, "+79409211408")).toBe(true);
+  });
+
+  it("две цифры номером не считаются — иначе «21» вытащит пол-базы", () => {
+    expect(matchClient({ name: "Аслан", phone: "+79409211408", car: null }, "21")).toBe(false);
+  });
+
+  it("клиент без телефона и машины ищется по имени", () => {
+    expect(matchClient({ name: "Гость", phone: null, car: null }, "гос")).toBe(true);
+  });
 });

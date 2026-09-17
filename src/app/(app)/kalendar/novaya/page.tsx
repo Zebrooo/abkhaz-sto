@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSection } from "@/lib/context";
-import { busyIntervals, countPending } from "@/lib/bookings";
+import { busyIntervals, countPending, recentBookings } from "@/lib/bookings";
 import { listServices } from "@/lib/services";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -8,6 +8,8 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
+import { summarizeClients } from "@/lib/clients";
+import { ClientPick } from "@/components/ClientPick";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
 
@@ -96,6 +98,12 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // возвращает полный список: иначе длинную услугу нельзя было бы и выбрать,
   // чтобы поискать под неё окно подлиннее.
   const showAll = pick(sp.all) === "1";
+  // Кто у нас уже был — для поиска в строке имени. Свод по последним записям,
+  // как на экране «Клиенты»: своей базы клиентов у приложения нет. Берём
+  // хвост истории, а не всё подряд: строка ищет тех, кто ездит, а не тех,
+  // кто был один раз три года назад, и в браузер уезжает список, а не архив.
+  const known = summarizeClients(await recentBookings(shop.id, 400)).slice(0, 200)
+    .map(c => ({ key: c.key, name: c.name, phone: c.phone, car: c.car, visits: c.visits }));
   const { list: fitting, hidden } = fittingServices({ services, schedule, startsAt, postNo, busy, now, keepId: svc.listingId });
   const pickable = showAll ? services : fitting;
   // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots
@@ -252,9 +260,9 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                   <div className="s">{when}</div>
                 </div>
                 <div className="nb-fields">
-                  <label className="fld"><span>Имя</span><input name="name" required maxLength={80} autoComplete="off" /></label>
-                  <label className="fld"><span>Телефон</span><input name="phone" inputMode="tel" placeholder="+7 940 000-00-00" /></label>
-                  <label className="fld"><span>Машина</span><input name="vehicle" maxLength={80} placeholder="Toyota Camry 2015, А123АВ" /></label>
+                  {/* Имя, телефон и машина живут в ClientPick: строка имени
+                      ищет по тем, кто уже был, и заполняет остальные два поля. */}
+                  <ClientPick clients={known} />
                   <label className="fld"><span>Комментарий</span><textarea name="comment" maxLength={500} placeholder="что просил клиент" /></label>
                 </div>
               </div>

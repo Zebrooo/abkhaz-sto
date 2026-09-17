@@ -93,8 +93,13 @@ export function clientCard(rows: readonly StoBookingRow[], key: string): ClientC
   return { ...summary, cars: [...cars.values()], history: [...mine].sort((a, b) => b.starts_at.localeCompare(a.starts_at)) };
 }
 
-/** Поиск по имени, телефону и машине — одной строкой, как в макете. */
-export function matchClient(c: ClientSummary, query: string): boolean {
+/**
+ * Поиск по имени, телефону и машине — одной строкой, как в макете. Берёт
+ * не всю карточку, а только эти три поля: тем же правилом ищет строка
+ * «Имя» в ручной записи (components/ClientPick.tsx), где карточка целиком
+ * в браузер не уезжает.
+ */
+export function matchClient(c: Pick<ClientSummary, "name" | "phone" | "car">, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const digits = q.replace(/\D+/g, "");

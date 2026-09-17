@@ -175,6 +175,21 @@ svg { display: block; }
   outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
 }
 .fld input::placeholder, .fld textarea::placeholder { color: var(--muted-2); }
+
+/* Строка «Имя» ручной записи с подсказками по прежним клиентам. */
+.cli-pick { position: relative; }
+.cli-hints {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none;
+  background: #fff; border: 1px solid var(--line-2); border-radius: var(--radius-md); box-shadow: var(--shadow-pop);
+  max-height: 248px; overflow-y: auto;
+}
+.cli-hints button {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  padding: 9px 10px; border-radius: var(--radius); min-height: 44px; justify-content: center;
+}
+.cli-hints button.at, .cli-hints button:hover { background: var(--bg-2); }
+.cli-hints .cli-t { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.cli-hints .cli-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .num { font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--font-mono); }
 

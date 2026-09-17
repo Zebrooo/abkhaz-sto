@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   signOut: vi.fn(),
+  serviceContext: vi.fn(),
+  clearPostMarks: vi.fn(),
   jar: {
     all: [] as { name: string; value: string }[],
     getAll: vi.fn(() => mocks.jar.all),
@@ -16,10 +18,11 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServer: async () => ({ auth: { signOut: mocks.signOut } }),
 }));
+vi.mock("@/lib/context", () => ({ serviceContext: mocks.serviceContext }));
+vi.mock("@/lib/post-cookie", () => ({ clearPostMarks: mocks.clearPostMarks }));
 
 import { logoutAction } from "./auth-actions";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-cookies";
-import { POST_COOKIE } from "@/lib/post-cookie";
 import { VIEW_COOKIE } from "@/lib/role-cookie";
 
 /** Действие всегда заканчивается редиректом — он бросает, как в Next. */
@@ -33,6 +36,7 @@ beforeEach(() => {
     { name: "sto-other", value: "not mine" },
   ];
   mocks.signOut.mockResolvedValue({ error: null });
+  mocks.serviceContext.mockResolvedValue({ shop: { id: 7 }, userId: "u1" });
 });
 
 // Домен куки читается при загрузке модуля — переменную за собой убираем,
@@ -62,12 +66,22 @@ describe("logoutAction", () => {
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
-  // За одним планшетом под одной учёткой работают посменно: отметка на
-  // подъёмнике и примерка роли — предыдущего человека, а не следующего.
-  it("снимает отметку о посте и примерку роли, уводит на вход", async () => {
+  // Отметка на подъёмнике снимается так же, как на «ушёл со смены»: через
+  // clearPostMarks, который бережёт принятые машины. Удалить куку целиком
+  // значило бы стереть человеку его же работы за день.
+  it("снимает человека с поста и стирает примерку роли, уводит на вход", async () => {
     expect(await logout()).toBe("REDIRECT /vhod");
-    expect(mocks.jar.delete).toHaveBeenCalledWith(POST_COOKIE);
+    expect(mocks.clearPostMarks).toHaveBeenCalledWith({ shop: { id: 7 }, userId: "u1" }, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(mocks.jar.delete).toHaveBeenCalledWith(VIEW_COOKIE);
+  });
+
+  // Витрины у человека может не быть вовсе (экран «Организации нет») — выход
+  // оттуда обязан работать, а снимать с поста там некого.
+  it("без витрины выход всё равно проходит", async () => {
+    mocks.serviceContext.mockResolvedValue(null);
+    expect(await logout()).toBe("REDIRECT /vhod");
+    expect(mocks.clearPostMarks).not.toHaveBeenCalled();
+    expect(mocks.signOut).toHaveBeenCalled();
   });
 
   // Человек просил выйти — он выйдет. Живая сессия на сервере хуже, чем

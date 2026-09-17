@@ -32,11 +32,20 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AUTH_COOKIE_NAME, authCookieAttributes } from "@/lib/auth-cookies";
-import { POST_COOKIE } from "@/lib/post-cookie";
+import { serviceContext } from "@/lib/context";
+import { todayLocal } from "@/lib/format";
+import { clearPostMarks } from "@/lib/post-cookie";
 import { VIEW_COOKIE } from "@/lib/role-cookie";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export async function logoutAction(): Promise<void> {
+  // Пока сессия жива: снять человека с подъёмника. Ровно так же, как «ушёл
+  // со смены» (lib/post-cookie.ts) — снимаются отметки, а принятые машины
+  // остаются: машина, которую человек принял, остаётся за ним до конца
+  // работы, и выход через обед не должен стирать его же работы.
+  const ctx = await serviceContext();
+  if (ctx) await clearPostMarks(ctx, todayLocal());
+
   const supabase = await createSupabaseServer();
   const { error } = await supabase.auth.signOut({ scope: "local" });
   if (error) console.error("[выход] GoTrue не погасил сессию:", error.message);
@@ -47,12 +56,11 @@ export async function logoutAction(): Promise<void> {
       jar.set(c.name, "", { ...authCookieAttributes, path: "/", maxAge: 0 });
     }
   }
-  // Куки устройства, которые пережили бы выход: отметка на подъёмнике
-  // (lib/post-cookie.ts) и примерка роли (lib/role-cookie.ts). Обе привязаны
-  // к учётке, но в маленьком сервисе сменщики ходят с одного планшета и под
-  // одной учёткой хозяина — после выхода за экраном другой человек, и чужой
-  // пост с чужой примеркой ему только мешают.
-  for (const name of [POST_COOKIE, VIEW_COOKIE]) jar.delete(name);
+  // Примерка роли (lib/role-cookie.ts) выход бы пережила: она в куке
+  // устройства. Следующему за этим планшетом — хоть тому же человеку —
+  // достался бы чужой «просмотр глазами мастера» и половина приложения
+  // без объяснения.
+  jar.delete(VIEW_COOKIE);
 
   // Дальше — на экран входа. Свои экраны приложения без куки не откроются:
   // «назад» упрётся в тот же замок (src/proxy.ts), а не покажет записи

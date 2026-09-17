@@ -20,11 +20,31 @@ import { Icon } from "@/components/Icon";
 import { PULL_TRIGGER, pullMove } from "@/lib/pull";
 
 /**
- * Где жест не наш совсем: шторка и затемнение (внутри шторки свой скролл),
- * колесо времени, ручки переноса записи. data-no-pull — на случай, когда
- * экрану понадобится отключить жест у своего блока.
+ * Где жест не наш совсем: шторка и затемнение (у шторки свой разговор с
+ * пальцем), ручки переноса записи (своя логика на pointer-событиях,
+ * CalendarDrag). data-no-pull — на случай, когда экрану понадобится
+ * отключить жест у своего блока.
  */
-const SKIP = ".sheet, .scrim, .wheel, .bk-grip, .tl-grip, [data-no-pull]";
+const SKIP = ".sheet, .scrim, .bk-grip, .tl-grip, [data-no-pull]";
+
+/**
+ * Палец лёг на то, что прокручивается само: ленту чипов, подсказки клиента,
+ * колесо времени, правую колонку рабочего места. Такой жест — их, и трогать
+ * его нельзя: перехватив, мы бы не дали прокрутить их вовсе.
+ *
+ * Считаем по дереву, а не по списку классов: список пришлось бы дописывать
+ * при каждом новом блоке с прокруткой, а забытая строка — это «лента не
+ * листается», о которой узнаёшь от человека за стойкой.
+ */
+function insideScroller(node: Element | null): boolean {
+  for (let el = node; el && el !== document.body; el = el.parentElement) {
+    const css = getComputedStyle(el);
+    const scrolls = (v: string) => v === "auto" || v === "scroll";
+    if (scrolls(css.overflowY) && el.scrollHeight > el.clientHeight) return true;
+    if (scrolls(css.overflowX) && el.scrollWidth > el.clientWidth) return true;
+  }
+  return false;
+}
 
 export function PullRefresh() {
   const router = useRouter();
@@ -48,10 +68,9 @@ export function PullRefresh() {
     function onStart(e: TouchEvent) {
       g.current = null;
       unwatch();
-      // Обновление уже идёт — второй жест ему ничем не поможет.
-      if (busy || e.touches.length !== 1 || window.scrollY > 0) return;
+      if (e.touches.length !== 1 || window.scrollY > 0) return;
       const t = e.touches[0];
-      if (t.target instanceof Element && t.target.closest(SKIP)) return;
+      if (t.target instanceof Element && (t.target.closest(SKIP) || insideScroller(t.target))) return;
       g.current = { y: t.clientY, x: t.clientX, mine: false, dist: 0 };
       watch();
     }
@@ -90,23 +109,29 @@ export function PullRefresh() {
       document.removeEventListener("touchcancel", onEnd);
       unwatch();
     };
-  }, [busy, router, startRefresh]);
+  }, [router, startRefresh]);
 
   const ready = pull >= PULL_TRIGGER;
-  // Отпустили — кружок либо уехал наверх, либо остался на отметке и крутится,
-  // пока сервер отвечает. Переход в CSS, поэтому анимации здесь нет.
-  const shown = busy ? PULL_TRIGGER : pull;
+  // Палец на экране — показываем палец; иначе, пока сервер отвечает, кружок
+  // стоит на отметке и крутится. Переход в CSS, поэтому анимации здесь нет.
+  //
+  // Порядок именно такой, и жест во время обновления не запрещён: если ответ
+  // не придёт (в сервисе бывает узкий интернет), крутилка останется висеть —
+  // и запертый на ней жест было бы уже не повторить, а другого способа
+  // обновить экран в оболочке нет.
+  const spinning = busy && pull === 0;
+  const shown = spinning ? PULL_TRIGGER : pull;
   return (
     <div className="pull" role="status" aria-live="polite">
       <span
-        className={`pull-i${ready || busy ? " ready" : ""}${pull > 0 ? " held" : ""}`}
+        className={`pull-i${ready || spinning ? " ready" : ""}${pull > 0 ? " held" : ""}`}
         style={{ transform: `translate3d(0, ${shown}px, 0)`, opacity: shown > 0 ? 1 : 0 }}
       >
-        {busy
+        {spinning
           ? <i className="spin" />
           : <Icon name="chevDown" size={18} style={{ transform: `rotate(${ready ? 180 : 0}deg)` }} />}
       </span>
-      {busy && <span className="sr">Обновляю экран</span>}
+      {spinning && <span className="sr">Обновляю экран</span>}
     </div>
   );
 }

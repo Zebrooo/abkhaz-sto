@@ -13,6 +13,9 @@ import { listOr } from "@/lib/api/site-api";
 import type { ServiceContext } from "@/lib/context";
 import { addDays } from "@/lib/format";
 import { inspectTarget, masterBookings } from "@/lib/mywork";
+import { currentPost } from "@/lib/post-hold";
+import { readPostHold } from "@/lib/post-cookie";
+import type { PostHold } from "@/lib/post-hold";
 import { isLive } from "@/lib/stats";
 import { localTime } from "@/lib/sto/slots";
 import type { StoBookingRow } from "@/lib/sto/types";
@@ -27,12 +30,18 @@ export type MasterDay = {
   me: StoMaster | null;
   /** Живые записи, за которые отвечает мастер, по времени. */
   mine: StoBookingRow[];
+  /** Сегодняшняя отметка «занял подъёмник»; null — не отмечался. */
+  hold: PostHold | null;
+  /** Где человек стоит сейчас: отметка, иначе закрепление справочника. */
+  postNo: number | null;
 };
 
 export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise<MasterDay> => {
   const from = localTime(day, "00:00");
   const to = localTime(addDays(day, 1), "00:00");
   const q = { shopId: ctx.shop.id, actorUserId: ctx.userId, from: from.toISOString(), to: to.toISOString() };
+  // Отметка лежит в куке — читается без сети и решает, чьи записи считать.
+  const hold = await readPostHold(ctx, day);
   const [rows, links, masters] = await Promise.all([
     dayBookings(ctx.shop.id, day),
     fetchBookingMasters(q),
@@ -41,8 +50,17 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
   const list = listOr(masters);
   const pairs = listOr(links);
   const me = ctx.masterId === null ? null : (list.find(m => m.id === ctx.masterId) ?? null);
-  const mine = ctx.masterId === null ? [] : masterBookings(rows, pairs, ctx.masterId, me?.postNo ?? null);
-  return { rows, links: pairs, masters: list, me, mine };
+  // ПРИОРИТЕТ ИСТОЧНИКОВ «ЧЕЙ ПОСТ», в одном месте:
+  //  1) сегодняшние отметки со временем (человек сам сказал, где стоит);
+  //  2) закрепление в справочнике — им живут мастера, которые не отмечались.
+  // Привязка записи к мастеру перекрывает оба (правило внутри masterBookings),
+  // а принятая машина остаётся за принявшим независимо от поста.
+  const post = hold && hold.marks.length > 0 ? hold.marks : (me?.postNo ?? null);
+  // masterId может быть null — сегодня он такой у всех, пока сайт не отдаёт
+  // справочника. Отметка на подъёмнике обязана работать и в этом случае,
+  // иначе экран мастера пуст у всех.
+  const mine = masterBookings(rows, pairs, ctx.masterId, post, hold?.accepted ?? []);
+  return { rows, links: pairs, masters: list, me, mine, hold, postNo: currentPost(hold) ?? me?.postNo ?? null };
 });
 
 /**
@@ -56,11 +74,13 @@ export const masterDay = cache(async (ctx: ServiceContext, day: string): Promise
  * внизу того же экрана.
  */
 export async function inspectHref(ctx: ServiceContext, day: string, now: Date): Promise<string> {
-  if (ctx.role === "master") {
-    const { mine } = await masterDay(ctx, day);
-    const target = inspectTarget(mine, now);
-    return target ? `/zapis/${target.id}/osmotr` : "/moi-raboty";
-  }
+  // Отметился на подъёмнике — ведём к машине СВОЕГО поста, кем бы человек ни
+  // числился: хозяин маленького сервиса тоже стоит у подъёмника. Отметка
+  // только сужает выбор, ветка по роли и запасные адреса остаются прежними.
+  const { mine } = await masterDay(ctx, day);
+  const own = inspectTarget(mine, now);
+  if (own) return `/zapis/${own.id}/osmotr`;
+  if (ctx.role === "master") return "/moi-raboty";
   const rows = await dayBookings(ctx.shop.id, day);
   const target = inspectTarget(rows.filter(isLive), now);
   return target ? `/zapis/${target.id}/osmotr` : "/otchety";

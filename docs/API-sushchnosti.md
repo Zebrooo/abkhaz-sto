@@ -97,7 +97,7 @@ StoMember = { userId, name, phone, role, masterId, active, canRemove, addedAt }
 | `GET /masters?shopId&actorUserId` | `admin`, `owner` | `StoMaster[]` |
 | `GET /masters/load?shopId&actorUserId&from&to` | `admin`, `owner` | `MasterLoad[]` |
 | `POST /masters` | `owner` | создать |
-| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin` | патч → `{ master, orphaned }` |
+| `POST /masters/update` | `owner`; смену (`onShift`) — и `admin`; свою строку (`postNo`, `onShift`) — сам мастер, см. ниже | патч → `{ master, orphaned }` |
 | `GET /masters/bookings?shopId&actorUserId&from&to` | любому своему | `{ bookingId, masterId }[]` |
 | `POST /masters/assign` | `admin`, `owner` | `{ …, bookingId, masterId \| null }` |
 
@@ -126,6 +126,35 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 Автор отчёта — мастер **записи**, а не тот, кто сегодня стоит на посту: за
 день на посту могут смениться двое.
 
+### Мастер отмечается сам
+
+Двое мастеров работают в одно время на разных подъёмниках, и «чья это
+машина» решается не заранее, а утром, когда каждый занял свой пост. Поэтому
+мастер отмечается сам, а не ждёт, пока хозяин раздаст посты.
+
+Своего маршрута у этого пока нет, и приложение обходится тем, что есть:
+`POST /masters/update` **со своей строкой** — `postNo` и `onShift` про себя.
+Сейчас поле `postNo` правит только `owner`; просьба к сайту — **разрешить
+мастеру и админу менять `postNo` и `onShift` в СВОЕЙ строке** (`masterId`
+той строки, чей `userId` равен `actorUserId`). Чужую строку по-прежнему
+правит только хозяин: это он снимает со смены и переставляет людей.
+
+Пока сайт этого не умеет — и пока `GET /masters` вообще не отвечает —
+отметка живёт в куке устройства (`src/lib/post-cookie.ts`, кука `sto-post`:
+сервис, учётка, день, номера постов со временем и номера принятых записей).
+Кука — местный запасной путь, а не вторая база: приложение всё равно
+best-effort шлёт `masters/update`, чтобы хозяин видел, кто где стоит.
+
+**Чей это пост в момент записи** — три источника, в порядке силы:
+
+1. запись **принята** этим человеком (он начал по ней осмотр) — она его до
+   конца работы, даже если её перенесут на другой подъёмник;
+2. **привязка** `masters/assign` — админ назначил исполнителя явно;
+3. **пост**: по умолчанию машина достаётся мастеру своего поста. Пост берётся
+   из сегодняшних отметок **со временем**, а не из `postNo` справочника:
+   иначе переход на другой подъёмник в обед задним числом переписал бы утро.
+   Мастер, который не отмечался, живёт по `postNo` из справочника.
+
 ---
 
 ## Осмотр и дефекты
@@ -150,13 +179,18 @@ MasterLoad = { masterId, busySlots, totalSlots, jobs, revenue }
 |---|---|---|
 | `GET /inspections?shopId&actorUserId&bookingId` | `master`, `admin`, `owner` | `Inspection` |
 | `GET /inspections/summary?shopId&actorUserId&from&to` | те же | `InspectionSummary[]` |
-| `POST /inspections/start` | `master`, `admin` | идемпотентно: повтор отдаёт начатый |
-| `POST /inspections/defects` | `master`, `admin` | `Defect` |
-| `POST /inspections/defects/update` | `master`, `admin` | `Defect` |
-| `POST /inspections/defects/remove` | `master`, `admin` | `{ removed: true }` |
-| `GET /inspections/presets?shopId&actorUserId&nodeKey?` | `master`, `admin` | `DefectPreset[]` |
+| `POST /inspections/start` | `master`, `admin`, `owner` | идемпотентно: повтор отдаёт начатый |
+| `POST /inspections/defects` | `master`, `admin`, `owner` | `Defect` |
+| `POST /inspections/defects/update` | `master`, `admin`, `owner` | `Defect` |
+| `POST /inspections/defects/remove` | `master`, `admin`, `owner` | `{ removed: true }` |
+| `GET /inspections/presets?shopId&actorUserId&nodeKey?` | `master`, `admin`, `owner` | `DefectPreset[]` |
 | `GET /inspections/presets/frequent?shopId&actorUserId&limit` | те же | `DefectPreset[]` |
-| `POST /inspections/photo-upload` | `master`, `admin` | `{ photoId, uploadUrl, expiresAt }` |
+| `POST /inspections/photo-upload` | `master`, `admin`, `owner` | `{ photoId, uploadUrl, expiresAt }` |
+
+**Хозяин осматривает наравне с мастером.** В сервисе на два подъёмника он сам
+принимает машину и сам снимает дефекты — отказывать ему в записи осмотра
+значит оставить сервис без отчётов. Право «смотреть» и право «писать» здесь
+не расходятся: читать осмотр `owner` мог всегда.
 
 `masterId` в `/inspections/start` — необязательное поле, и «необязательное»
 здесь значит «поля может не быть», а не «поле со значением `null`». Осмотр

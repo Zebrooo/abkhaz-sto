@@ -9,7 +9,8 @@ import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, count, initials, minutesLabel, shortName, timeRange, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
-import { busyMinutes, jobNow, jobsAfter, minutesLeft } from "@/lib/mywork";
+import { busyMinutes, jobNow, jobsAfter, jobsDue, minutesLeft, postCount } from "@/lib/mywork";
+import { leavePostAction, takePostAction } from "@/app/(app)/post-actions";
 import { REPORT_BADGE } from "@/lib/reports";
 import { dayWindow } from "@/lib/stats";
 import { localHHMM, localTime } from "@/lib/sto/slots";
@@ -30,11 +31,19 @@ const durationMin = (b: StoBookingRow) =>
   Math.max(0, Math.round((new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60_000));
 
 /**
- * «Мой пост» — смена глазами мастера: кто он и где стоит, что в работе прямо
- * сейчас (с «осталось N мин»), что дальше на его посту и отчёты за смену.
- * Ни выручки, ни настроек. Записи — по привязкам с сайта, а без них — по
- * посту (lib/mywork.ts). Учётка без мастера видит не пустой экран, а
- * объяснение: привязать её может хозяин в «Доступах».
+ * «Мой пост» — смена глазами мастера: где он стоит, что в работе прямо
+ * сейчас (с «осталось N мин»), какая машина подошла по времени, что дальше
+ * и отчёты за смену. Ни выручки, ни настроек.
+ *
+ * НАЧИНАЕТСЯ ВСЁ С ОТМЕТКИ. Пока человек не сказал, какой подъёмник занял,
+ * экран не знает, чьи записи показывать, и честно просит отметиться, а не
+ * делает вид, что работы нет. Двое мастеров на разных постах отмечаются
+ * каждый со своего телефона и видят каждый своё — отметка живёт на
+ * устройстве (lib/post-cookie.ts).
+ *
+ * Строка мастера в справочнике сайта тут не обязательна: пока сайт не отдаёт
+ * /masters, её нет ни у кого, а работать надо сегодня. Без неё не будет
+ * только имени в отчёте — об этом и говорит приписка.
  */
 export default async function MyWorkPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -42,34 +51,21 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   const { shop } = ctx;
   const pending = await countPending(shop.id);
 
-  if (ctx.masterId === null) {
-    return (
-      <>
-        <ScreenHead title="Мой пост" sub="учётка не привязана к посту" unread={pending} />
-        <div className="page page-narrow stack">
-          <div className="head">
-            <div>
-              <div className="head-t">Мой пост</div>
-              <div className="head-s">Здесь мастер видит свою смену: текущую работу, следующие записи и отчёты.</div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="empty">
-              <span className="sq"><Icon name="user" size={26} /></span>
-              <div className="empty-t">Вы не привязаны к посту</div>
-              <div className="empty-s">Попросите хозяина открыть «Доступы» и привязать вашу учётку к мастеру — тогда здесь появятся записи вашего поста.</div>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
   const day = todayLocal();
   const now = new Date();
-  const { me, mine } = await masterDay(ctx, day);
+  const { me, mine, rows, masters, hold, postNo } = await masterDay(ctx, day);
+  const posts = postCount(shop.schedule?.posts, rows);
+  // Кто ещё занял подъёмники — подпись на чипах; справочник молчит, пока
+  // сайта нет, и тогда чипы просто номера.
+  const takenBy = new Map<number, string>();
+  for (const m of masters) {
+    if (m.postNo && m.onShift && m.id !== ctx.masterId) takenBy.set(m.postNo, m.name);
+  }
+  // Машины, которые подошли по времени и ещё не приняты: принятой считаем ту,
+  // по которой этот человек уже начал осмотр (отметка на устройстве).
+  const due = jobsDue(mine, now).filter(b => !hold?.accepted.includes(b.id));
   const reports = listOr(await fetchReports({
-    shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId,
+    shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId ?? undefined,
     from: localTime(day, "00:00").toISOString(), to: localTime(addDays(day, 1), "00:00").toISOString(),
   }));
   const current = jobNow(mine, now);
@@ -78,9 +74,12 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   const shiftLine = win.off ? "сегодня выходной" : `смена до ${hhmm(win.toMin)}`;
 
   const name = me?.name ?? "Мастер";
-  const postLabel = me?.postNo ? `пост ${me.postNo}` : "без поста";
+  // Пост берём из отметки, а не из справочника: справочник мастеру закрыт, и
+  // после «занял подъёмник 2» экран не должен продолжать писать «без поста».
+  const postLabel = postNo ? `пост ${postNo}` : "подъёмник не выбран";
+  const since = hold?.marks.length ? hold.marks[hold.marks.length - 1].at : null;
   // В шапке телефона — только имя: «Пост 2 · Леван», фамилия не влезает.
-  const title = me ? `${me.postNo ? `Пост ${me.postNo} · ` : ""}${me.name.trim().split(/\s+/)[0]}` : "Мой пост";
+  const title = postNo ? `Пост ${postNo}${me ? ` · ${me.name.trim().split(/\s+/)[0]}` : ""}` : "Мой пост";
   const self = "/moi-raboty";
 
   return (
@@ -112,6 +111,60 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         </div>
 
+        <div className="card mw-post">
+          <div className="card-t">Я на подъёмнике</div>
+          <div className="card-s">
+            {postNo
+              ? `Пост ${postNo}${since ? ` · с ${since}` : ""} — записи этого поста ниже. Перешли на другой? Нажмите его номер.`
+              : "Отметьтесь, какой подъёмник заняли, — и записи этого поста появятся ниже."}
+          </div>
+          <div className="chips mw-posts">
+            {Array.from({ length: posts }, (_, i) => i + 1).map(p => (
+              <form key={p} action={takePostAction}>
+                <input type="hidden" name="postNo" value={p} />
+                <button className="chip" type="submit" aria-pressed={p === postNo}>
+                  Пост {p}{takenBy.has(p) ? ` · ${shortName(takenBy.get(p)!)}` : ""}
+                </button>
+              </form>
+            ))}
+          </div>
+          {postNo && (
+            <div className="note-b">
+              <form action={leavePostAction}>
+                <button className="aui-btn aui-btn--outline aui-btn--sm" type="submit">Уйти со смены</button>
+              </form>
+            </div>
+          )}
+          {ctx.masterId === null && (
+            <p className="hint">Учётка не привязана к мастеру: отметка живёт на этом телефоне, а в отчёте не будет имени. Привязать может хозяин в «Доступах».</p>
+          )}
+        </div>
+
+        {due.length > 0 && (
+          <>
+            <div className="sect mw-sect">Машина подошла по времени</div>
+            {due.map(b => (
+              <div key={b.id} className="card card-accent mw-due">
+                <div className="mw-now-head">
+                  <span className="mono mw-time">{timeRange(b.starts_at, b.ends_at)}</span>
+                  <span className="rspec is-accent">пост {b.post_no}</span>
+                </div>
+                <div className="mw-now-t">{b.service.title}</div>
+                <div className="mw-now-s">{carLine(b)}</div>
+                <div className="mw-now-actions">
+                  {/* «Принять» — это начать осмотр: шторка пробега откроется
+                      сама, потому что осмотра ещё нет. Адрес без do=km, чтобы
+                      не пробивать защиту «сайт не ответил». */}
+                  <Link className="aui-btn aui-btn--primary aui-btn--md" href={`/zapis/${b.id}/osmotr?d=${day}`}>
+                    <Icon name="camera" size={17} />Принять машину
+                  </Link>
+                  <Link className="aui-btn aui-btn--outline aui-btn--md" href={`/zapis/${b.id}?d=${day}`}>Запись</Link>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
         <div className="sect mw-sect">Сейчас в работе</div>
         {current ? (
           <div className="card card-accent mw-now">
@@ -139,11 +192,13 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
           </div>
         ) : (
           <div className="card">
-            <div className="note-t">Пост свободен</div>
+            <div className="note-t">{postNo ? "Пост свободен" : "Подъёмник не выбран"}</div>
             <div className="note-s">
-              {next.length > 0
-                ? `Следующая запись в ${localHHMM(new Date(next[0].starts_at))} — ${next[0].service.title.toLowerCase()}.`
-                : mine.length > 0 ? "На сегодня работы закончились." : "На сегодня записей нет."}
+              {!postNo
+                ? "Нажмите номер подъёмника выше — экран наполнится записями этого поста."
+                : next.length > 0
+                  ? `Следующая запись в ${localHHMM(new Date(next[0].starts_at))} — ${next[0].service.title.toLowerCase()}.`
+                  : mine.length > 0 ? "На сегодня работы закончились." : "На сегодня записей на вашем посту нет."}
             </div>
           </div>
         )}

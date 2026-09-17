@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { busyMinutes, inspectTarget, jobNow, jobsAfter, masterBookings, minutesLeft } from "@/lib/mywork";
+import {
+  busyMinutes, inspectTarget, jobHere, jobNow, jobsAfter, jobsDue, masterBookings, minutesLeft, postCount,
+} from "@/lib/mywork";
 import type { StoBookingRow } from "@/lib/sto/types";
 import { localTime } from "@/lib/sto/slots";
 
@@ -82,5 +84,73 @@ describe("осталось N мин", () => {
 
   it("занято — сумма длительностей", () => {
     expect(busyMinutes(masterBookings(ROWS, [], 7, 2))).toBe(60 + 90 + 45);
+  });
+});
+
+describe("записи по отметкам на подъёмнике", () => {
+  // Утро на посту 2, после обеда человек перешёл на пост 3.
+  const MARKS = [{ postNo: 2, at: "09:05" }, { postNo: 3, at: "13:00" }];
+  const SHIFT_ROWS = [
+    row({ id: 1, from: "09:00", to: "10:00", post: 2 }),
+    row({ id: 2, from: "10:00", to: "11:00", post: 3 }),
+    row({ id: 3, from: "14:00", to: "15:00", post: 3 }),
+    row({ id: 4, from: "14:00", to: "15:00", post: 2 }),
+  ];
+
+  it("утренние записи прежнего поста остаются его, дневные — нового", () => {
+    expect(masterBookings(SHIFT_ROWS, [], null, MARKS).map(b => b.id)).toEqual([1, 3]);
+  });
+
+  it("отметился в обед — утро не присваивается", () => {
+    expect(masterBookings(SHIFT_ROWS, [], null, [{ postNo: 2, at: "13:00" }]).map(b => b.id)).toEqual([4]);
+  });
+
+  it("принятая машина остаётся его, даже если её перенесли на чужой пост", () => {
+    const moved = [row({ id: 9, from: "10:00", to: "11:00", post: 1 })];
+    expect(masterBookings(moved, [], null, MARKS).map(b => b.id)).toEqual([]);
+    expect(masterBookings(moved, [], null, MARKS, [9]).map(b => b.id)).toEqual([9]);
+  });
+
+  it("учётка без строки мастера видит свой пост, но не чужое назначение", () => {
+    const links = [{ bookingId: 3, masterId: 9 }];
+    expect(masterBookings(SHIFT_ROWS, links, null, MARKS).map(b => b.id)).toEqual([1]);
+  });
+
+  it("без отметок записей нет — это и есть «отметьтесь на подъёмнике»", () => {
+    expect(masterBookings(SHIFT_ROWS, [], null, []).map(b => b.id)).toEqual([]);
+  });
+});
+
+describe("машина на посту и приёмка по времени", () => {
+  const at = (hhmm: string) => new Date(localTime(DAY, hhmm));
+
+  it("выполненная запись всё ещё «здесь», пока машина не уехала", () => {
+    expect(jobNow(ROWS, at("09:30"))).toBeNull();
+    expect(jobHere(ROWS, at("09:30"))?.id).toBe(1);
+    expect(inspectTarget(ROWS, at("09:30"))?.id).toBe(1);
+  });
+
+  it("подошедшая по времени машина видна за четверть часа до начала", () => {
+    expect(jobsDue(ROWS, at("13:20")).map(b => b.id)).toEqual([2]);
+    expect(jobsDue(ROWS, at("13:10")).map(b => b.id)).toEqual([]);
+  });
+
+  it("закрытую работу принимать больше не предлагаем", () => {
+    expect(jobsDue(ROWS, at("09:30")).map(b => b.id)).toEqual([]);
+  });
+});
+
+describe("postCount", () => {
+  it("расписание задаёт число подъёмников", () => {
+    expect(postCount(4, [])).toBe(4);
+  });
+
+  it("расписания нет — считаем по записям дня", () => {
+    expect(postCount(null, ROWS)).toBe(2);
+    expect(postCount(undefined, [])).toBe(1);
+  });
+
+  it("запись стоит на посту, которого нет в расписании, — подъёмник всё равно показываем", () => {
+    expect(postCount(2, [row({ id: 9, from: "09:00", to: "10:00", post: 5 })])).toBe(5);
   });
 });

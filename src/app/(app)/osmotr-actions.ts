@@ -21,8 +21,10 @@ import {
 import type { ApiResult } from "@/lib/api/site-api";
 import { fetchReportPdf, sendReport, setEstimateItem } from "@/lib/api/reports";
 import { serviceContext } from "@/lib/context";
+import { todayLocal } from "@/lib/format";
 import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } from "@/lib/inspection";
 import { isNodeKey } from "@/lib/inspection-nodes";
+import { saveAccepted } from "@/lib/post-cookie";
 import { listServices } from "@/lib/services";
 
 function back(path: string, q: Record<string, string | string[] | undefined>): never {
@@ -74,9 +76,15 @@ function revalidateInspection(bookingId: number) {
 }
 
 /**
- * Начать осмотр с пробегом. Число проверяем здесь, чтобы человек увидел
- * понятное «введите пробег», а не ответ сайта; но «пробег уехал назад»
- * знает только сайт — его validation_error показываем как есть.
+ * Начать осмотр с пробегом — этим же мастер и «принимает машину».
+ * Число проверяем здесь, чтобы человек увидел понятное «введите пробег», а
+ * не ответ сайта; но «пробег уехал назад» знает только сайт — его
+ * validation_error показываем как есть.
+ *
+ * ОСМОТР ИДЕМПОТЕНТЕН: если его уже начали (второй мастер, или сам человек
+ * с другого телефона), сайт возвращает тот, что есть, — с ЧУЖИМ пробегом.
+ * Писать «Пробег: 112 300» на введённые 118 000 нельзя: мастер поверит, что
+ * его число сохранилось. Поэтому сверяем и говорим как есть.
  */
 export async function startInspectionAction(fd: FormData) {
   const c = await ctx();
@@ -88,7 +96,19 @@ export async function startInspectionAction(fd: FormData) {
   const res = await startInspection({ shopId: c.shop.id, actorUserId: c.userId, bookingId, odometerKm: km.km, masterId: c.masterId });
   revalidateInspection(bookingId);
   if (!res.ok) back(bare(ret), { d: dayOf(ret), do: "km", err: res.error });
-  back(bare(ret), { d: dayOf(ret), ok: `Пробег: ${kmLabel(res.data.odometerKm)}` });
+  // Машина теперь за этим человеком: её могут перенести на другой пост, а
+  // работает с ней он (lib/post-hold.ts). Отметка — на устройстве, и сорваться
+  // из-за неё приёмка не должна: осмотр уже начат.
+  try {
+    await saveAccepted(c, dayOf(ret) ?? todayLocal(), bookingId);
+  } catch {
+    // Кука не записалась (редкий случай) — осмотр от этого не отменяется.
+  }
+  const same = res.data.odometerKm === km.km;
+  back(bare(ret), {
+    d: dayOf(ret),
+    ok: same ? `Пробег: ${kmLabel(res.data.odometerKm)}` : `Осмотр уже начат, пробег в нём: ${kmLabel(res.data.odometerKm)}`,
+  });
 }
 
 /**

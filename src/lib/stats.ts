@@ -8,7 +8,7 @@ import { toMinutes } from "@/lib/sto/schedule";
 import { dayOfWeek } from "@/lib/sto/slots";
 
 /** Запись, которая занимает окно и считается в деньгах: живая или выполненная. */
-export function isLive(b: StoBookingRow): boolean {
+export function isLive(b: Pick<StoBookingRow, "status">): boolean {
   return b.status === "new" || b.status === "confirmed" || b.status === "done";
 }
 

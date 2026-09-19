@@ -2086,7 +2086,7 @@ svg { display: block; }
 
 
 
-/* @section:skleton */
+/* @section:skeleton */
 /* Скелетон загрузки страницы ((app)/loading.tsx): пульс-полосы вместо белого
    экрана, пока страница ждёт данные. */
 @keyframes sklPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }

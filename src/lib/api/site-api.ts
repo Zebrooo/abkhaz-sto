@@ -99,7 +99,9 @@ function fail(code: ApiErrorCode, message?: string): { ok: false; code: ApiError
 
 /**
  * Одна попытка запроса. Таймаут — на попытку, а не на запрос целиком:
- * у повторной попытки свой AbortController.
+ * у повторной попытки свой AbortController. last — «попытка последняя»:
+ * warn о недоступности пишем только после неё, иначе один сбой с retry
+ * давал бы два warn в логе.
  */
 async function attempt<T>(
   method: string,
@@ -107,6 +109,7 @@ async function attempt<T>(
   headers: Record<string, string>,
   path: string,
   init: { body?: unknown; timeoutMs?: number },
+  last: boolean,
 ): Promise<ApiResult<T>> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? READ_TIMEOUT_MS);
@@ -141,7 +144,7 @@ async function attempt<T>(
     return { ok: true, data: payload.data };
   } catch (e) {
     // AbortError от таймаута и сетевой сбой для экрана — одно и то же.
-    console.warn("[сто] сайт недоступен:", method, path, e);
+    if (last) console.warn("[сто] сайт недоступен:", method, path, e);
     return fail("unavailable");
   } finally {
     clearTimeout(timer);
@@ -182,7 +185,7 @@ async function request<T>(
   const attempts = method === "GET" ? 2 : 1;
   for (let i = 0; i < attempts; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-    const res = await attempt<T>(method, url, headers, path, init);
+    const res = await attempt<T>(method, url, headers, path, init, i === attempts - 1);
     // Повторяем только сетевой сбой/таймаут; отказ сайта — это ответ.
     if (res.ok || res.code !== "unavailable") return res;
   }

@@ -58,7 +58,7 @@ export function clientKeyOf(clientId: string | null, client: { name?: string | n
 }
 
 /** Ключ клиента: учётка → телефон → имя. Безопасен для адреса. */
-export function clientKey(b: StoBookingRow): string {
+export function clientKey(b: Pick<StoBookingRow, "client_id" | "data">): string {
   return clientKeyOf(b.client_id, b.data.client);
 }
 

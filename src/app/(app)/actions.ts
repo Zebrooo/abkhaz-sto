@@ -87,13 +87,19 @@ function revalidateBookings() {
 /**
  * Экраны, которые читают расписание сервиса (schedule): часы приёма, посты,
  * выходные. Раньше здесь был revalidatePath("/", "layout") — он ронял кэш
- * всего приложения после каждой правки расписания.
+ * всего приложения после каждой правки расписания. /zapis/[id] в списке нет:
+ * путь динамический, и карточка записи подхватит расписание на открытии.
  */
 function revalidateSchedule() {
   revalidatePath("/raspisanie");
   revalidatePath("/segodnya");
   revalidatePath("/kalendar");
   revalidatePath("/kalendar/novaya");
+  revalidatePath("/");
+  revalidatePath("/moi-raboty");
+  revalidatePath("/menu");
+  revalidatePath("/mastera");
+  revalidatePath("/svodka");
 }
 
 export async function transitionAction(fd: FormData) {

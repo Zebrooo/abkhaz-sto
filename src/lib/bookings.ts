@@ -7,6 +7,7 @@ import { cache } from "react";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { notifySite } from "@/lib/site-events";
 import { clientKey, clientKeyOf } from "@/lib/clients";
+import { vehicleKey, type VehiclePastRow } from "@/lib/vehicles";
 import type { StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
@@ -96,19 +97,38 @@ function matchClientKey(rowKey: string, key: string): boolean {
   return rowKey === key || rowKey === encodeURIComponent(key);
 }
 
+/**
+ * Нижняя граница клиентской истории. Предфильтр ключей «p» и «n» грубый
+ * (телефон есть / учётки нет), и без окна он тянул бы все безучётковые строки
+ * сервиса за всё время — тяжелее заменённого recentBookings(1000). Два года
+ * покрывают живых клиентов: «N записей» и история карточки считаются в этом
+ * окне, и клиент, не приезжавший дольше, честно выглядит новым — об этом
+ * говорит и подпись возраста карточки. Для учётки окно то же, чтобы цифра не
+ * зависела от способа склейки.
+ */
+const CLIENT_HISTORY_YEARS = 2;
+
+function clientHistoryFrom(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - CLIENT_HISTORY_YEARS);
+  return d.toISOString();
+}
+
 /** Сколько записей у клиента — цифра «N записей» в карточке записи. */
 export async function countClientVisits(shopId: number, key: string): Promise<number> {
   // Учётка — точный фильтр, строки не нужны вовсе.
   if (key.startsWith("u")) {
     const { count, error } = await createSupabaseAdmin().from("sto_bookings")
-      .select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("client_id", key.slice(1));
+      .select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("client_id", key.slice(1))
+      .gte("starts_at", clientHistoryFrom());
     if (error) {
       console.error("[сто] записи клиента не посчитались:", error.message);
       return 0;
     }
     return count ?? 0;
   }
-  const base = createSupabaseAdmin().from("sto_bookings").select("id, client_id, data->client").eq("shop_id", shopId);
+  const base = createSupabaseAdmin().from("sto_bookings").select("id, client_id, data->client")
+    .eq("shop_id", shopId).gte("starts_at", clientHistoryFrom());
   const q = key.startsWith("p") ? base.not("data->client->>phone", "is", null) : base.is("client_id", null);
   const { data, error } = await q.returns<{ id: number; client_id: string | null; client: StoBookingClientSnapshot | null }[]>();
   if (error) {
@@ -121,6 +141,7 @@ export async function countClientVisits(shopId: number, key: string): Promise<nu
 /** Записи одного клиента для его карточки, свежие сверху. */
 export async function bookingsOfClient(shopId: number, key: string, limit = 200): Promise<StoBookingRow[]> {
   const base = createSupabaseAdmin().from("sto_bookings").select(COLUMNS).eq("shop_id", shopId)
+    .gte("starts_at", clientHistoryFrom())
     .order("starts_at", { ascending: false });
   // По учётке фильтр точный — хватает и лимита в самом запросе; по телефону и
   // имени лимит ставить нельзя: предфильтр грубый, и он отрезал бы нужное.
@@ -153,37 +174,27 @@ export async function feedBookings(shopId: number, limit = 200): Promise<StoBook
   return data ?? [];
 }
 
-/** Значение фильтра внутри or(): запятые и кавычки ломают разбор строки. */
-const quoted = (v: string) => `"${v.replace(/"+/g, "")}"`;
+/** Колонки, которые читает vehiclePast, — целиком COLUMNS ради досье одной машины не тянем. */
+const PAST_COLUMNS = "id, client_id, service, starts_at, status, data";
 
 /**
- * Прошлые записи той же машины до b — кандидаты для досье на приёмке
- * (lib/car-brief.ts). Сильные признаки (id гаража, VIN, госномер) уходят в
- * SQL как лежат в снимке: точное сравнение с нормализацией всё равно делает
- * vehiclePast по вернувшимся строкам, а запрос без фильтра тянул бы всю
- * историю сервиса. Машины без номера SQL отличает только по марке — склейка
- * по марке, модели и году внутри одного клиента остаётся за vehiclePast.
- * Лимит — запас от «не больше трёх осмотров» car-brief: одна машина столько
- * раз в одном сервисе не бывает, а «обслуживали N раз» считается по всем
- * вернувшимся.
+ * Прошлые записи сервиса до b — кандидаты для досье машины на приёмке
+ * (lib/car-brief.ts). Склейку «та же машина» делает vehiclePast в JS, и её
+ * нормализацию (кириллица → латиница, без пробелов, верхний регистр) в SQL
+ * НЕ повторить: снимок хранит написание человека, и сравнение сырого текста
+ * молча теряло записи той же машины, набранные в другой раскладке. Поэтому
+ * здесь — широкая, но лёгкая выборка-надмножество: только колонки
+ * vehiclePast, свежие сверху, с верхней границей. Окно 200 — старое было
+ * 1000 записей сервиса: в двухстах последних записях машина с историей
+ * встретится почти всегда, а «обслуживали N раз» для неё может занизиться —
+ * принятый компромисс ради приёмки без ожидания.
  */
-export async function vehicleVisits(shopId: number, b: StoBookingRow, limit = 50): Promise<StoBookingRow[]> {
-  const filters: string[] = [];
-  if (b.vehicle_id != null) filters.push(`vehicle_id.eq.${b.vehicle_id}`);
-  const vin = b.data.vehicle?.vin?.trim();
-  if (vin) filters.push(`data->vehicle->>vin.eq.${quoted(vin)}`);
-  const plate = b.data.vehicle?.plate?.trim();
-  if (plate) filters.push(`data->vehicle->>plate.eq.${quoted(plate)}`);
-  // Номера нет — vehiclePast добирает визиты того же клиента по марке, модели
-  // и году; в SQL из этого выразима только марка, остальное отсеет он сам.
-  if (!plate) {
-    const brand = b.data.vehicle?.brand?.trim();
-    if (brand) filters.push(`data->vehicle->>brand.eq.${quoted(brand)}`);
-  }
-  if (filters.length === 0) return [];
-  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
-    .eq("shop_id", shopId).lt("starts_at", b.starts_at).or(filters.join(","))
-    .order("starts_at", { ascending: false }).limit(limit).returns<StoBookingRow[]>();
+export async function vehicleVisits(shopId: number, b: StoBookingRow, limit = 200): Promise<VehiclePastRow[]> {
+  // Машины в записи нет — и досье не из чего собирать, в базу не ходим.
+  if (!vehicleKey(b.data.vehicle)) return [];
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(PAST_COLUMNS)
+    .eq("shop_id", shopId).lt("starts_at", b.starts_at)
+    .order("starts_at", { ascending: false }).limit(limit).returns<VehiclePastRow[]>();
   if (error) {
     console.error("[сто] прошлые записи машины не прочитались:", error.message);
     return [];

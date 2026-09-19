@@ -44,12 +44,22 @@ function phoneOf(b: StoBookingRow): string | null {
   return normalizePhone(b.data.client?.phone) ?? null;
 }
 
+/**
+ * Ключ клиента по частям снимка — там, где целой строки записи нет: лёгкие
+ * запросы lib/bookings.ts читают только client_id и data.client и обязаны
+ * склеивать клиентов ровно так же. Учётка выше уже вернула u-ключ, поэтому
+ * запасное имя здесь одно — «Клиент».
+ */
+export function clientKeyOf(clientId: string | null, client: { name?: string | null; phone?: string | null } | null | undefined): string {
+  if (clientId) return `u${clientId}`;
+  const phone = normalizePhone(client?.phone) ?? null;
+  if (phone) return `p${phone.replace(/\D+/g, "")}`;
+  return `n${encodeURIComponent((client?.name?.trim() || "Клиент").toLowerCase())}`;
+}
+
 /** Ключ клиента: учётка → телефон → имя. Безопасен для адреса. */
 export function clientKey(b: StoBookingRow): string {
-  if (b.client_id) return `u${b.client_id}`;
-  const phone = phoneOf(b);
-  if (phone) return `p${phone.replace(/\D+/g, "")}`;
-  return `n${encodeURIComponent(nameOf(b).toLowerCase())}`;
+  return clientKeyOf(b.client_id, b.data.client);
 }
 
 /** Свод клиентов по записям, свежие визиты сверху. */

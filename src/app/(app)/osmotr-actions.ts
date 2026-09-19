@@ -284,8 +284,13 @@ export async function createPhotoUploadAction(contentType: string): Promise<Clie
  * Пришить загруженный кадр к дефекту. Список фото у сайта — целиком, поэтому
  * сначала читаем, что уже есть, и дописываем: два кадра подряд с телефона
  * не должны затирать друг друга.
+ *
+ * last — «это последний кадр пачки»: кадры с камеры уходят по несколько
+ * подряд, и обновлять экран на каждый — лишние перерисовки и запросы, пока
+ * мастер стоит в яме. Полный revalidate делаем один раз, на последнем;
+ * промежуточные кадры у сайта уже пришиты, экран догонит на последнем.
  */
-export async function attachPhotoAction(input: { bookingId: number; defectId: number; photoId: string }): Promise<ClientResult> {
+export async function attachPhotoAction(input: { bookingId: number; defectId: number; photoId: string; last?: boolean }): Promise<ClientResult> {
   const c = await serviceContext();
   if (!c || !can(c.role, "inspect")) return { ok: false, error: "Нет доступа" };
   if (c.viewing) return { ok: false, error: VIEW_ONLY_MESSAGE };
@@ -298,6 +303,6 @@ export async function attachPhotoAction(input: { bookingId: number; defectId: nu
   const photoIds = [...defect.photos.map(p => p.id), photoId];
   const res = await updateDefect({ shopId: c.shop.id, actorUserId: c.userId, defectId: defect.id, photoIds });
   if (!res.ok) return { ok: false, error: res.error };
-  revalidateInspection(input.bookingId);
+  if (input.last) revalidateInspection(input.bookingId);
   return { ok: true, data: undefined };
 }

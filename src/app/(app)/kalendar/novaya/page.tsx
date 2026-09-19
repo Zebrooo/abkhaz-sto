@@ -43,10 +43,9 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
   const ctx = (await requireSection("bookings"))!;
   const shop = ctx.shop;
-  const pending = await countPending(shop.id);
   const today = todayLocal();
   const day = isDay(pick(sp.d)) ? pick(sp.d) : today;
-  const services = await listServices(shop.id);
+  const [pending, services] = await Promise.all([countPending(shop.id), listServices(shop.id)]);
   const err = pick(sp.err);
   const schedule = shop.schedule;
 
@@ -100,7 +99,20 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const timeRaw = pick(sp.t) || pick(sp.hhmm);
   const time = /^\d{2}:\d{2}$/.test(timeRaw) ? timeRaw : "";
 
-  const busy = await busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"));
+  // Кто у нас уже был — для поиска в строке имени. Свод по последним записям,
+  // как на экране «Клиенты»: своей базы клиентов у приложения нет. Берём
+  // хвост истории, а не всё подряд: строка ищет тех, кто ездит, а не тех,
+  // кто был один раз три года назад, и в браузер уезжает список, а не архив.
+  // БАЗА КЛИЕНТОВ УЕЗЖАЕТ В БРАУЗЕР, поэтому её отдаём только тому, кому
+  // раздел «Клиенты» открыт. Мастеру он закрыт — и подсказки в строке имени
+  // ему не положены: иначе на его телефоне оказался бы список всех клиентов
+  // сервиса с телефонами, номерами и VIN. Записывать он по-прежнему может,
+  // просто без поиска по прежним.
+  const mayPick = can(ctx.role, "clients");
+  const [busy, history] = await Promise.all([
+    busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00")),
+    mayPick ? recentBookings(shop.id, 400) : Promise.resolve([]),
+  ]);
   const now = new Date();
   const startsAt = time ? localTime(day, time) : null;
   // Услуга по умолчанию — та, что влезает в окно, пришедшее с сетки
@@ -112,17 +124,6 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // возвращает полный список: иначе длинную услугу нельзя было бы и выбрать,
   // чтобы поискать под неё окно подлиннее.
   const showAll = pick(sp.all) === "1";
-  // Кто у нас уже был — для поиска в строке имени. Свод по последним записям,
-  // как на экране «Клиенты»: своей базы клиентов у приложения нет. Берём
-  // хвост истории, а не всё подряд: строка ищет тех, кто ездит, а не тех,
-  // кто был один раз три года назад, и в браузер уезжает список, а не архив.
-  // БАЗА КЛИЕНТОВ УЕЗЖАЕТ В БРАУЗЕР, поэтому её отдаём только тому, кому
-  // раздел «Клиенты» открыт. Мастеру он закрыт — и подсказки в строке имени
-  // ему не положены: иначе на его телефоне оказался бы список всех клиентов
-  // сервиса с телефонами, номерами и VIN. Записывать он по-прежнему может,
-  // просто без поиска по прежним.
-  const mayPick = can(ctx.role, "clients");
-  const history = mayPick ? await recentBookings(shop.id, 400) : [];
   const cars = carsByClient(history);
   const known = summarizeClients(history).slice(0, 200).map(c => ({
     key: c.key, name: c.name, phone: c.phone, car: c.car,

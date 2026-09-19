@@ -70,7 +70,7 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
   const grid = month ? monthGrid(month) : [];
   const gridFrom = grid[0]?.day ?? day;
   const gridTo = grid[grid.length - 1]?.day ?? day;
-  const [rows, monthRows] = await Promise.all([
+  const [rows, monthRows, pending] = await Promise.all([
     dayBookings(shop.id, day),
     month
       // Границы — по СЕТКЕ, а не по месяцу: в ней видны и последние дни
@@ -78,13 +78,13 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
       // ткнуть. Без точек они читались бы как свободные.
       ? listBookings(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
       : Promise.resolve([]),
+    countPending(shop.id),
   ]);
   const monthCounts: Record<string, number> = {};
   for (const b of monthRows.filter(isLive)) {
     const d = localDay(new Date(b.starts_at));
     monthCounts[d] = (monthCounts[d] ?? 0) + 1;
   }
-  const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const live = rows.filter(isLive);
   const counts: Record<Filter, number> = {

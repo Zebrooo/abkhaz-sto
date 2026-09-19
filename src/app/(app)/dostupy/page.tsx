@@ -33,8 +33,7 @@ export default async function AccessPage({ searchParams }: { searchParams: SP })
   const sp = await searchParams;
   const ctx = (await requireSection("access"))!;
   const { shop } = ctx;
-  const pending = await countPending(shop.id);
-  const res = await fetchMembers(shop.id, ctx.userId);
+  const [pending, res] = await Promise.all([countPending(shop.id), fetchMembers(shop.id, ctx.userId)]);
   // not_found — сотрудников ещё не заводили, пусто честно. Любой другой отказ
   // — сайт молчит, и пустой список выглядел бы как «всех уволили».
   const siteErr = !res.ok && res.code !== "not_found" ? `Сайт пока не отдаёт сотрудников: ${res.error}` : "";

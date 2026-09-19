@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { requireSection } from "@/lib/context";
-import { busyIntervals, countPending, getBooking, listBookings } from "@/lib/bookings";
+import { countPending, getBooking, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { CalendarDrag, type DragDay } from "@/components/CalendarDrag";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
@@ -76,7 +76,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   const grid = month ? monthGrid(month) : [];
   const gridFrom = grid[0]?.day ?? day;
   const gridTo = grid[grid.length - 1]?.day ?? day;
-  const [weekRows, monthRows] = await Promise.all([
+  const moveId = Number(pick(sp.move));
+  const [weekRows, monthRows, pending, moving] = await Promise.all([
     listBookings(shop.id, localTime(ws, "00:00"), localTime(addDays(ws, 7), "00:00")),
     month
       // Границы — по СЕТКЕ, а не по месяцу: в ней видны и последние дни
@@ -84,13 +85,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
       // ткнуть. Без точек они читались бы как свободные.
       ? listBookings(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
       : Promise.resolve([]),
+    countPending(shop.id),
+    Number.isInteger(moveId) && moveId > 0 ? getBooking(shop.id, moveId) : Promise.resolve(null),
   ]);
   const monthCounts: Record<string, number> = {};
   for (const b of monthRows.filter(isLive)) {
     const d = localDay(new Date(b.starts_at));
     monthCounts[d] = (monthCounts[d] ?? 0) + 1;
   }
-  const pending = await countPending(shop.id);
   const posts = shop.schedule?.posts ?? Math.max(1, ...weekRows.map(r => r.post_no));
 
   const week = Array.from({ length: 7 }, (_, i) => addDays(ws, i)).map(d => {
@@ -113,12 +115,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   };
   const visible = filter === "all" ? live : live.filter(b => b.status === filter);
 
-  const moveId = Number(pick(sp.move));
-  const moving = Number.isInteger(moveId) && moveId > 0 ? await getBooking(shop.id, moveId) : null;
   let moveSlots: { hhmm: string; postNo: number }[] = [];
   if (moving && shop.schedule && canReschedule(moving.status)) {
     const durationMin = Math.max(1, Math.round((new Date(moving.ends_at).getTime() - new Date(moving.starts_at).getTime()) / 60_000));
-    const busy = await busyIntervals(shop.id, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00"), moving.id);
+    // Занятость дня — из уже загруженной недели, а не повторным запросом:
+    // день целиком лежит внутри weekRows, а правило отбора то же, что у
+    // busyIntervals (живые записи, кроме переносимой).
+    const dayFrom = localTime(day, "00:00");
+    const dayTo = localTime(addDays(day, 1), "00:00");
+    const busy = weekRows
+      .filter(r => new Date(r.starts_at) < dayTo && new Date(r.ends_at) > dayFrom)
+      .filter(r => canReschedule(r.status) && r.id !== moving.id)
+      .map(r => ({ postNo: r.post_no, startsAt: new Date(r.starts_at), endsAt: new Date(r.ends_at) }));
     moveSlots = freeSlots({ schedule: shop.schedule, day, durationMin, busy, now: new Date() })
       .map(s => ({ hhmm: localHHMM(s.startsAt), postNo: s.postNo }));
   }

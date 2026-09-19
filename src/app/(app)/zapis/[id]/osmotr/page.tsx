@@ -77,11 +77,13 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const bookingHref = `/zapis/${b.id}?d=${day}`;
   const reportHref = `/zapis/${b.id}/otchet?d=${day}`;
   const self = (q = "") => `/zapis/${b.id}/osmotr?d=${day}${q}`;
-  const pending = await countPending(shop.id);
   const actor = { shopId: shop.id, actorUserId: ctx.userId };
-
-  const insp = await fetchInspection({ ...actor, bookingId: b.id });
-  // not_found — осмотра ещё нет, это нормально; остальное — ошибка на экран.
+  // Колокол и осмотр независимы — одной пачкой; not_found — осмотра ещё нет,
+  // это нормально, остальное — ошибка на экран.
+  const [pending, insp] = await Promise.all([
+    countPending(shop.id),
+    fetchInspection({ ...actor, bookingId: b.id }),
+  ]);
   const inspection = insp.ok ? insp.data : null;
   const loadErr = !insp.ok && insp.code !== "not_found" ? insp.error : "";
 

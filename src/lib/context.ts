@@ -51,8 +51,9 @@ export function roleIn(shop: ServiceShop): { role: StoRole; masterId: number | n
  * значит развести их между собой в одном рендере.
  */
 export const serviceContext = cache(async (): Promise<ServiceContext | null> => {
-  const shop = await currentServiceShop();
-  const user = await getServerUser();
+  // Витрина и учётка независимы: getServerUser кэширован на запрос, поэтому
+  // второй вызов внутри myServiceShops не ходит в GoTrue повторно.
+  const [shop, user] = await Promise.all([currentServiceShop(), getServerUser()]);
   if (!shop || !user) return null;
   const { role: realRole, masterId } = roleIn(shop);
   const view = await readRoleView({ shopId: shop.id, userId: user.id });

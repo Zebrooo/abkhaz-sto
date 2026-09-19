@@ -36,8 +36,12 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   const ctx = (await requireSection("masters"))!;
   const { shop, role } = ctx;
   const day = todayLocal();
-  const pending = await countPending(shop.id);
-  const { masters, mastersErr } = await masterDay(ctx, day);
+  // Колокол, день мастера и записи дня независимы — одной пачкой.
+  const [pending, { masters, mastersErr }, dayRows] = await Promise.all([
+    countPending(shop.id),
+    masterDay(ctx, day),
+    dayBookings(shop.id, day),
+  ]);
   const active = masters.filter(m => m.active);
   // Уволенные прячутся, но не исчезают: вернуть человека в штат иначе нечем,
   // а увольнение по ошибке — обычное дело.
@@ -67,7 +71,6 @@ export default async function MastersPage({ searchParams }: { searchParams: SP }
   // пост самого мастера: если в расписании их два, а человек закреплён за
   // третьим, чипов на его пост не было бы — и «Сохранить» молча снял бы его
   // с подъёмника.
-  const dayRows = await dayBookings(shop.id, day);
   const posts = postCount(shop.schedule?.posts ?? undefined, dayRows);
   const postRaw = Number(pick(sp.post));
   const newPost = Number.isInteger(postRaw) && postRaw >= 1 && postRaw <= posts ? postRaw : 0;

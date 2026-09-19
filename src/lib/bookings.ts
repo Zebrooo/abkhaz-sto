@@ -6,7 +6,8 @@ import { cache } from "react";
 // нажавшие разное одновременно, не затрут друг друга молча.
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { notifySite } from "@/lib/site-events";
-import type { StoBookingRow, StoBookingService, StoBookingData } from "@/lib/sto/types";
+import { clientKey, clientKeyOf } from "@/lib/clients";
+import type { StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
 import { addDays } from "@/lib/format";
@@ -37,7 +38,7 @@ export const dayBookings = cache((shopId: number, day: string): Promise<StoBooki
   listBookings(shopId, localTime(day, "00:00"), localTime(addDays(day, 1), "00:00")));
 
 /** Сколько записей ждёт подтверждения — цифра на колоколе и в меню. */
-export async function countPending(shopId: number): Promise<number> {
+export const countPending = cache(async (shopId: number): Promise<number> => {
   const { count, error } = await createSupabaseAdmin().from("sto_bookings")
     .select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("status", "new");
   if (error) {
@@ -45,7 +46,7 @@ export async function countPending(shopId: number): Promise<number> {
     return 0;
   }
   return count ?? 0;
-}
+});
 
 /**
  * Все записи сервиса, новые сверху — для клиентов, машин и ленты
@@ -68,6 +69,126 @@ export async function getBooking(shopId: number, id: number): Promise<StoBooking
   const { data } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
     .eq("shop_id", shopId).eq("id", id).maybeSingle<StoBookingRow>();
   return data ?? null;
+}
+
+/** Записи по списку id одним запросом — вместо N getBooking подряд (отчёт: «записан на работу»). */
+export async function bookingsByIds(shopId: number, ids: number[]): Promise<StoBookingRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
+    .eq("shop_id", shopId).in("id", ids).returns<StoBookingRow[]>();
+  if (error) {
+    console.error("[сто] записи по списку не прочитались:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Ключ клиента (clientKey, lib/clients.ts) в SQL повторяется только для
+ * учётки: телефон нормализуется в JS (8 → +7, 10 цифр → +7), а имя кодируется —
+ * postgrest этого не выразит. Поэтому для ключей «p» и «n» запрос режется
+ * грубым предфильтром (телефон вообще есть / учётки нет), а точный отбор
+ * делает тот же clientKey в JS — множество строк то же, что у recentBookings.
+ * Ключ из адреса может прийти раскодированным — сравниваем оба вида, как
+ * карточка клиента.
+ */
+function matchClientKey(rowKey: string, key: string): boolean {
+  return rowKey === key || rowKey === encodeURIComponent(key);
+}
+
+/** Сколько записей у клиента — цифра «N записей» в карточке записи. */
+export async function countClientVisits(shopId: number, key: string): Promise<number> {
+  // Учётка — точный фильтр, строки не нужны вовсе.
+  if (key.startsWith("u")) {
+    const { count, error } = await createSupabaseAdmin().from("sto_bookings")
+      .select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("client_id", key.slice(1));
+    if (error) {
+      console.error("[сто] записи клиента не посчитались:", error.message);
+      return 0;
+    }
+    return count ?? 0;
+  }
+  const base = createSupabaseAdmin().from("sto_bookings").select("id, client_id, data->client").eq("shop_id", shopId);
+  const q = key.startsWith("p") ? base.not("data->client->>phone", "is", null) : base.is("client_id", null);
+  const { data, error } = await q.returns<{ id: number; client_id: string | null; client: StoBookingClientSnapshot | null }[]>();
+  if (error) {
+    console.error("[сто] записи клиента не посчитались:", error.message);
+    return 0;
+  }
+  return (data ?? []).filter(r => matchClientKey(clientKeyOf(r.client_id, r.client), key)).length;
+}
+
+/** Записи одного клиента для его карточки, свежие сверху. */
+export async function bookingsOfClient(shopId: number, key: string, limit = 200): Promise<StoBookingRow[]> {
+  const base = createSupabaseAdmin().from("sto_bookings").select(COLUMNS).eq("shop_id", shopId)
+    .order("starts_at", { ascending: false });
+  // По учётке фильтр точный — хватает и лимита в самом запросе; по телефону и
+  // имени лимит ставить нельзя: предфильтр грубый, и он отрезал бы нужное.
+  const q = key.startsWith("u") ? base.eq("client_id", key.slice(1)).limit(limit)
+    : key.startsWith("p") ? base.not("data->client->>phone", "is", null)
+      : base.is("client_id", null);
+  const { data, error } = await q.returns<StoBookingRow[]>();
+  if (error) {
+    console.error("[сто] записи клиента не прочитались:", error.message);
+    return [];
+  }
+  return (data ?? []).filter(b => matchClientKey(clientKey(b), key)).slice(0, limit);
+}
+
+/**
+ * Лента уведомлений: только те записи, из которых buildFeed строит события
+ * (lib/notifications.ts) — новые, отменённые клиентом и с зачисленной
+ * предоплатой. Порядок по updated_at приблизительный: свежесть события для
+ * новых записей — created_at, поэтому финальную сортировку делает buildFeed.
+ */
+export async function feedBookings(shopId: number, limit = 200): Promise<StoBookingRow[]> {
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
+    .eq("shop_id", shopId)
+    .or("status.eq.new,and(status.eq.cancelled,cancelled_by.eq.client),and(prepay_status.eq.released_to_shop,prepay_amount.gt.0)")
+    .order("updated_at", { ascending: false }).limit(limit).returns<StoBookingRow[]>();
+  if (error) {
+    console.error("[сто] лента уведомлений не прочиталась:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+/** Значение фильтра внутри or(): запятые и кавычки ломают разбор строки. */
+const quoted = (v: string) => `"${v.replace(/"+/g, "")}"`;
+
+/**
+ * Прошлые записи той же машины до b — кандидаты для досье на приёмке
+ * (lib/car-brief.ts). Сильные признаки (id гаража, VIN, госномер) уходят в
+ * SQL как лежат в снимке: точное сравнение с нормализацией всё равно делает
+ * vehiclePast по вернувшимся строкам, а запрос без фильтра тянул бы всю
+ * историю сервиса. Машины без номера SQL отличает только по марке — склейка
+ * по марке, модели и году внутри одного клиента остаётся за vehiclePast.
+ * Лимит — запас от «не больше трёх осмотров» car-brief: одна машина столько
+ * раз в одном сервисе не бывает, а «обслуживали N раз» считается по всем
+ * вернувшимся.
+ */
+export async function vehicleVisits(shopId: number, b: StoBookingRow, limit = 50): Promise<StoBookingRow[]> {
+  const filters: string[] = [];
+  if (b.vehicle_id != null) filters.push(`vehicle_id.eq.${b.vehicle_id}`);
+  const vin = b.data.vehicle?.vin?.trim();
+  if (vin) filters.push(`data->vehicle->>vin.eq.${quoted(vin)}`);
+  const plate = b.data.vehicle?.plate?.trim();
+  if (plate) filters.push(`data->vehicle->>plate.eq.${quoted(plate)}`);
+  // Номера нет — vehiclePast добирает визиты того же клиента по марке, модели
+  // и году; в SQL из этого выразима только марка, остальное отсеет он сам.
+  if (!plate) {
+    const brand = b.data.vehicle?.brand?.trim();
+    if (brand) filters.push(`data->vehicle->>brand.eq.${quoted(brand)}`);
+  }
+  if (filters.length === 0) return [];
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select(COLUMNS)
+    .eq("shop_id", shopId).lt("starts_at", b.starts_at).or(filters.join(","))
+    .order("starts_at", { ascending: false }).limit(limit).returns<StoBookingRow[]>();
+  if (error) {
+    console.error("[сто] прошлые записи машины не прочитались:", error.message);
+    return [];
+  }
+  return data ?? [];
 }
 
 /** Занятые интервалы — живые записи сервиса за период (для окон и переноса). */
@@ -181,6 +302,11 @@ export async function createManualBooking(input: {
   if (error || !row) {
     return { ok: false, error: error?.code === "23P01" ? "Окно только что заняли — выберите другое" : "Не удалось сохранить: " + (error?.message ?? "") };
   }
-  await notifySite({ bookingId: row.id, shopId, event: "created", actorUserId });
+  // Ответ не ждёт сайт: запись уже в базе, а событие сайт обработает, когда
+  // дойдёт, — ровно как при молчащем сайте (site-events.ts). В переходах
+  // ждём, потому что экран говорит «клиент уведомлён» только по правде; здесь
+  // такого обещания нет.
+  void notifySite({ bookingId: row.id, shopId, event: "created", actorUserId })
+    .catch(e => console.warn("[сто] событие создания записи не ушло на сайт:", e));
   return { ok: true, id: row.id };
 }

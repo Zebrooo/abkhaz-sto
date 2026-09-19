@@ -8,12 +8,12 @@ vi.mock("@supabase/ssr", () => ({
 import { proxy } from "./proxy";
 import type { NextRequest } from "next/server";
 
-/** Минимальный запрос: proxy читает только nextUrl и cookies. */
-const req = (path: string): NextRequest => {
+/** Минимальный запрос: proxy читает только method, nextUrl и cookies. */
+const req = (path: string, method = "GET"): NextRequest => {
   const href = "https://business.abkhaz-auto.ru" + path;
   const url = new URL(href) as URL & { clone: () => URL };
   url.clone = () => new URL(href);
-  return { nextUrl: url, cookies: { getAll: () => [], set: () => {} } } as unknown as NextRequest;
+  return { method, nextUrl: url, cookies: { getAll: () => [], set: () => {} } } as unknown as NextRequest;
 };
 
 beforeEach(() => {
@@ -74,5 +74,21 @@ describe("proxy: что видит гость", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
     expect(res.headers.get("location")).toBeNull();
+  });
+
+  // Server actions форм идут POSTом на тот же адрес, и getUser() на каждое
+  // действие — лишний HTTP к GoTrue: сессию внутри проверяет само действие,
+  // а кука обновляется на навигациях. Поэтому не-GET проходят мимо проверки.
+  it("POST server action проходит без запроса сессии к GoTrue", async () => {
+    const res = await proxy(req("/segodnya", "POST"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(mocks.getUser).not.toHaveBeenCalled();
+  });
+
+  it("POST гостя НЕ уводит на страницу входа — отказ даст само действие", async () => {
+    const res = await proxy(req("/kalendar", "POST"));
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(mocks.getUser).not.toHaveBeenCalled();
   });
 });

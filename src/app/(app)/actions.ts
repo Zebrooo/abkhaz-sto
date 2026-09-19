@@ -72,13 +72,28 @@ async function ctx(fd: FormData, section: Section) {
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
-/** Экраны, которые показывают записи: после любого перехода обновляем все. */
+/**
+ * Экраны, которые показывают записи и их статусы: после любого перехода
+ * обновляем их. /klienty здесь нет: переход записи не меняет ни список
+ * клиентов, ни карточку клиента (её путь всё равно другой — /klienty/[key]).
+ */
 function revalidateBookings() {
   revalidatePath("/");
   revalidatePath("/segodnya");
   revalidatePath("/kalendar");
-  revalidatePath("/klienty");
   revalidatePath("/uvedomleniya");
+}
+
+/**
+ * Экраны, которые читают расписание сервиса (schedule): часы приёма, посты,
+ * выходные. Раньше здесь был revalidatePath("/", "layout") — он ронял кэш
+ * всего приложения после каждой правки расписания.
+ */
+function revalidateSchedule() {
+  revalidatePath("/raspisanie");
+  revalidatePath("/segodnya");
+  revalidatePath("/kalendar");
+  revalidatePath("/kalendar/novaya");
 }
 
 export async function transitionAction(fd: FormData) {
@@ -154,15 +169,6 @@ export async function createManualAction(fd: FormData) {
   };
   const ret = "/kalendar/novaya";
   if (!shop.schedule) back(ret, { ...keep, err: "Сначала задайте расписание" });
-  const services = await listServices(shop.id);
-  const svc = services.find(s => s.listingId === listingId);
-  if (!svc) back(ret, { ...keep, err: "Выберите услугу" });
-  // Право на запись из отчёта проверяем ДО создания: иначе мастер получал бы
-  // отказ уже после того, как окно в календаре занято, и сирота оставалась бы
-  // висеть. Экран кнопку прячет — здесь граница.
-  if (fromReport && !can(role, "closeBooking")) {
-    back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
-  }
   const name = str(fd, "name");
   const phoneRaw = str(fd, "phone");
   const vehicle = str(fd, "vehicle");
@@ -175,6 +181,8 @@ export async function createManualAction(fd: FormData) {
     n: name || undefined, ph: phoneRaw || undefined, v: vehicle || undefined,
     pl: plateRaw || undefined, vin: vinRaw || undefined,
   };
+  // Валидация формы — ДО запроса прайса: опечатка в телефоне не должна
+  // стоить лишнего обращения к базе.
   const step2 = { ...keep, ...typed, step: "2" };
   if (!name) back(ret, { ...step2, err: "Имя клиента обязательно" });
   const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
@@ -184,6 +192,15 @@ export async function createManualAction(fd: FormData) {
   const vinBad = vinProblem(vinRaw);
   if (vinBad) back(ret, { ...step2, err: vinBad });
   if (!/^\d{2}:\d{2}$/.test(hhmm)) back(ret, { ...keep, ...typed, step: "1", err: "Выберите время" });
+  const services = await listServices(shop.id);
+  const svc = services.find(s => s.listingId === listingId);
+  if (!svc) back(ret, { ...keep, err: "Выберите услугу" });
+  // Право на запись из отчёта проверяем ДО создания: иначе мастер получал бы
+  // отказ уже после того, как окно в календаре занято, и сирота оставалась бы
+  // висеть. Экран кнопку прячет — здесь граница.
+  if (fromReport && !can(role, "closeBooking")) {
+    back(`/zapis/${fromBooking}/otchet`, { d: day, err: "Записать на работу из отчёта может админ или хозяин" });
+  }
   const res = await createManualBooking({
     shopId: shop.id, schedule: shop.schedule, day, hhmm, service: toBookingService(svc), listingId: svc.listingId,
     postNo, client: { name: name.slice(0, 80), phone }, vehicle, plate: plateRaw, vin: vinRaw,
@@ -235,7 +252,7 @@ export async function saveIntervalAction(fd: FormData) {
   if (!v.ok) back("/raspisanie", { err: v.error });
   const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });
-  revalidatePath("/", "layout");
+  revalidateSchedule();
   back("/raspisanie", { ok: remove ? "Интервал убран" : "Часы приёма сохранены" });
 }
 
@@ -256,7 +273,7 @@ export async function saveScheduleAction(fd: FormData) {
   if (!p.ok) back("/raspisanie", { err: p.error });
   const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule, sto_prepay: p.prepay }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });
-  revalidatePath("/", "layout");
+  revalidateSchedule();
   back("/raspisanie", { ok: "Расписание сохранено" });
 }
 
@@ -273,7 +290,7 @@ export async function toggleDayOffAction(fd: FormData) {
   if (!v.ok) back("/raspisanie", { err: v.error });
   const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });
-  revalidatePath("/", "layout");
+  revalidateSchedule();
   back("/raspisanie", { ok: current.includes(date) ? "Дата убрана" : "Выходной добавлен" });
 }
 

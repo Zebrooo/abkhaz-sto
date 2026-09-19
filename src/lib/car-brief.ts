@@ -19,7 +19,7 @@ import "server-only";
 import { cache } from "react";
 import { fetchInspection, type Severity } from "@/lib/api/inspections";
 import { fetchGarage, type StoGarageCar } from "@/lib/api/garage";
-import { recentBookings } from "@/lib/bookings";
+import { vehicleVisits } from "@/lib/bookings";
 import type { ServiceContext } from "@/lib/context";
 import { localDay } from "@/lib/sto/slots";
 import type { StoBookingRow } from "@/lib/sto/types";
@@ -51,7 +51,9 @@ const EMPTY: CarBrief = {
 };
 
 export const carBrief = cache(async (ctx: ServiceContext, b: StoBookingRow): Promise<CarBrief> => {
-  const rows = await recentBookings(ctx.shop.id);
+  // Точечный запрос по признакам машины вместо всей истории сервиса: экран
+  // открывают у подъёмника, и тысяча строк ради одной машины — лишнее.
+  const rows = await vehicleVisits(ctx.shop.id, b);
   const past = vehiclePast(rows, b, 5);
   if (!past.key) return EMPTY;
 

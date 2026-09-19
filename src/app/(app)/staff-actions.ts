@@ -47,12 +47,14 @@ async function ctx(section: Section, ret: string): Promise<ServiceContext> {
   return c;
 }
 
-/** Экраны, где видно мастера записи: после смены привязки обновляем все. */
+/**
+ * Экраны, где видно мастеров и их смены: список мастеров, «Мои работы» и
+ * строка «на смене» в меню. Главная и «Сегодня» мастеров не показывают —
+ * их инвалидировать незачем.
+ */
 function revalidateMasters() {
   revalidatePath("/mastera");
   revalidatePath("/moi-raboty");
-  revalidatePath("/");
-  revalidatePath("/segodnya");
   revalidatePath("/menu");
 }
 

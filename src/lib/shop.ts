@@ -62,13 +62,15 @@ export const myServiceShops = cache(async (): Promise<ServiceShop[]> => {
   const user = await getServerUser();
   if (!user) return [];
   const admin = createSupabaseAdmin();
-  const { data: profile } = await admin.from("profiles").select("phone").eq("id", user.id).maybeSingle();
-  const or = ownerFilter(user.id, typeof profile?.phone === "string" ? profile.phone : null);
-
-  const [ownedRes, memberships] = await Promise.all([
-    admin.from("shops").select(COLUMNS).eq("rubric", "service").eq("status", "approved").or(or).order("id").returns<ShopRow[]>(),
+  // Телефон учётки и список членств независимы — одной пачкой; витрины по
+  // телефону спрашиваем после: ownerFilter ждёт номер.
+  const [profileRes, memberships] = await Promise.all([
+    admin.from("profiles").select("phone").eq("id", user.id).maybeSingle(),
     fetchMyShops(user.id).then(listOr),
   ]);
+  const or = ownerFilter(user.id, typeof profileRes.data?.phone === "string" ? profileRes.data.phone : null);
+
+  const ownedRes = await admin.from("shops").select(COLUMNS).eq("rubric", "service").eq("status", "approved").or(or).order("id").returns<ShopRow[]>();
   if (ownedRes.error) {
     console.error("[сто] не прочитались витрины пользователя:", ownedRes.error.message);
   }

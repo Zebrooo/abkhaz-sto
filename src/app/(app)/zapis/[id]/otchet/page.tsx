@@ -8,7 +8,7 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { SEVERITY_LABEL, fetchInspection, type Severity } from "@/lib/api/inspections";
 import { fetchReport, REPORT_STATUS_LABEL, type Report } from "@/lib/api/reports";
 import { can } from "@/lib/access";
-import { countPending, getBooking } from "@/lib/bookings";
+import { bookingsByIds, countPending, getBooking } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
 import { dayShort, dayTitle, minutesLabel, rub, todayLocal } from "@/lib/format";
 import { bySeverity, countBySeverity, kmLabel } from "@/lib/inspection";
@@ -70,11 +70,13 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   const day = isDay(pick(sp.d)) ? pick(sp.d) : localDay(new Date(b.starts_at));
   const inspectHref = `/zapis/${b.id}/osmotr?d=${day}`;
   const self = `/zapis/${b.id}/otchet?d=${day}`;
-  const pending = await countPending(shop.id);
   const actor = { shopId: shop.id, actorUserId: ctx.userId };
   const sub = `№ Д-${b.id} · ${b.service.title}`;
 
-  const insp = await fetchInspection({ ...actor, bookingId: b.id });
+  const [pending, insp] = await Promise.all([
+    countPending(shop.id),
+    fetchInspection({ ...actor, bookingId: b.id }),
+  ]);
   if (!insp.ok) {
     return (
       <Frame sub={sub} back={inspectHref} unread={pending}>
@@ -118,16 +120,24 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
 
   // «Записан: 18 сентября, 10:00» — время из самой записи, по ней и придут.
   const bookedIds = r.estimate.map(i => i.nextBookingId).filter((v): v is number => v != null);
-  const booked = new Map(
-    (await Promise.all(bookedIds.map(async bid => [bid, await getBooking(shop.id, bid)] as const)))
-      .filter(([, row]) => row != null)
-      .map(([bid, row]) => [bid, `${dayTitle(localDay(new Date(row!.starts_at)))}, ${localHHMM(new Date(row!.starts_at))}`]),
-  );
   // Ссылка «Записать на эту работу» ведёт в ручную запись с услугой прайса:
   // работа дефекта — название строки прайса, по нему её и находим. Связь
   // пункта с записью (book-item) ставит createManualAction по этим параметрам
   // и возвращает сюда — «Записан: …» появится у пункта.
-  const services = await listServices(shop.id);
+  // Прайс нужен, только когда есть что записывать: все пункты уже с записью
+  // (или роль не записывает) — и запроса за услугами нет.
+  const canBook = can(ctx.role, "closeBooking");
+  const needServices = canBook && r.defects.some(d => {
+    const item = items.get(d.id);
+    return (item?.included ?? true) && item?.nextBookingId == null;
+  });
+  const [bookedRows, services] = await Promise.all([
+    bookingsByIds(shop.id, bookedIds),
+    needServices ? listServices(shop.id) : Promise.resolve([]),
+  ]);
+  const booked = new Map(
+    bookedRows.map(row => [row.id, `${dayTitle(localDay(new Date(row.starts_at)))}, ${localHHMM(new Date(row.starts_at))}`]),
+  );
   const bookHref = (defectId: number, work: string) => {
     const q = new URLSearchParams({ d: todayLocal(), fromInspection: String(r.inspectionId), defect: String(defectId), fromBooking: String(b.id) });
     const svc = services.find(s => s.title === work);
@@ -144,9 +154,6 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   };
 
   const sendLabel = can(ctx.role, "sendReport") ? "Отправить клиенту" : "Передать администратору";
-  // Записать клиента на найденную работу может тот, кто вообще ведёт записи
-  // за стойкой: у мастера прав на привязку пункта к записи нет.
-  const canBook = can(ctx.role, "closeBooking");
   // «wait» — сайт сказал «собирается»: это не отказ, и краснеть тут нечему.
   const pdfRaw = pick(sp.pdf);
   const pdfWait = pdfRaw === "wait";

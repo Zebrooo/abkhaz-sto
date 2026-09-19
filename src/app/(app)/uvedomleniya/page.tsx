@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { countPending, recentBookings } from "@/lib/bookings";
+import { countPending, feedBookings } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
 import { buildFeed, groupFeed } from "@/lib/notifications";
 import { Flash } from "@/components/Flash";
@@ -24,8 +24,9 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
   const ctx = (await requireSection("shift"))!;
   const shop = ctx.shop;
-  const rows = await recentBookings(shop.id);
-  const pending = await countPending(shop.id);
+  // Ленте нужны только записи-события (новые, отмены клиентом, предоплаты) —
+  // их и приносит feedBookings, а не вся история сервиса.
+  const [rows, pending] = await Promise.all([feedBookings(shop.id), countPending(shop.id)]);
   const groups = groupFeed(buildFeed(rows, timeRange), todayLocal(), localDay);
 
   return (

@@ -47,6 +47,8 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: ApiErrorCo
  */
 const READ_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 8_000;
+/** Пауза перед единственной повторной попыткой чтения. */
+const RETRY_DELAY_MS = 300;
 
 /** Человеческие подписи кодов — их видно на экране, когда запрос не удался. */
 const MESSAGE: Record<ApiErrorCode, string> = {
@@ -96,31 +98,19 @@ function fail(code: ApiErrorCode, message?: string): { ok: false; code: ApiError
 }
 
 /**
- * Один запрос к /api/sto/*. Ошибку не бросает: любой исход — объединение,
- * которое экран разбирает наравне с данными. Логируем всё, кроме not_found:
- * «ещё не заводили» — обычное состояние нового сервиса, а не происшествие.
+ * Одна попытка запроса. Таймаут — на попытку, а не на запрос целиком:
+ * у повторной попытки свой AbortController. last — «попытка последняя»:
+ * warn о недоступности пишем только после неё, иначе один сбой с retry
+ * давал бы два warn в логе.
  */
-async function request<T>(
-  method: "GET" | "POST" | "PATCH",
+async function attempt<T>(
+  method: string,
+  url: URL,
+  headers: Record<string, string>,
   path: string,
-  init: { query?: Record<string, string | number | undefined>; body?: unknown; timeoutMs?: number },
+  init: { body?: unknown; timeoutMs?: number },
+  last: boolean,
 ): Promise<ApiResult<T>> {
-  const base = baseUrl();
-  const signed = issueTicket();
-  if (!base || !signed) {
-    console.error("[сто] запрос к сайту не отправлен: не задан адрес или ключ подписи", method, path);
-    return fail("not_configured");
-  }
-
-  const url = new URL(`${base}/api/sto/${path.replace(/^\//, "")}`);
-  for (const [k, v] of Object.entries(init.query ?? {})) {
-    if (v !== undefined) url.searchParams.set(k, String(v));
-  }
-
-  const headers: Record<string, string> = { accept: "application/json" };
-  headers[SERVICE_TICKET_HEADER] = signed;
-  if (init.body !== undefined) headers["content-type"] = "application/json";
-
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? READ_TIMEOUT_MS);
   try {
@@ -154,11 +144,52 @@ async function request<T>(
     return { ok: true, data: payload.data };
   } catch (e) {
     // AbortError от таймаута и сетевой сбой для экрана — одно и то же.
-    console.warn("[сто] сайт недоступен:", method, path, e);
+    if (last) console.warn("[сто] сайт недоступен:", method, path, e);
     return fail("unavailable");
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Один запрос к /api/sto/*. Ошибку не бросает: любой исход — объединение,
+ * которое экран разбирает наравне с данными. Логируем всё, кроме not_found:
+ * «ещё не заводили» — обычное состояние нового сервиса, а не происшествие.
+ *
+ * GET идемпотентен, поэтому единичный сетевой сбой повторяем один раз с
+ * короткой паузой — иначе каждый случайный обрыв становился бы ошибкой на
+ * экране. Пишущие методы не повторяем: на той стороне транзакция с побочными
+ * эффектами, и вторая попытка могла бы задвоить её.
+ */
+async function request<T>(
+  method: "GET" | "POST" | "PATCH",
+  path: string,
+  init: { query?: Record<string, string | number | undefined>; body?: unknown; timeoutMs?: number },
+): Promise<ApiResult<T>> {
+  const base = baseUrl();
+  const signed = issueTicket();
+  if (!base || !signed) {
+    console.error("[сто] запрос к сайту не отправлен: не задан адрес или ключ подписи", method, path);
+    return fail("not_configured");
+  }
+
+  const url = new URL(`${base}/api/sto/${path.replace(/^\//, "")}`);
+  for (const [k, v] of Object.entries(init.query ?? {})) {
+    if (v !== undefined) url.searchParams.set(k, String(v));
+  }
+
+  const headers: Record<string, string> = { accept: "application/json" };
+  headers[SERVICE_TICKET_HEADER] = signed;
+  if (init.body !== undefined) headers["content-type"] = "application/json";
+
+  const attempts = method === "GET" ? 2 : 1;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    const res = await attempt<T>(method, url, headers, path, init, i === attempts - 1);
+    // Повторяем только сетевой сбой/таймаут; отказ сайта — это ответ.
+    if (res.ok || res.code !== "unavailable") return res;
+  }
+  return fail("unavailable");
 }
 
 function statusToCode(status: number): ApiErrorCode {

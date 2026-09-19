@@ -69,6 +69,36 @@ function postTaken(busy: readonly BusyInterval[], postNo: number, startsAt: Date
 }
 
 /**
+ * Занятые интервалы по постам — один раз на расчёт дня, а не на каждый слот:
+ * без группировки свободные окна считаются за O(слоты × посты × записи).
+ */
+function busyByPost(busy: readonly BusyInterval[]): Map<number, BusyInterval[]> {
+  const map = new Map<number, BusyInterval[]>();
+  for (const b of busy) {
+    const list = map.get(b.postNo);
+    if (list) list.push(b);
+    else map.set(b.postNo, [b]);
+  }
+  return map;
+}
+
+/** Тот же ответ, что postTaken, но по уже сгруппированным интервалам поста. */
+function postTakenIn(list: readonly BusyInterval[] | undefined, startsAt: Date, endsAt: Date, bufferMin: number): boolean {
+  if (!list) return false;
+  const pad = (Number.isFinite(bufferMin) && bufferMin > 0 ? bufferMin : 0) * 60_000;
+  const held = endsAt.getTime() + pad;
+  return list.some(b => startsAt.getTime() < b.endsAt.getTime() + pad && b.startsAt.getTime() < held);
+}
+
+/** firstFreePost по сгруппированным интервалам — для цикла по слотам дня. */
+function firstFreePostIn(posts: number, byPost: Map<number, BusyInterval[]>, startsAt: Date, endsAt: Date, bufferMin: number): number | null {
+  for (let p = 1; p <= posts; p++) {
+    if (!postTakenIn(byPost.get(p), startsAt, endsAt, bufferMin)) return p;
+  }
+  return null;
+}
+
+/**
  * Окна дня, на которые хватает свободного поста на всю длительность.
  * Пост — первый свободный (сервис может переставить при подтверждении).
  * Окно должно целиком лежать внутри интервала работы: услуга «через обед»
@@ -96,6 +126,7 @@ export function freeSlots(input: {
   if (schedule.daysOff.includes(day)) return [];
   const intervals = schedule.days[dayOfWeek(day)] ?? [];
   const earliest = new Date(now.getTime() + leadMin * 60_000);
+  const byPost = busyByPost(busy);
   const out: FreeSlot[] = [];
   for (const it of intervals) {
     const from = toMinutes(it.from);
@@ -104,7 +135,7 @@ export function freeSlots(input: {
       const startsAt = localTime(day, `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
       if (startsAt < earliest) continue;
       const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
-      const postNo = firstFreePost(schedule.posts, busy, startsAt, endsAt, schedule.bufferMin);
+      const postNo = firstFreePostIn(schedule.posts, byPost, startsAt, endsAt, schedule.bufferMin);
       if (postNo !== null) out.push({ startsAt, endsAt, postNo });
     }
   }

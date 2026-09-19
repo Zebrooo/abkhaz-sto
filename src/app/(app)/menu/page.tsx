@@ -80,30 +80,33 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
   const { shop, role } = ctx;
   const keys = MENU[role];
   const day = todayLocal();
-  const pending = await countPending(shop.id);
-  const services = keys.includes("services") ? await listServices(shop.id) : [];
-  // Цифры с сайта — только для строк, которые эта роль увидит: незачем
-  // спрашивать непрочитанные у хозяина, у которого чата нет.
-  const unread = keys.includes("chats") ? await fetchUnread(shop.id, ctx.userId) : null;
-  // Один поход за днём мастера кормит две строки: «Мастера» (кто на смене) и
-  // «Мой пост» (где стоите вы сами).
-  const mday = keys.includes("masters") || keys.includes("mywork") ? await masterDay(ctx, day) : null;
-  const masters = mday?.masters ?? [];
   // Ровно то же окно, что откроется по нажатию (экран «Готовые отчёты»
   // стартует с недели): число в подписи обязано совпасть со списком, иначе
   // строка врёт. Мастеру — только его отчёты, как и на самом экране.
   const reportRange = periodRange("week", day);
-  const reports = keys.includes("report")
-    ? listOr(await fetchReports({
-      shopId: shop.id, actorUserId: ctx.userId,
-      masterId: role === "master" && ctx.masterId !== null ? ctx.masterId : undefined,
-      from: reportRange.from, to: reportRange.to,
-    }))
-    : [];
-  const inspect = keys.includes("inspect") ? await inspectHref(ctx, day, new Date()) : "";
-  // Под какой учёткой сидит приложение — это и подпись строки выхода, и
-  // ответ на «почему я вижу чужой сервис»: номер виден, не выходя.
-  const user = await getServerUser();
+  // Цифры с сайта — только для строк, которые эта роль увидит: незачем
+  // спрашивать непрочитанные у хозяина, у которого чата нет. Всё независимое
+  // уходит одной пачкой — иначе экран ждёт каждый запрос по очереди.
+  const [pending, services, unread, mday, reports, inspect, user] = await Promise.all([
+    countPending(shop.id),
+    keys.includes("services") ? listServices(shop.id) : Promise.resolve([]),
+    keys.includes("chats") ? fetchUnread(shop.id, ctx.userId) : Promise.resolve(null),
+    // Один поход за днём мастера кормит две строки: «Мастера» (кто на смене) и
+    // «Мой пост» (где стоите вы сами).
+    keys.includes("masters") || keys.includes("mywork") ? masterDay(ctx, day) : Promise.resolve(null),
+    keys.includes("report")
+      ? fetchReports({
+        shopId: shop.id, actorUserId: ctx.userId,
+        masterId: role === "master" && ctx.masterId !== null ? ctx.masterId : undefined,
+        from: reportRange.from, to: reportRange.to,
+      }).then(listOr)
+      : Promise.resolve([]),
+    keys.includes("inspect") ? inspectHref(ctx, day, new Date()) : Promise.resolve(""),
+    // Под какой учёткой сидит приложение — это и подпись строки выхода, и
+    // ответ на «почему я вижу чужой сервис»: номер виден, не выходя.
+    getServerUser(),
+  ]);
+  const masters = mday?.masters ?? [];
   const me = formatPhone(user?.phone) || user?.email || "";
 
   const unreadLine = !unread?.ok || unread.data.unread === 0

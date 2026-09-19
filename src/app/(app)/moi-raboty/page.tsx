@@ -50,11 +50,17 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   const sp = await searchParams;
   const ctx = (await requireSection("bookings"))!;
   const { shop } = ctx;
-  const pending = await countPending(shop.id);
-
   const day = todayLocal();
   const now = new Date();
-  const { me, mine, rows, masters, hold, postNo } = await masterDay(ctx, day);
+  // Колокол, день мастера и отчёты за смену независимы — одной пачкой.
+  const [pending, { me, mine, rows, masters, hold, postNo }, reports] = await Promise.all([
+    countPending(shop.id),
+    masterDay(ctx, day),
+    fetchReports({
+      shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId ?? undefined,
+      from: localTime(day, "00:00").toISOString(), to: localTime(addDays(day, 1), "00:00").toISOString(),
+    }).then(listOr),
+  ]);
   const posts = postCount(shop.schedule?.posts, rows);
   // Кто ещё занял подъёмники — подпись на чипах; справочник молчит, пока
   // сайта нет, и тогда чипы просто номера.
@@ -65,10 +71,6 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
   // Машины, которые подошли по времени и ещё не приняты: принятой считаем ту,
   // по которой этот человек уже начал осмотр (отметка на устройстве).
   const due = jobsDue(mine, now).filter(b => !hold?.accepted.includes(b.id));
-  const reports = listOr(await fetchReports({
-    shopId: shop.id, actorUserId: ctx.userId, masterId: ctx.masterId ?? undefined,
-    from: localTime(day, "00:00").toISOString(), to: localTime(addDays(day, 1), "00:00").toISOString(),
-  }));
   const current = jobNow(mine, now);
   const next = jobsAfter(mine, now);
   const win = dayWindow(shop.schedule, day);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { saveClientNoteAction } from "@/app/(app)/zametki-actions";
-import { countPending, recentBookings } from "@/lib/bookings";
+import { bookingsOfClient, countPending } from "@/lib/bookings";
 import { fetchClientNotes } from "@/lib/api/client-notes";
 import { fetchGarage } from "@/lib/api/garage";
 import { requireSection } from "@/lib/context";
@@ -35,27 +35,30 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const sp = await searchParams;
   const ctx = (await requireSection("clients"))!;
   const { shop } = ctx;
-  const rows = await recentBookings(shop.id);
+  // Записи одного клиента, а не вся история сервиса: ключ в SQL повторяется
+  // только для учётки, остальное дожимает clientKey в bookingsOfClient.
+  const [rows, pending] = await Promise.all([bookingsOfClient(shop.id, key), countPending(shop.id)]);
   // Из адреса ключ приходит раскодированным, а clientKey кодирует имя —
   // поэтому пробуем оба вида, иначе клиент без телефона не находится.
   const card = clientCard(rows, key) ?? clientCard(rows, encodeURIComponent(key));
   if (!card) notFound();
-  const pending = await countPending(shop.id);
   const visits = count(card.visits, "запись", "записи", "записей");
 
   // Заметку спрашиваем по ключу карточки: он совпадает с тем, что строит
   // clientKey, даже если в адресе имя пришло раскодированным.
-  const notesRes = await fetchClientNotes({ shopId: shop.id, actorUserId: ctx.userId, keys: [card.key] });
-  // Машины клиента: у карточки машины свой адрес, и туда ведут ссылки ниже.
-  const cars = clientVehicles(rows, card.key);
   // Гараж — актуальные машины из учётки клиента; маршрута на сайте пока нет,
   // и пустой ответ здесь обычное дело: блок просто не рисуется.
-  const garageRes = await fetchGarage({
-    shopId: shop.id,
-    actorUserId: ctx.userId,
-    clientUserId: card.key.startsWith("u") ? card.key.slice(1) : null,
-    phone: card.phone,
-  });
+  const [notesRes, garageRes] = await Promise.all([
+    fetchClientNotes({ shopId: shop.id, actorUserId: ctx.userId, keys: [card.key] }),
+    fetchGarage({
+      shopId: shop.id,
+      actorUserId: ctx.userId,
+      clientUserId: card.key.startsWith("u") ? card.key.slice(1) : null,
+      phone: card.phone,
+    }),
+  ]);
+  // Машины клиента: у карточки машины свой адрес, и туда ведут ссылки ниже.
+  const cars = clientVehicles(rows, card.key);
   const garage = garageRes.ok ? garageRes.data : [];
   const note = notesRes.ok ? (notesRes.data.find(n => n.clientKey === card.key) ?? null) : null;
   const notesFailed = !notesRes.ok && notesRes.code !== "not_found" ? notesRes.error : null;

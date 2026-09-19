@@ -21,6 +21,11 @@ const PUBLIC_PATHS = [
 // свежие куки в ответ; без входа — содержимое /vhod на том же адресе. Куку ставит сайт (общий домен),
 // здесь она только читается и продлевается.
 export async function proxy(req: NextRequest) {
+  // Не-GET запросы — это server actions форм, и getUser() здесь был бы лишним
+  // HTTP к GoTrue на каждое действие: сессию в действии проверяет само
+  // действие (ctx()/getServerUser), а кука обновляется на навигациях (GET).
+  if (req.method !== "GET" && req.method !== "HEAD") return NextResponse.next();
+
   const path = req.nextUrl.pathname;
   if (PUBLIC_PATHS.some(p => path === p || path.startsWith(p + "/"))) return NextResponse.next();
 

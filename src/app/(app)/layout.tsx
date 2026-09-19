@@ -74,10 +74,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const { shop, role } = ctx;
   const day = todayLocal();
-  const pending = await countPending(shop.id);
   const newHref = `/kalendar/novaya?d=${day}`;
   // «Осмотр» ведёт на текущую запись — её ищем один раз здесь, а не в каждой вкладке.
-  const inspect = await inspectHref(ctx, day, new Date());
+  const [pending, inspect] = await Promise.all([countPending(shop.id), inspectHref(ctx, day, new Date())]);
   return (
     <div className="app">
       {/* Жест «потяни вниз» — на всех экранах приложения разом: он про

@@ -13,5 +13,7 @@ export default defineConfig([
       "no-alert": "error",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "docker/**"]),
+  // .claude/** — локальные ворктри агентов с собственными .next и
+  // node_modules внутри: линтить их артефакты сборки не нужно.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "docker/**", ".claude/**"]),
 ]);

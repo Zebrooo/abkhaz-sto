@@ -46,8 +46,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
   // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
   const ctx = (await requireSection("clients"))!;
   const shop = ctx.shop;
-  const rows = await recentBookings(shop.id);
-  const pending = await countPending(shop.id);
+  const [rows, pending] = await Promise.all([recentBookings(shop.id), countPending(shop.id)]);
 
   const q = pick(sp.q).trim();
   const f = pick(sp.f);

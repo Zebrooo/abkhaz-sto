@@ -33,8 +33,7 @@ export default async function ShiftPage({ searchParams }: { searchParams: SP }) 
   const shop = ctx.shop;
   const day = todayLocal();
   const now = new Date();
-  const rows = await dayBookings(shop.id, day);
-  const pending = await countPending(shop.id);
+  const [rows, pending] = await Promise.all([dayBookings(shop.id, day), countPending(shop.id)]);
   const posts = shop.schedule?.posts ?? Math.max(1, ...rows.map(r => r.post_no));
   const win = dayWindow(shop.schedule, day);
   const openLine = !shop.schedule ? "расписание не задано" : win.off ? "сегодня выходной" : `открыт до ${hhmm(win.toMin)}`;

@@ -105,7 +105,7 @@ export function vehicleKey(v: StoBookingVehicleSnapshot | undefined): string | n
   return vehicleIds(v)[0] ?? null;
 }
 
-function ownerOf(b: StoBookingRow): VehicleOwner {
+function ownerOf(b: Pick<StoBookingRow, "client_id" | "starts_at" | "data">): VehicleOwner {
   return {
     key: clientKey(b),
     name: b.data.client?.name?.trim() || (b.client_id ? "Клиент с сайта" : "Клиент"),
@@ -312,12 +312,19 @@ export type VehiclePast = {
    */
   byName: boolean;
   /** Прошлые состоявшиеся визиты, свежие сверху. */
-  visits: StoBookingRow[];
+  visits: VehiclePastRow[];
   /** Сколько раз машину уже обслуживали (выполненные визиты до этой записи). */
   done: number;
   /** Прежние владельцы — машину продают, и мастеру полезно это видеть. */
   otherOwners: VehicleOwner[];
 };
+
+/**
+ * То, что vehiclePast реально читает из строки записи. Лёгкие запросы
+ * (vehicleVisits, lib/bookings.ts) отдают только эти колонки — целиком
+ * COLUMNS ради досье одной машины не тянем.
+ */
+export type VehiclePastRow = Pick<StoBookingRow, "id" | "client_id" | "service" | "starts_at" | "status" | "data">;
 
 const EMPTY_PAST: VehiclePast = { key: null, byName: false, visits: [], done: 0, otherOwners: [] };
 
@@ -329,7 +336,7 @@ const EMPTY_PAST: VehiclePast = { key: null, byName: false, visits: [], done: 0,
  * исключаем. «Сколько раз была» — по выполненным: подтверждённая, но ещё не
  * закрытая запись — это не визит, а обещание.
  */
-export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, limit = 5): VehiclePast {
+export function vehiclePast(rows: readonly VehiclePastRow[], b: StoBookingRow, limit = 5): VehiclePast {
   const key = vehicleKey(b.data.vehicle);
   if (!key) return EMPTY_PAST;
   const vin = vehicleVin(b.data.vehicle);
@@ -339,7 +346,7 @@ export function vehiclePast(rows: readonly StoBookingRow[], b: StoBookingRow, li
   // Совпадение по марке и году — догадка: «Веста 2021» в городе не одна, и
   // такую историю показываем лишь внутри одного клиента. Машину продали и
   // новый хозяин приехал на ней же — сработает номер или VIN, как и должно.
-  const strong = (r: StoBookingRow) => {
+  const strong = (r: VehiclePastRow) => {
     const rv = vehicleVin(r.data.vehicle);
     if (vin && rv) return rv === vin;
     return plate !== null && normalizePlate(r.data.vehicle?.plate) === plate;

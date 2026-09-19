@@ -8,7 +8,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { StatusBadge } from "@/components/Status";
-import { countPending, dayBookings, getBooking, recentBookings } from "@/lib/bookings";
+import { countClientVisits, countPending, dayBookings, getBooking } from "@/lib/bookings";
 import { Timeline } from "@/components/Timeline";
 import { clientKey } from "@/lib/clients";
 import { count, formatPhone, formatRub, initials, minutesLabel, relativeAt, rub, timeRange } from "@/lib/format";
@@ -74,7 +74,19 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const backHref = `/segodnya?d=${day}`;
   // Свой адрес: день таскаем с собой, иначе «назад» уведёт в сегодняшний день.
   const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
-  const pending = await countPending(shop.id);
+  const key = clientKey(b);
+  const showInspect = can(ctx.role, "inspect");
+  // Всё независимое — одной пачкой: колокол, счётчик визитов клиента, сетка
+  // дня за ящиком и осмотр при приёмке друг друга не ждут.
+  const [pending, visits, dayRows, insp] = await Promise.all([
+    countPending(shop.id),
+    // «N записей» — точечным счётчиком по ключу клиента: таблицы клиентов
+    // нет, они собираются из снимков — то же правило, что на экране клиентов.
+    countClientVisits(shop.id, key),
+    dayBookings(shop.id, day),
+    // not_found — осмотр ещё не начат, это обычное состояние, а не ошибка.
+    showInspect ? fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: b.id }) : Promise.resolve(null),
+  ]);
 
   // Отмена и «не приехал» — разговор с клиентом, и ведёт его стойка: мастеру
   // эти кнопки не показываем (access.ts, closeBooking). «Выполнено» и
@@ -107,10 +119,6 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
   const name = clientName(b);
   const phone = normalizePhone(b.data.client?.phone);
-  const key = clientKey(b);
-  // «N записей» считаем по всем записям сервиса: таблицы клиентов нет, они
-  // собираются из снимков — то же правило, что на экране клиентов.
-  const visits = (await recentBookings(shop.id)).filter(r => clientKey(r) === key).length;
   const car = vehicleLine(b);
   const plate = b.data.vehicle?.plate ?? null;
   // Номер и VIN — под названием машины: по ним сверяют, ту ли машину приняли,
@@ -132,16 +140,12 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
   // За ящиком на вебе — сетка того же дня: запись видно в контексте смены,
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
-  const dayRows = await dayBookings(shop.id, day);
   const posts = shop.schedule?.posts ?? Math.max(1, ...dayRows.map(r => r.post_no));
 
   const act = pick(sp.do);
   const reason = /^[0-3]$/.test(pick(sp.r)) ? Number(pick(sp.r)) : -1;
 
-  // Осмотр при приёмке: счётчики из осмотра, если он есть. not_found — осмотр
-  // ещё не начат, это обычное состояние, а не ошибка.
-  const showInspect = can(ctx.role, "inspect");
-  const insp = showInspect ? await fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: b.id }) : null;
+  // Осмотр при приёмке: счётчики из осмотра, если он есть.
   const inspection = insp?.ok ? insp.data : null;
   const inspErr = insp && !insp.ok && insp.code !== "not_found" ? insp.error : "";
   const sev = countBySeverity(inspection?.defects ?? []);

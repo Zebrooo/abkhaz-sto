@@ -2,6 +2,7 @@ import "server-only";
 // Услуги сервиса — объявления его витрины в разделе «Услуги» (модель Маркета):
 // длительность живёт в attrs.duration_min. Создание новых услуг и типовой
 // прайс — #1271 (через API сайта); здесь чтение и правка цены/длительности.
+import { cache } from "react";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { DEFAULT_STO_DURATION_MIN, MAX_STO_DURATION_MIN, MIN_STO_DURATION_MIN, type Currency, type StoBookingService } from "@/lib/sto/types";
 
@@ -22,7 +23,8 @@ function durationFromAttrs(attrs: Record<string, unknown> | null): number {
   return Number.isInteger(v) && v >= MIN_STO_DURATION_MIN && v <= MAX_STO_DURATION_MIN ? v : DEFAULT_STO_DURATION_MIN;
 }
 
-export async function listServices(shopId: number): Promise<ServiceItem[]> {
+/** Прайс витрины один на рендер: его спрашивают и меню, и форма записи, и отчёт. */
+export const listServices = cache(async (shopId: number): Promise<ServiceItem[]> => {
   const { data, error } = await createSupabaseAdmin().from("listings")
     .select("id, slug, title, price, currency, status, attrs")
     .eq("shop_id", shopId).eq("category_slug", "uslugi").in("status", ["active", "archived", "pending"])
@@ -37,7 +39,7 @@ export async function listServices(shopId: number): Promise<ServiceItem[]> {
     currency: (r.currency === "USD" || r.currency === "EUR" ? r.currency : "RUB"),
     durationMin: durationFromAttrs(r.attrs), status: r.status,
   }));
-}
+});
 
 export function toBookingService(s: ServiceItem): StoBookingService {
   return { title: s.title, price: s.price, currency: s.currency, durationMin: s.durationMin };

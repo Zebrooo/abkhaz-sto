@@ -27,8 +27,9 @@ import { MAX_PHOTOS } from "@/lib/inspection";
 
 type Shot = {
   key: number;
-  file: File;
-  /** blob:-адрес превью; отзывается при уходе со страницы. */
+  /** Что реально уходит в хранилище: сжатый кадр, а при сбое сжатия — исходник. */
+  blob: Blob;
+  /** blob:-адрес превью; делается из уменьшенной версии, отзывается при уходе со страницы. */
   preview: string;
   status: "uploading" | "done" | "failed";
   photoId?: string;
@@ -52,6 +53,37 @@ type Props = {
 const FAIL_SHORT = "фото не ушло · повторить";
 const FAIL_LONG = "Один кадр не ушёл — в отчёте пункт будет «без фото»";
 
+/** Кадр с камеры — 4–12 МБ; в хранилище нужен снимок, а не исходник. */
+const MAX_SIDE = 1600;
+const JPEG_QUALITY = 0.8;
+/** PUT в хранилище не должен висеть вечно на плохой связи. */
+const PUT_TIMEOUT_MS = 60_000;
+
+/**
+ * Сжатие на клиенте перед загрузкой: createImageBitmap → Canvas → JPEG.
+ * Что-то пошло не так (формат не разобран, нет canvas) — уходит исходный
+ * файл: потерять кадр из-за нашей оптимизации недопустимо.
+ */
+async function compress(file: File): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close();
+    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, "image/jpeg", JPEG_QUALITY));
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
+
 let seq = 0;
 
 export function PhotoUpload({ bookingId, defectId, photos = [], variant }: Props) {
@@ -69,49 +101,85 @@ export function PhotoUpload({ bookingId, defectId, photos = [], variant }: Props
   const patch = (key: number, p: Partial<Shot>) =>
     setShots(list => list.map(s => (s.key === key ? { ...s, ...p } : s)));
 
+  // Сколько кадров сейчас в полёте (адрес + PUT). По нему находим последний
+  // кадр пачки: обновление экрана с сервера делаем один раз, а не на каждый
+  // кадр — иначе четыре снимка подряд давали четыре перерисовки карточки.
+  const inflight = useRef(0);
+
   async function upload(shot: Shot) {
     patch(shot.key, { status: "uploading", error: undefined });
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       patch(shot.key, { status: "failed", error: "нет связи" });
       return;
     }
+    inflight.current += 1;
+    // Своя загрузка закончилась до attach — флаг, чтобы finally не вычел
+    // счётчик второй раз.
+    let landed = false;
     try {
-      const up = await createPhotoUploadAction(shot.file.type);
+      const up = await createPhotoUploadAction(shot.blob.type || "image/jpeg");
       if (!up.ok) throw new Error(up.error);
-      const put = await fetch(up.data.uploadUrl, {
-        method: "PUT",
-        body: shot.file,
-        headers: { "content-type": shot.file.type || "image/jpeg" },
-      });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), PUT_TIMEOUT_MS);
+      let put: Response;
+      try {
+        put = await fetch(up.data.uploadUrl, {
+          method: "PUT",
+          body: shot.blob,
+          headers: { "content-type": shot.blob.type || "image/jpeg" },
+          signal: ctrl.signal,
+        });
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") throw new Error("не ушло за минуту");
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
       if (!put.ok) throw new Error(`хранилище ответило ${put.status}`);
       if (defectId) {
-        const att = await attachPhotoAction({ bookingId, defectId, photoId: up.data.photoId });
+        // Свои мегабайты уже в хранилище; если других кадров в полёте нет —
+        // этот последний, и после него экран обновляем один раз на пачку.
+        inflight.current -= 1;
+        landed = true;
+        const last = inflight.current === 0;
+        const att = await attachPhotoAction({ bookingId, defectId, photoId: up.data.photoId, last });
         if (!att.ok) throw new Error(att.error);
-      }
-      if (defectId) {
-        // Кадр уже у дефекта на сайте: убираем свою копию и просим свежую
-        // карточку — иначе он считался бы дважды, и лимит срабатывал бы рано.
-        setShots(list => list.filter(s => s.key !== shot.key));
-        router.refresh();
+        patch(shot.key, { status: "done", photoId: up.data.photoId });
+        if (last) {
+          // Кадры уже у дефекта на сайте: убираем свои копии и просим свежую
+          // карточку — иначе они считались бы дважды, и лимит срабатывал бы рано.
+          setShots(list => {
+            for (const s of list) if (s.status === "done") URL.revokeObjectURL(s.preview);
+            return list.filter(s => s.status !== "done");
+          });
+          router.refresh();
+        }
         return;
       }
       patch(shot.key, { status: "done", photoId: up.data.photoId });
     } catch (e) {
       patch(shot.key, { status: "failed", error: e instanceof Error ? e.message : "не ушло" });
+    } finally {
+      if (!landed) inflight.current -= 1;
     }
   }
 
-  function onPick(files: FileList | null) {
+  async function onPick(files: FileList | null) {
     if (!files) return;
     const room = MAX_PHOTOS - photos.length - shots.filter(s => s.status !== "failed").length;
-    const fresh: Shot[] = Array.from(files).slice(0, Math.max(0, room)).map(file => ({
-      key: ++seq, file, preview: URL.createObjectURL(file), status: "uploading",
-    }));
-    if (fresh.length === 0) return;
+    const picked = Array.from(files).slice(0, Math.max(0, room));
+    if (picked.length === 0) return;
+    if (input.current) input.current.value = "";
+    // Сжимаем до постановки в очередь: превью делаем из уменьшенной версии,
+    // полные blob'ы кадров с камеры в памяти не держим.
+    const fresh: Shot[] = [];
+    for (const file of picked) {
+      const blob = await compress(file);
+      fresh.push({ key: ++seq, blob, preview: URL.createObjectURL(blob), status: "uploading" });
+    }
     previews.current.push(...fresh.map(s => s.preview));
     setShots(list => [...list, ...fresh]);
     for (const s of fresh) void upload(s);
-    if (input.current) input.current.value = "";
   }
 
   const done = shots.filter(s => s.status === "done");
@@ -124,7 +192,7 @@ export function PhotoUpload({ bookingId, defectId, photos = [], variant }: Props
       ref={input} type="file" accept="image/*" capture="environment" multiple
       className="ph-input" aria-label="Снять фото"
       disabled={full}
-      onChange={e => onPick(e.target.files)}
+      onChange={e => void onPick(e.target.files)}
     />
   );
   // Скрытые поля — только там, где кадр ещё некуда пришить: их унесёт форма шторки.

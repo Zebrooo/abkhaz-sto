@@ -2085,3 +2085,19 @@ svg { display: block; }
 }
 
 
+
+/* @section:skeleton */
+/* Скелетон загрузки страницы ((app)/loading.tsx): пульс-полосы вместо белого
+   экрана, пока страница ждёт данные. */
+@keyframes sklPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.skl { display: flex; flex-direction: column; gap: 12px; }
+.skl .card { display: flex; flex-direction: column; gap: 12px; }
+.skl-bar { height: 14px; border-radius: var(--radius-pill); background: var(--warm); animation: sklPulse 1.2s var(--ease-out) infinite; }
+.skl-w-40 { width: 40%; }
+.skl-w-45 { width: 45%; }
+.skl-w-50 { width: 50%; }
+.skl-w-55 { width: 55%; }
+.skl-w-60 { width: 60%; }
+.skl-w-65 { width: 65%; }
+.skl-w-70 { width: 70%; }
+.skl-w-80 { width: 80%; }

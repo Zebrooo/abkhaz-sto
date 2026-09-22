@@ -15,6 +15,8 @@ import {
 import { fetchReport } from "@/lib/api/reports";
 import { listOr } from "@/lib/api/site-api";
 import { countPending, getBooking } from "@/lib/bookings";
+import { ensureBookingVin } from "@/lib/vin-history";
+import { BookingVin } from "@/components/BookingVin";
 import { carBrief } from "@/lib/car-brief";
 import { can } from "@/lib/access";
 import { requireSection } from "@/lib/context";
@@ -70,8 +72,12 @@ export default async function InspectionPage({ params, searchParams }: { params:
   const sp = await searchParams;
   const bookingId = Number(id);
   if (!Number.isInteger(bookingId)) notFound();
-  const b = await getBooking(shop.id, bookingId);
+  let b = await getBooking(shop.id, bookingId);
   if (!b) notFound();
+  // Машина уже в сервисе — самое время добрать VIN: из истории сами, иначе
+  // ниже напомнит блок «VIN не указан» (без блокировки осмотра: VIN бывает
+  // нечитаем, и машина не должна стоять из-за поля в форме).
+  b = await ensureBookingVin(shop.id, b);
 
   const day = isDay(pick(sp.d)) ? pick(sp.d) : localDay(new Date(b.starts_at));
   const bookingHref = `/zapis/${b.id}?d=${day}`;
@@ -164,6 +170,8 @@ export default async function InspectionPage({ params, searchParams }: { params:
         {/* Пока открыта шторка, ошибка живёт в ней: карточка под затемнением
             нечитаема, а одна и та же строка дважды выглядит как две беды. */}
         <Flash ok={pick(sp.ok)} err={sheetOpen ? "" : formErr || loadErr} title={formErr ? undefined : "Осмотр не загрузился"} />
+
+        {!b.data.vehicle?.vin && <BookingVin shopId={shop.id} bookingId={b.id} returnTo={`/zapis/${b.id}/osmotr?d=${day}`} />}
 
         <div className="ins-cols">
           <div className="ins-col">

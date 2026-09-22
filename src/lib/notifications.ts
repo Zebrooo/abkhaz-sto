@@ -43,7 +43,10 @@ export function buildFeed(
       out.push({
         id: `new-${b.id}`, bookingId: b.id, icon: "car", accent: true,
         title: b.source === "site" ? "Новая запись с сайта" : "Новая запись",
-        text: `${who(b)} · ${b.service.title} · ${when(b, timeRange)}`,
+        // «без VIN» — подсказка админу вписать его с кузова при приёмке
+        // (спека abkhaz-auto 2026-09-22-sto-booking-garage-vin): у записи
+        // без VIN на карточке ждёт блок «VIN не указан».
+        text: `${who(b)} · ${b.service.title} · ${when(b, timeRange)}${b.data.vehicle?.vin ? "" : " · без VIN"}`,
         at: b.created_at, canConfirm: true,
       });
       continue;

@@ -23,7 +23,9 @@ describe("лента уведомлений", () => {
   it("новая запись — с кнопкой подтверждения и подписью времени записи", () => {
     const [n] = buildFeed([row({ id: 814 })], timeRange);
     expect(n.title).toBe("Новая запись с сайта");
-    expect(n.text).toBe("Гурам Броцман · Диагностика двигателя · 15:00–16:00, пост 1");
+    // «без VIN» — у записи, где VIN некому было заполнить (снимок без него):
+    // подсказка админу вписать его при приёмке.
+    expect(n.text).toBe("Гурам Броцман · Диагностика двигателя · 15:00–16:00, пост 1 · без VIN");
     expect(n.canConfirm).toBe(true);
     expect(n.accent).toBe(true);
   });
@@ -31,6 +33,13 @@ describe("лента уведомлений", () => {
   it("ручная запись подписывается иначе", () => {
     const [n] = buildFeed([row({ id: 1, source: "app" })], timeRange);
     expect(n.title).toBe("Новая запись");
+  });
+
+  it("у записи с VIN хвоста «без VIN» нет", () => {
+    const withVin = row({ id: 2 });
+    withVin.data.vehicle = { brand: "Kia", model: null, year: null, plate: null, vin: "XW8ED45J8DK123456" };
+    const [n] = buildFeed([withVin], timeRange);
+    expect(n.text).not.toContain("без VIN");
   });
 
   it("отмена клиентом попадает в ленту с причиной, отмена сервисом — нет", () => {

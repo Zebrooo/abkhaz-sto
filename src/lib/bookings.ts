@@ -240,6 +240,34 @@ export async function transitionBooking(input: {
 }
 
 /**
+ * VIN в запись — рукой администратора или автоподстановкой из истории
+ * (lib/vin-history.ts; спека abkhaz-auto 2026-09-22-sto-booking-garage-vin).
+ * Пишется в data.vehicle, дальше историю клеит существующий механизм
+ * clients.vins. Если запись пришла с машиной из гаража сайта (vehicle_id) —
+ * VIN уезжает и туда, но ТОЛЬКО в пустое поле: заполненное клиентом сервис
+ * молча не перетирает. Ошибка гаража запись не роняет — VIN в записи уже
+ * сохранён, а гараж догонит следующая правка.
+ */
+export async function setBookingVin(shopId: number, bookingId: number, vin: string): Promise<StoBookingRow | null> {
+  const current = await getBooking(shopId, bookingId);
+  if (!current) return null;
+  const vehicle = { ...(current.data.vehicle ?? { brand: "", model: null, year: null, plate: null }), vin };
+  const data = { ...current.data, vehicle };
+  const { error } = await createSupabaseAdmin().from("sto_bookings")
+    .update({ data }).eq("id", bookingId).eq("shop_id", shopId);
+  if (error) {
+    console.error("[сто] VIN записи не сохранился:", error.message);
+    return null;
+  }
+  if (current.vehicle_id != null) {
+    const { error: garageError } = await createSupabaseAdmin().from("user_vehicles")
+      .update({ vin }).eq("id", current.vehicle_id).or("vin.is.null,vin.eq.");
+    if (garageError) console.error("[сто] VIN в гараж клиента не дописался:", garageError.message);
+  }
+  return { ...current, data };
+}
+
+/**
  * Перенос живой записи на другое окно (и, возможно, пост). Пост задан —
  * ставим ровно на него (запись перетащили на колонку сетки), не задан —
  * сервер берёт первый свободный, как в списке окон.

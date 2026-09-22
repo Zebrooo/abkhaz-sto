@@ -35,10 +35,13 @@ export function planDelay(input: { rows: readonly StoBookingRow[]; bookingId: nu
   if (!canReschedule(booking.status)) return { ok: false, error: "Продлить можно только живую запись" };
 
   const endsAt = new Date(new Date(booking.ends_at).getTime() + minutes * 60_000);
+  // Сравниваем моменты, а не строки: формат ISO из базы одинаковый, но
+  // полагаться на это молча не стоит.
+  const after = new Date(booking.starts_at).getTime();
   const tail = rows
     .filter(r => r.id !== booking.id && r.post_no === booking.post_no && canReschedule(r.status)
-      && r.starts_at >= booking.starts_at)
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      && new Date(r.starts_at).getTime() >= after)
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
 
   const shifts: DelayShift[] = [];
   let prevEnd = endsAt;

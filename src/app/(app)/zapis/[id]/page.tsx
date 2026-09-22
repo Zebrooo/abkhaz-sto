@@ -209,8 +209,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               </div>
               <div className="bd-svc-p">{formatRub(b.service.price)}</div>
             </div>
-            {extras.map(e => (
-              <div key={e.at} className="bd-svc bd-extra">
+            {extras.map((e, i) => (
+              // Индекс в ключе: две услуги могут добавиться в одну секунду.
+              <div key={`${e.at}-${i}`} className="bd-svc bd-extra">
                 <div>
                   <div className="bd-extra-t">{e.title}</div>
                   <div className="bd-svc-s">добавлена по ходу работы · {relativeAt(e.at)}</div>

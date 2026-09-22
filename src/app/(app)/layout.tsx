@@ -4,7 +4,6 @@ import { STO_ROLE_LABEL } from "@/lib/access";
 import { ViewBar } from "@/components/ViewBar";
 import { AdminBar } from "@/components/AdminBar";
 import { countPending } from "@/lib/bookings";
-import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
 import { SideNav } from "@/components/SideNav";
 import { TopBar } from "@/components/TopBar";
@@ -76,8 +75,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { shop, role } = ctx;
   const day = todayLocal();
   const newHref = `/kalendar/novaya?d=${day}`;
-  // «Осмотр» ведёт на текущую запись — её ищем один раз здесь, а не в каждой вкладке.
-  const [pending, inspect] = await Promise.all([countPending(shop.id), inspectHref(ctx, day, new Date())]);
+  // «Осмотр» — постоянный адрес /osmotr: куда именно вести (текущая запись,
+  // новый осмотр, отчёты) решает сама страница-редиректор, когда по ней
+  // перешли. Раньше это считал layout — два HTTP к сайту на каждый рендер.
+  const pending = await countPending(shop.id);
   return (
     <div className="app">
       {/* Жест «потяни вниз» — на всех экранах приложения разом: он про
@@ -92,10 +93,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           в чужой витрине забыть, где стоишь, ещё дороже, чем в чужой роли. */}
       {shop.adminEntry && <AdminBar shopName={shop.name} />}
       <div className="app-body">
-        <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} inspectHref={inspect} />
+        <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} />
         <main className="main">{children}</main>
       </div>
-      <TabBar role={role} newHref={newHref} inspectHref={inspect} />
+      <TabBar role={role} newHref={newHref} />
     </div>
   );
 }

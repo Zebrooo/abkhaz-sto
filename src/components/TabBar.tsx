@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { StoRole } from "@/lib/access";
-import { activeTab, hrefOf, TABS } from "@/lib/nav";
+import { activeTab, ROUTE, TABS } from "@/lib/nav";
 import { Icon, type IconName } from "@/components/Icon";
 
 /**
@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/components/Icon";
  * админу смена с кнопкой «+», хозяину деньги и мастера. Клиентский код
  * здесь только ради подсветки текущей вкладки по адресу.
  */
-export function TabBar({ role, newHref, inspectHref }: { role: StoRole; newHref: string; inspectHref: string }) {
+export function TabBar({ role, newHref }: { role: StoRole; newHref: string }) {
   const active = activeTab(role, usePathname() ?? "/");
   return (
     <nav className="tabbar" aria-label="Разделы">
@@ -19,7 +19,7 @@ export function TabBar({ role, newHref, inspectHref }: { role: StoRole; newHref:
           <span className="fab"><Icon name="plus" size={26} /></span>
         </Link>
       ) : (
-        <Tab key={t.key} href={hrefOf(t.key, inspectHref)} label={t.label} icon={t.icon} on={active === t.key} />
+        <Tab key={t.key} href={ROUTE[t.key]} label={t.label} icon={t.icon} on={active === t.key} />
       ))}
     </nav>
   );

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { StoRole } from "@/lib/access";
-import { hrefOf, navKeyOf, sideNav } from "@/lib/nav";
+import { navKeyOf, ROUTE, sideNav } from "@/lib/nav";
 import { Icon } from "@/components/Icon";
 
 /**
@@ -10,7 +10,7 @@ import { Icon } from "@/components/Icon";
  * Пункты — по роли (lib/nav.ts): у хозяина есть «Деньги» и «Доступы»,
  * у мастера — только осмотр и чат.
  */
-export function SideNav({ role, siteUrl, unread, inspectHref }: { role: StoRole; siteUrl: string; unread: number; inspectHref: string }) {
+export function SideNav({ role, siteUrl, unread }: { role: StoRole; siteUrl: string; unread: number }) {
   const current = navKeyOf(usePathname() ?? "/");
   return (
     <nav className="side" aria-label="Разделы">
@@ -18,7 +18,7 @@ export function SideNav({ role, siteUrl, unread, inspectHref }: { role: StoRole;
         const on = it.key === current;
         const count = it.key === "notifs" ? unread : 0;
         return (
-          <Link key={it.key} href={hrefOf(it.key, inspectHref)} aria-current={on ? "page" : undefined}>
+          <Link key={it.key} href={ROUTE[it.key]} aria-current={on ? "page" : undefined}>
             <Icon name={it.icon} size={18} />
             <span className="n">{it.label}</span>
             {count > 0 && <span className="c">{count}</span>}

@@ -11,7 +11,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { count, formatPhone, todayLocal } from "@/lib/format";
-import { inspectHref, masterDay } from "@/lib/master-day";
+import { masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
 import { STO_ROLE_LABEL, type StoRole } from "@/lib/access";
 import { setRoleViewAction } from "@/app/(app)/view-actions";
@@ -88,7 +88,7 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
   // Цифры с сайта — только для строк, которые эта роль увидит: незачем
   // спрашивать непрочитанные у хозяина, у которого чата нет. Всё независимое
   // уходит одной пачкой — иначе экран ждёт каждый запрос по очереди.
-  const [pending, services, unread, mday, reports, inspect, user] = await Promise.all([
+  const [pending, services, unread, mday, reports, user] = await Promise.all([
     countPending(shop.id),
     keys.includes("services") ? listServices(shop.id) : Promise.resolve([]),
     keys.includes("chats") ? fetchUnread(shop.id, ctx.userId) : Promise.resolve(null),
@@ -102,7 +102,6 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
         from: reportRange.from, to: reportRange.to,
       }).then(listOr)
       : Promise.resolve([]),
-    keys.includes("inspect") ? inspectHref(ctx, day, new Date()) : Promise.resolve(""),
     // Под какой учёткой сидит приложение — это и подпись строки выхода, и
     // ответ на «почему я вижу чужой сервис»: номер виден, не выходя.
     getServerUser(),
@@ -122,7 +121,8 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
       key: "mywork", href: "/moi-raboty", icon: "list", title: "Мой пост",
       sub: mday?.postNo ? `вы на посту ${mday.postNo} · ${count(mday.mine.length, "запись", "записи", "записей")}` : "отметьтесь, какой подъёмник заняли",
     },
-    inspect: { key: "inspect", href: inspect, icon: "camera", title: "Осмотр и отчёты", sub: "фото дефекта, узел — и он в отчёте" },
+    // Постоянный адрес: куда именно вести, решает страница-редиректор /osmotr.
+    inspect: { key: "inspect", href: "/osmotr", icon: "camera", title: "Осмотр и отчёты", sub: "фото дефекта, узел — и он в отчёте" },
     report: role === "master"
       ? { key: "report", href: "/otchety", icon: "list", title: "Мои отчёты", sub: `${reports.length} за 7 дней` }
       : { key: "report", href: "/otchety", icon: "list", title: "Готовые отчёты", sub: `${reports.length} за 7 дней · весь сервис` },

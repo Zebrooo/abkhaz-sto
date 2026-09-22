@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, HOME_PATH, STO_ROLES } from "@/lib/access";
-import { activeTab, hrefOf, MENU, NAV_SECTION, navKeyOf, sideNav, TABS, visibleKeys } from "@/lib/nav";
+import { activeTab, MENU, NAV_SECTION, navKeyOf, ROUTE, sideNav, TABS, visibleKeys } from "@/lib/nav";
 
 describe("навигация по ролям", () => {
   // Ловушка: вкладка ведёт в раздел, где requireSection тут же уводит обратно.
@@ -41,7 +41,7 @@ describe("навигация по ролям", () => {
   // Ловушка, из-за которой хозяин не находил готовых отчётов: у пункта не
   // было своего адреса, и он вёл туда же, куда «Осмотр», — на записи дня.
   it("готовые отчёты — свой адрес, и он у всех ролей", () => {
-    expect(hrefOf("report", "/zapis/7/osmotr")).toBe("/otchety");
+    expect(ROUTE.report).toBe("/otchety");
     expect(navKeyOf("/otchety")).toBe("report");
     for (const r of STO_ROLES) expect(visibleKeys(r), r).toContain("report");
   });
@@ -55,9 +55,12 @@ describe("навигация по ролям", () => {
     }
   });
 
-  it("«Осмотр» берёт адрес текущей записи, остальное — постоянное", () => {
-    expect(hrefOf("inspect", "/zapis/7/osmotr")).toBe("/zapis/7/osmotr");
-    expect(hrefOf("today", "/zapis/7/osmotr")).toBe("/segodnya");
+  it("«Осмотр» — постоянный адрес редиректора, и он подсвечивает свою вкладку", () => {
+    // Куда идти дальше (текущая запись, новый осмотр, отчёты), решает
+    // страница /osmotr при переходе — вкладке расчёт не нужен.
+    expect(ROUTE.inspect).toBe("/osmotr");
+    expect(navKeyOf(ROUTE.inspect)).toBe("inspect");
+    expect(ROUTE.today).toBe("/segodnya");
   });
 
   it("«Доступы» есть только у хозяина, и в меню, и слева", () => {

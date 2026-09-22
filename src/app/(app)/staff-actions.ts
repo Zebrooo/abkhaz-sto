@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { can, isStoRole, type Section } from "@/lib/access";
 import { blockIfViewing, serviceContext, type ServiceContext } from "@/lib/context";
 import { assignBookingMaster, createMaster, updateMaster } from "@/lib/api/masters";
-import { inviteMember, setMemberActive, setMemberRole } from "@/lib/api/members";
+import { invalidateMyShops, inviteMember, setMemberActive, setMemberRole } from "@/lib/api/members";
 import { count, todayLocal } from "@/lib/format";
 import { dayBookings } from "@/lib/bookings";
 import { postCount } from "@/lib/mywork";
@@ -68,6 +68,9 @@ export async function inviteMemberAction(fd: FormData) {
   if (!phone) back("/dostupy", { do: "invite", role, err: "Телефон не разобран — укажите в формате +7…" });
   const name = str(fd, "name").slice(0, 80);
   const res = await inviteMember({ shopId: c.shop.id, actorUserId: c.userId, phone, role, name: name || undefined });
+  // Членства этого человека изменились — кэш (lib/api/members.ts) обязан
+  // забыть старый список; у приглашения без учётки забывать пока нечего.
+  if (res.ok && res.data.userId) invalidateMyShops(res.data.userId);
   revalidatePath("/dostupy");
   if (!res.ok) back("/dostupy", { do: "invite", role, err: res.error });
   back("/dostupy", { ok: res.data.pending ? "Приглашение ушло по SMS — роль включится после входа" : "Сотрудник добавлен" });
@@ -80,6 +83,7 @@ export async function setMemberRoleAction(fd: FormData) {
   const userId = str(fd, "userId");
   if (!userId) back("/dostupy", { err: "Сотрудник не указан" });
   const res = await setMemberRole({ shopId: c.shop.id, actorUserId: c.userId, userId, role });
+  if (res.ok) invalidateMyShops(userId);
   revalidatePath("/dostupy");
   back("/dostupy", res.ok ? { ok: role === "admin" ? "Теперь админ" : "Теперь мастер" } : { err: res.error });
 }
@@ -90,6 +94,7 @@ export async function setMemberActiveAction(fd: FormData) {
   if (!userId) back("/dostupy", { err: "Сотрудник не указан" });
   const active = str(fd, "active") === "1";
   const res = await setMemberActive({ shopId: c.shop.id, actorUserId: c.userId, userId, active });
+  if (res.ok) invalidateMyShops(userId);
   revalidatePath("/dostupy");
   back("/dostupy", res.ok ? { ok: active ? "Доступ включён" : "Доступ выключен" } : { err: res.error });
 }

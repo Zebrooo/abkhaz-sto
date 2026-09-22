@@ -6,9 +6,9 @@ import { cache } from "react";
 // нажавшие разное одновременно, не затрут друг друга молча.
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { notifySite } from "@/lib/site-events";
-import { clientKey, clientKeyOf } from "@/lib/clients";
+import { clientKey, clientKeyOf, type ClientHistoryRow, type ClientSnapshotRow } from "@/lib/clients";
 import { vehicleKey, type VehiclePastRow } from "@/lib/vehicles";
-import type { StoBookingExtra, StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
+import type { StoBookingExtra, StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData, StoBookingVehicleSnapshot } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { planDelay } from "@/lib/delay";
 import { firstFreePost, isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
@@ -25,6 +25,23 @@ export async function listBookings(shopId: number, from: Date, to: Date): Promis
     .order("starts_at").order("post_no").returns<StoBookingRow[]>();
   if (error) {
     console.error("[сто] записи не прочитались:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Время и статус записей за период — точки под числами в маленьких
+ * календарях («Сегодня» и «Календарь»). Точке нужны только день и «жива ли»
+ * запись, а полный listBookings ради неё тянул COLUMNS с data по всей сетке
+ * месяца. Границы и правило пересечения — те же, что у listBookings.
+ */
+export async function listBookingDots(shopId: number, from: Date, to: Date): Promise<Pick<StoBookingRow, "starts_at" | "status">[]> {
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings").select("starts_at, status")
+    .eq("shop_id", shopId).lt("starts_at", to.toISOString()).gt("ends_at", from.toISOString())
+    .returns<Pick<StoBookingRow, "starts_at" | "status">[]>();
+  if (error) {
+    console.error("[сто] точки месяца не прочитались:", error.message);
     return [];
   }
   return data ?? [];
@@ -65,6 +82,47 @@ export const recentBookings = cache(async (shopId: number, limit = 1000): Promis
     return [];
   }
   return data ?? [];
+});
+
+/**
+ * Снимки клиента и машины из data — узкими колонками, без history/extras/
+ * delays. Снимок в базе лежит объектом или отсутствует, поэтому null здесь —
+ * «поля нет», и в data он не кладётся: ключи склейки ждут undefined.
+ */
+const SNAPSHOT_COLUMNS = "client:data->client, vehicle:data->vehicle";
+
+type SnapshotCols = {
+  client: StoBookingClientSnapshot | null;
+  vehicle: StoBookingVehicleSnapshot | null;
+};
+
+function snapshotData(r: SnapshotCols): ClientSnapshotRow["data"] {
+  return { ...(r.client ? { client: r.client } : {}), ...(r.vehicle ? { vehicle: r.vehicle } : {}) };
+}
+
+/**
+ * История для сводов клиентов и машин — экраны «Клиенты» и карточка машины.
+ * То же множество строк, что у recentBookings, но только колонки, которые
+ * читают summarizeClients и vehicleCard (data целиком — самая тяжёлая часть
+ * COLUMNS), и с нижней границей по дате: свод живёт в окне клиентской
+ * истории (CLIENT_HISTORY_YEARS), как счётчики «N записей» и карточка
+ * клиента. recentBookings не трогаем — остальным его потребителям нужна
+ * строка целиком.
+ */
+export const clientHistoryRows = cache(async (shopId: number, limit = 1000): Promise<ClientHistoryRow[]> => {
+  const { data, error } = await createSupabaseAdmin().from("sto_bookings")
+    .select(`id, client_id, service, starts_at, status, ${SNAPSHOT_COLUMNS}`)
+    .eq("shop_id", shopId).gte("starts_at", clientHistoryFrom())
+    .order("starts_at", { ascending: false }).limit(limit)
+    .returns<(Pick<StoBookingRow, "id" | "client_id" | "service" | "starts_at" | "status"> & SnapshotCols)[]>();
+  if (error) {
+    console.error("[сто] история записей не прочиталась:", error.message);
+    return [];
+  }
+  return (data ?? []).map(r => ({
+    id: r.id, client_id: r.client_id, service: r.service, starts_at: r.starts_at, status: r.status,
+    data: snapshotData(r),
+  }));
 });
 
 export async function getBooking(shopId: number, id: number): Promise<StoBookingRow | null> {
@@ -155,6 +213,33 @@ export async function bookingsOfClient(shopId: number, key: string, limit = 200)
     return [];
   }
   return (data ?? []).filter(b => matchClientKey(clientKey(b), key)).slice(0, limit);
+}
+
+/**
+ * Записи клиента для добора VIN (lib/vin-history.ts) — узкими колонками:
+ * vinFromHistory читает только снимок машины, а ключ клиента дожимается по
+ * client_id и data.client. Правила отбора — те же, что у bookingsOfClient
+ * (точный фильтр по учётке; для телефона и имени — грубый предфильтр в SQL и
+ * clientKey в JS), но без полного COLUMNS и с тем же окном по дате. Отдельная
+ * функция, а не правка bookingsOfClient: карточке клиента нужна история
+ * целиком, ей узкие колонки не подходят.
+ */
+export async function clientVinRows(shopId: number, key: string, limit = 200): Promise<ClientSnapshotRow[]> {
+  const base = createSupabaseAdmin().from("sto_bookings").select(`id, client_id, ${SNAPSHOT_COLUMNS}`)
+    .eq("shop_id", shopId).gte("starts_at", clientHistoryFrom())
+    // Свежие сверху: по совпавшему номеру vinFromHistory берёт первый VIN.
+    .order("starts_at", { ascending: false });
+  const q = key.startsWith("u") ? base.eq("client_id", key.slice(1)).limit(limit)
+    : key.startsWith("p") ? base.not("data->client->>phone", "is", null)
+      : base.is("client_id", null);
+  const { data, error } = await q.returns<(Pick<StoBookingRow, "id" | "client_id"> & SnapshotCols)[]>();
+  if (error) {
+    console.error("[сто] записи клиента не прочитались:", error.message);
+    return [];
+  }
+  return (data ?? [])
+    .map(r => ({ id: r.id, client_id: r.client_id, data: snapshotData(r) }))
+    .filter(b => matchClientKey(clientKey(b), key)).slice(0, limit);
 }
 
 /**
@@ -372,15 +457,13 @@ export async function delayBooking(input: {
     // Соседи уже сдвинуты — это не потеря, просто зазор; но правду говорим.
     return { ok: false, error: "Записи следом сдвинуты, а продлить эту не вышло — запись только что изменили, обновите экран" };
   }
-  let told = true;
-  for (const s of plan.shifts) {
-    const ok = await notifySite({
-      bookingId: s.row.id, shopId, event: "rescheduled", actorUserId,
-      details: { startsAt: s.newStart.toISOString(), delayMin: s.shiftMin },
-    });
-    told = told && ok;
-  }
-  return { ok: true, told, shifted: plan.shifts.length };
+  // Уведомления — пачкой: notifySite никогда не бросает (site-events.ts), а
+  // по очереди цепочка из N сдвинутых записей ждала бы N таймаутов подряд.
+  const oks = await Promise.all(plan.shifts.map(s => notifySite({
+    bookingId: s.row.id, shopId, event: "rescheduled", actorUserId,
+    details: { startsAt: s.newStart.toISOString(), delayMin: s.shiftMin },
+  })));
+  return { ok: true, told: oks.every(Boolean), shifted: plan.shifts.length };
 }
 
 /** Ручная запись клиента с улицы из приложения: без учётки, имя и телефон снимком. */

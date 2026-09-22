@@ -6,12 +6,14 @@
 // склеивает машины в карточках) — VIN точно этой машины; без номера — только
 // когда у клиента в истории РОВНО ОДИН различный VIN: у человека с двумя
 // машинами угадывать нельзя.
-import { bookingsOfClient, setBookingVin } from "@/lib/bookings";
-import { clientKey } from "@/lib/clients";
+import { clientVinRows, setBookingVin } from "@/lib/bookings";
+import { clientKey, type ClientSnapshotRow } from "@/lib/clients";
 import type { StoBookingRow } from "@/lib/sto/types";
 import { normalizePlate } from "@/lib/vehicles";
 
-export function vinFromHistory(rows: readonly StoBookingRow[], booking: StoBookingRow): string | null {
+// rows — лёгкие строки истории (clientVinRows): здесь читается только снимок
+// машины, и тянуть ради него data целиком по всей истории клиента незачем.
+export function vinFromHistory(rows: readonly ClientSnapshotRow[], booking: StoBookingRow): string | null {
   if (booking.data.vehicle?.vin) return null;
   const plate = normalizePlate(booking.data.vehicle?.plate);
   if (plate) {
@@ -30,7 +32,7 @@ export function vinFromHistory(rows: readonly StoBookingRow[], booking: StoBooki
  */
 export async function ensureBookingVin(shopId: number, b: StoBookingRow): Promise<StoBookingRow> {
   if (b.data.vehicle?.vin) return b;
-  const rows = await bookingsOfClient(shopId, clientKey(b));
+  const rows = await clientVinRows(shopId, clientKey(b));
   const vin = vinFromHistory(rows.filter(r => r.id !== b.id), b);
   if (!vin) return b;
   return (await setBookingVin(shopId, b.id, vin)) ?? b;

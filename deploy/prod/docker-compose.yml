@@ -20,13 +20,25 @@ services:
     restart: always
     env_file:
       - /data/abkhaz-business/.env.production
+    # Потолки: приложение делит сервер с сайтом и базой, и разбухший или
+    # зациклившийся контейнер не должен съесть их память и CPU. Куча V8
+    # ограничена НИЖЕ mem_limit: так Node жмёт сборку мусора заранее, а не
+    # умирает по OOM-kill без стека; зазор — на буферы, стеки и сам рантайм.
+    mem_limit: 768m
+    cpus: "1.0"
+    environment:
+      NODE_OPTIONS: --max-old-space-size=512
     networks: [web, supabase-aa]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 15s
-      retries: 6
+      # Жёстче прежних 30s/15s/6: зависший контейнер должен быть помечен
+      # unhealthy за ~минуту, а не за четыре. start_interval — частые пробы
+      # только на старте (требует Docker Engine ≥25; на серверах 29.x).
+      interval: 15s
+      timeout: 5s
+      retries: 3
       start_period: 60s
+      start_interval: 3s
     logging:
       driver: json-file
       options: { max-size: "20m", max-file: "3", compress: "true" }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { countPending, recentBookings } from "@/lib/bookings";
+import { clientHistoryRows, countPending } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
 import { matchClient, summarizeClients, type ClientSummary } from "@/lib/clients";
 import { Icon } from "@/components/Icon";
@@ -46,7 +46,8 @@ export default async function ClientsPage({ searchParams }: { searchParams: SP }
   // Гейт по роли: раздел закрыт — requireSection уводит на первый экран роли.
   const ctx = (await requireSection("clients"))!;
   const shop = ctx.shop;
-  const [rows, pending] = await Promise.all([recentBookings(shop.id), countPending(shop.id)]);
+  // Узкая выборка: своду нужны снимки и услуга, а не data целиком (bookings.ts).
+  const [rows, pending] = await Promise.all([clientHistoryRows(shop.id), countPending(shop.id)]);
 
   const q = pick(sp.q).trim();
   const f = pick(sp.f);

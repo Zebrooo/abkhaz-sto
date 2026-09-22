@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authCookieOptions } from "@/lib/auth-cookies";
+import { fetchWithTimeout } from "@/lib/supabase/fetch";
 
 /**
  * Без входа: объяснение, как войти, здоровье, cookie-мост мобильной оболочки
@@ -31,10 +32,18 @@ export async function proxy(req: NextRequest) {
 
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    // Proxy в Next 16 работает в Node (см. docs/01-app/.../proxy.md,
+    // «Proxy defaults to using the Node.js runtime»), то есть внутри того же
+    // контейнера, что и рендер, — значит в GoTrue тоже ходим по внутренней
+    // docker-сети, а не петлёй через Traefik и Kong на каждую навигацию.
+    // Имя куки от адреса не зависит (auth-cookies.ts).
+    process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookieOptions: authCookieOptions,
+      // Потолок ожидания: зависший GoTrue отдаёт гостевую ветку (страница
+      // входа), а не вечную загрузку каждой вкладки.
+      global: { fetch: fetchWithTimeout },
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (toSet) => {

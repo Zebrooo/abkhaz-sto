@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  bookingsOfClient: vi.fn(),
+  clientVinRows: vi.fn(),
   setBookingVin: vi.fn(),
 }));
-vi.mock("@/lib/bookings", () => ({ bookingsOfClient: mocks.bookingsOfClient, setBookingVin: mocks.setBookingVin }));
+vi.mock("@/lib/bookings", () => ({ clientVinRows: mocks.clientVinRows, setBookingVin: mocks.setBookingVin }));
 vi.mock("@/lib/clients", () => ({ clientKey: () => "p:+79400000001" }));
 
 import { ensureBookingVin, vinFromHistory } from "./vin-history";
@@ -45,7 +45,7 @@ describe("ensureBookingVin — ленивое дописывание при чт
 
   it("история дала VIN — сохраняем и отдаём обновлённую запись", async () => {
     const b = { ...row({ plate: "В777ОР" }), id: 100 } as StoBookingRow;
-    mocks.bookingsOfClient.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 90 }]);
+    mocks.clientVinRows.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 90 }]);
     const updated = { ...b, data: { ...b.data, vehicle: { ...b.data.vehicle!, vin: "VIN123456" } } };
     mocks.setBookingVin.mockResolvedValue(updated);
     expect(await ensureBookingVin(7, b)).toBe(updated);
@@ -54,14 +54,14 @@ describe("ensureBookingVin — ленивое дописывание при чт
 
   it("свою же запись из истории вычёркиваем — сама с собой она не сверяется", async () => {
     const b = { ...row({ plate: "В777ОР" }), id: 100 } as StoBookingRow;
-    mocks.bookingsOfClient.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 100 }]);
+    mocks.clientVinRows.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 100 }]);
     expect(await ensureBookingVin(7, b)).toBe(b);
     expect(mocks.setBookingVin).not.toHaveBeenCalled();
   });
 
   it("истории нет — запись как была, апдейтов нет", async () => {
     const b = { ...row(), id: 100 } as StoBookingRow;
-    mocks.bookingsOfClient.mockResolvedValue([]);
+    mocks.clientVinRows.mockResolvedValue([]);
     expect(await ensureBookingVin(7, b)).toBe(b);
     expect(mocks.setBookingVin).not.toHaveBeenCalled();
   });
@@ -69,6 +69,6 @@ describe("ensureBookingVin — ленивое дописывание при чт
   it("VIN уже есть — в базу не ходим вовсе", async () => {
     const b = { ...row({ vin: "OWN000001" }), id: 100 } as StoBookingRow;
     expect(await ensureBookingVin(7, b)).toBe(b);
-    expect(mocks.bookingsOfClient).not.toHaveBeenCalled();
+    expect(mocks.clientVinRows).not.toHaveBeenCalled();
   });
 });

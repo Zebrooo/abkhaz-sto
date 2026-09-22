@@ -102,6 +102,11 @@ function fail(code: ApiErrorCode, message?: string): { ok: false; code: ApiError
  * у повторной попытки свой AbortController. last — «попытка последняя»:
  * warn о недоступности пишем только после неё, иначе один сбой с retry
  * давал бы два warn в логе.
+ *
+ * retriable — стоит ли пробовать ещё раз: true только для мгновенного
+ * сетевого отказа (DNS, connection refused). Свой таймаут — false: сайт
+ * жив, но медлен, и повтор лишь удвоил бы его нагрузку и растянул ожидание
+ * экрана с 3 до 6+ секунд.
  */
 async function attempt<T>(
   method: string,
@@ -110,7 +115,7 @@ async function attempt<T>(
   path: string,
   init: { body?: unknown; timeoutMs?: number },
   last: boolean,
-): Promise<ApiResult<T>> {
+): Promise<{ result: ApiResult<T>; retriable: boolean }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? READ_TIMEOUT_MS);
   try {
@@ -135,17 +140,21 @@ async function attempt<T>(
       if (code !== "not_found") {
         console.warn("[сто] сайт отказал:", method, path, res.status, payload?.error?.message ?? "");
       }
-      return fail(code, payload?.error?.message);
+      return { result: fail(code, payload?.error?.message), retriable: false };
     }
     if (!payload || payload.data === undefined) {
       console.warn("[сто] сайт ответил без данных:", method, path);
-      return fail("internal");
+      return { result: fail("internal"), retriable: false };
     }
-    return { ok: true, data: payload.data };
+    return { result: { ok: true, data: payload.data }, retriable: false };
   } catch (e) {
-    // AbortError от таймаута и сетевой сбой для экрана — одно и то же.
-    if (last) console.warn("[сто] сайт недоступен:", method, path, e);
-    return fail("unavailable");
+    // Для экрана таймаут и сетевой сбой — одно unavailable, а для ретрая —
+    // разное: наш ctrl.abort() сработал — значит соединение БЫЛО и просто не
+    // успело, повторять его бессмысленно и вредно. Чужой AbortError (из
+    // init.signal) сюда не попадает — свой signal мы ставим сами.
+    const timedOut = ctrl.signal.aborted;
+    if (last || timedOut) console.warn("[сто] сайт недоступен:", method, path, e);
+    return { result: fail("unavailable"), retriable: !timedOut };
   } finally {
     clearTimeout(timer);
   }
@@ -156,9 +165,11 @@ async function attempt<T>(
  * которое экран разбирает наравне с данными. Логируем всё, кроме not_found:
  * «ещё не заводили» — обычное состояние нового сервиса, а не происшествие.
  *
- * GET идемпотентен, поэтому единичный сетевой сбой повторяем один раз с
- * короткой паузой — иначе каждый случайный обрыв становился бы ошибкой на
- * экране. Пишущие методы не повторяем: на той стороне транзакция с побочными
+ * GET идемпотентен, поэтому единичный МГНОВЕННЫЙ сетевой сбой повторяем один
+ * раз с короткой паузой — иначе каждый случайный обрыв становился бы ошибкой
+ * на экране. Таймаут не повторяем (см. attempt): медленному сайту повтор
+ * только добавляет нагрузку, а экран ждал бы 6.3с вместо 3.15с. Пишущие
+ * методы не повторяем вовсе: на той стороне транзакция с побочными
  * эффектами, и вторая попытка могла бы задвоить её.
  */
 async function request<T>(
@@ -185,9 +196,10 @@ async function request<T>(
   const attempts = method === "GET" ? 2 : 1;
   for (let i = 0; i < attempts; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-    const res = await attempt<T>(method, url, headers, path, init, i === attempts - 1);
-    // Повторяем только сетевой сбой/таймаут; отказ сайта — это ответ.
-    if (res.ok || res.code !== "unavailable") return res;
+    const { result, retriable } = await attempt<T>(method, url, headers, path, init, i === attempts - 1);
+    // Повторяем только мгновенный сетевой отказ; отказ сайта — это ответ,
+    // а таймаут — знак, что сайту и так тяжело.
+    if (!retriable) return result;
   }
   return fail("unavailable");
 }

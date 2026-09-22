@@ -21,22 +21,21 @@ export const NAV_SECTION: Record<NavKey, Section> = {
 };
 
 /**
- * Адреса пунктов. «Осмотр» — единственный без постоянного адреса: он ведёт
- * на осмотр текущей записи, и его подставляет оболочка (hrefOf).
+ * Адреса пунктов — все постоянные. Раньше «Осмотр» был исключением: адрес
+ * текущей записи считал layout по записям дня и мастерам — два HTTP к сайту
+ * на каждый рендер каждого экрана у всех ролей. Теперь это страница-редиректор
+ * /osmotr: тот же расчёт происходит один раз, когда по ссылке действительно
+ * перешли.
  */
-const ROUTE: Record<Exclude<NavKey, "inspect">, string> = {
-  mywork: "/moi-raboty", chats: "/chat", smena: "/", today: "/segodnya", clients: "/klienty",
-  dash: "/svodka", masters: "/mastera", more: "/menu", services: "/uslugi", schedule: "/raspisanie",
-  notifs: "/uvedomleniya", access: "/dostupy",
+export const ROUTE: Record<NavKey, string> = {
+  mywork: "/moi-raboty", inspect: "/osmotr", chats: "/chat", smena: "/", today: "/segodnya",
+  clients: "/klienty", dash: "/svodka", masters: "/mastera", more: "/menu", services: "/uslugi",
+  schedule: "/raspisanie", notifs: "/uvedomleniya", access: "/dostupy",
   // Готовые отчёты за период. Раньше своего адреса у пункта не было и он вёл
   // на «Мой пост», где отчёты видны только за сегодня и только мастеру, —
   // хозяин искал готовые отчёты и не находил.
   report: "/otchety",
 };
-
-export function hrefOf(key: NavKey, inspectHref: string): string {
-  return key === "inspect" ? inspectHref : ROUTE[key];
-}
 
 export type TabDef = { key: NavKey | "fab"; label: string; icon: IconName };
 
@@ -130,7 +129,7 @@ export function navKeyOf(path: string): NavKey {
   if (path.startsWith("/osmotr")) return "inspect";
   if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "today";
   const first = "/" + path.split("/")[1];
-  const found = (Object.keys(ROUTE) as Exclude<NavKey, "inspect">[]).find(k => ROUTE[k] === first);
+  const found = (Object.keys(ROUTE) as NavKey[]).find(k => ROUTE[k] === first);
   return found ?? "more";
 }
 

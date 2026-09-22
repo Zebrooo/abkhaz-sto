@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { StoBookingRow } from "@/lib/sto/types";
 import { StatusBadge } from "@/components/Status";
 import { BookingGrip } from "@/components/CalendarDrag";
+import { bookingPrice } from "@/lib/booking-extras";
 import { formatRub, shortName, timeRange } from "@/lib/format";
 import { transitionAction } from "@/app/(app)/actions";
 
@@ -45,7 +46,8 @@ export function BookingRow({ b, variant = "day", returnTo, day }: {
         <div className="bk-title">{b.service.title}</div>
         <div className="bk-foot">
           <span className="bk-meta">{meta}</span>
-          {variant === "day" && <span className="bk-price">{formatRub(b.service.price)}</span>}
+          {/* Вместе с добавленным по ходу работы — та цифра, что и в карточке. */}
+          {variant === "day" && <span className="bk-price">{formatRub(bookingPrice(b))}</span>}
         </div>
       </Link>
       {variant === "pending" && (

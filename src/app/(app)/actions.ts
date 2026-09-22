@@ -9,7 +9,7 @@ import { blockIfViewing, roleIn } from "@/lib/context";
 import { readRoleView } from "@/lib/role-cookie";
 import { narrowRole } from "@/lib/role-view";
 import { can, HOME_PATH, type Section } from "@/lib/access";
-import { createManualBooking, rescheduleBooking, setBookingVin, transitionBooking } from "@/lib/bookings";
+import { addBookingExtra, createManualBooking, delayBooking, rescheduleBooking, setBookingVin, transitionBooking } from "@/lib/bookings";
 import { listServices, toBookingService, updateService } from "@/lib/services";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import {
@@ -19,6 +19,7 @@ import {
 import type { StoTransition } from "@/lib/sto/transitions";
 import { normalizePhone } from "@/lib/phone";
 import { plateProblem, vinProblem } from "@/lib/vehicle-input";
+import { DELAY_CHOICES } from "@/lib/delay";
 import { linkItemBooking } from "@/lib/api/reports";
 
 /**
@@ -150,6 +151,51 @@ export async function transitionAction(fd: FormData) {
     cancel: ". Сайт не ответил — клиента предупредите сами",
   } as const)[t];
   back(ret, { ok: res.told ? `${done}${told}` : `${done}${mute}` });
+}
+
+/**
+ * «Мастер задерживается»: продлить запись и сдвинуть идущие следом на посту.
+ * Право — раздел «Записи»: жмёт и мастер с телефона, и админ за стойкой
+ * (решение владельца 22.09.2026 — любой мастер, не только назначенный).
+ */
+export async function delayAction(fd: FormData) {
+  const { user, shop } = await ctx(fd, "bookings");
+  const bookingId = Number(str(fd, "bookingId"));
+  const ret = returnTo(fd, `/zapis/${bookingId}`);
+  const minutes = Number(str(fd, "minutes"));
+  if (!DELAY_CHOICES.includes(minutes)) back(ret, { do: null, err: "Выберите, на сколько продлить" });
+  if (!Number.isInteger(bookingId) || bookingId <= 0) back(ret, { do: null, err: "Запись не найдена" });
+  const res = await delayBooking({ shopId: shop.id, bookingId, minutes, actorUserId: user.id });
+  revalidateBookings();
+  revalidatePath(`/zapis/${bookingId}`);
+  revalidatePath("/moi-raboty");
+  if (!res.ok) back(ret, { do: null, err: res.error });
+  // Честно про уведомления, как у переходов: молчащий сайт — звоните сами.
+  const moved = res.shifted > 0 ? ` Сдвинуто записей следом: ${res.shifted}` : "";
+  const tail = res.shifted === 0 ? "" : res.told
+    ? " — их клиенты получили уведомление о смещении"
+    : ". Сайт не ответил — клиентов сдвинутых записей предупредите сами";
+  back(ret, { do: null, ok: `Время продлено на ${minutes} мин.${moved}${tail}` });
+}
+
+/** Услуга, добавленная по ходу работы, — в запись и в деньги; время не трогаем. */
+export async function addExtraAction(fd: FormData) {
+  const { shop } = await ctx(fd, "bookings");
+  const bookingId = Number(str(fd, "bookingId"));
+  const ret = returnTo(fd, `/zapis/${bookingId}`);
+  if (!Number.isInteger(bookingId) || bookingId <= 0) back(ret, { do: null, err: "Запись не найдена" });
+  const listingId = Number(str(fd, "listingId"));
+  const services = await listServices(shop.id);
+  const svc = services.find(s => s.listingId === listingId);
+  if (!svc) back(ret, { do: null, err: "Выберите услугу из прайса" });
+  const res = await addBookingExtra({
+    shopId: shop.id, bookingId,
+    extra: { title: svc.title, price: svc.price, currency: svc.currency, listingId: svc.listingId },
+  });
+  revalidateBookings();
+  revalidatePath(`/zapis/${bookingId}`);
+  if (!res.ok) back(ret, { do: null, err: res.error });
+  back(ret, { do: null, ok: `Добавлено к записи: ${svc.title}` });
 }
 
 export async function rescheduleAction(fd: FormData) {

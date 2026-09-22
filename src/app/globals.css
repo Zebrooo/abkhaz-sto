@@ -1986,6 +1986,16 @@ svg { display: block; }
   display: flex; flex-direction: column; gap: 10px;
 }
 .thread-foot .quick { margin: 0; padding: 0 0 2px; }
+/* Подвал — у нижнего края и без «клавиатурной» пустоты под ним: sticky держит
+   его у низа при прокрутке, но В ПОТОКЕ вниз не тянет, и при короткой
+   переписке подвал стоял сразу под пузырями, а до вкладок зияло. Колонка
+   треда растягивается на всю страницу (.page и так flex: 1): пузыри забирают
+   свободное место, подвал прижат к вкладкам. Только телефон — на вебе своя
+   геометрия двух панелей с фиксированной высотой (блок @media ниже). */
+@media (max-width: 880px) {
+  .thread-page, .thread-page .chat-wrap, .thread-page .chat-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .thread-page .thread-body { flex: 1; }
+}
 .chat-form { display: flex; gap: 8px; align-items: flex-end; }
 .chat-input {
   flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; font-size: 14px;

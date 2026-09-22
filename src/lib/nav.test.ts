@@ -33,6 +33,9 @@ describe("навигация по ролям", () => {
     expect(activeTab("master", "/zapis/812/osmotr")).toBe("inspect");
     expect(activeTab("admin", "/zapis/812/osmotr")).toBe("today");
     expect(activeTab("master", "/zapis/812")).toBe("mywork");
+    // «Осмотр без записи» — тоже вкладка «Осмотр»: с неё туда и приходят.
+    expect(navKeyOf("/osmotr/novyi")).toBe("inspect");
+    expect(activeTab("master", "/osmotr/novyi")).toBe("inspect");
   });
 
   // Ловушка, из-за которой хозяин не находил готовых отчётов: у пункта не

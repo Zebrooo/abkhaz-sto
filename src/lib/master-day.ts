@@ -95,7 +95,10 @@ export async function inspectHref(ctx: ServiceContext, day: string, now: Date): 
   const { mine } = await masterDay(ctx, day);
   const own = inspectTarget(mine, now);
   if (own) return `/zapis/${own.id}/osmotr`;
-  if (ctx.role === "master") return "/moi-raboty";
+  // Мастеру без текущей записи — «осмотр без записи»: машина с улицы уже
+  // стоит на посту, и прежний фолбэк в «Мои работы» выглядел как «кнопка не
+  // работает». Свои работы и отчёты доступны с того же экрана.
+  if (ctx.role === "master") return "/osmotr/novyi";
   const rows = await dayBookings(ctx.shop.id, day);
   const target = inspectTarget(rows.filter(isLive), now);
   return target ? `/zapis/${target.id}/osmotr` : "/otchety";

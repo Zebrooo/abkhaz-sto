@@ -197,9 +197,11 @@ export function addDefect(input: {
   presetId?: number;
   title?: string;
   severity?: Severity;
-  /** Своя формулировка: строка прайса или «цену согласует админ» (listingId пуст). */
+  /** Своя формулировка: строка прайса или «цену согласует админ» (без listingId).
+   *  Необязательное поле — это ПОЛЯ НЕТ, а не поле со значением null: null в
+   *  JSON доезжает до маршрута буквально (правило этого файла, см. masterId). */
   work?: string;
-  listingId?: number | null;
+  listingId?: number;
   note?: string;
   /** Фото, уже загруженные в хранилище (см. createPhotoUpload). */
   photoIds?: string[];

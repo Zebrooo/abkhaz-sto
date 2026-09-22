@@ -15,6 +15,7 @@ import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
 import { carsByClient, clientVehicles, vehicleCard } from "@/lib/vehicles";
 import { ClientPick } from "@/components/ClientPick";
+import { ServicePick } from "@/components/ServicePick";
 import { shopStorefrontUrl } from "@/lib/site";
 import { createManualAction } from "@/app/(app)/actions";
 
@@ -259,15 +260,13 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
           <div className="nb-cols">
             <div className="nb-svc">
               <div className="nb-lab">Услуга</div>
-              {pickable.map(s => (
-                <Link key={s.listingId} className="pick" href={href({ s: s.listingId })} aria-pressed={s.listingId === svc.listingId}>
-                  <div className="pick-main">
-                    <div className="pick-t">{s.title}</div>
-                    <div className="pick-s">{formatRub(s.price)} · {minutesLabel(s.durationMin)}</div>
-                  </div>
-                  {s.listingId === svc.listingId && <span className="pick-on"><Icon name="check" size={15} /></span>}
-                </Link>
-              ))}
+              <ServicePick items={pickable.map(s => ({
+                listingId: s.listingId,
+                title: s.title,
+                sub: `${formatRub(s.price)} · ${minutesLabel(s.durationMin)}`,
+                href: href({ s: s.listingId }),
+                selected: s.listingId === svc.listingId,
+              }))} />
               {hidden > 0 && !showAll && (
                 <p className="hint">
                   {count(hidden, "услуга", "услуги", "услуг")} {plural(hidden, "не влезает", "не влезают", "не влезают")} в окно {time} —{" "}

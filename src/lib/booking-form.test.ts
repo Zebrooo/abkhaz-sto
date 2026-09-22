@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
+import { fittingServices, matchesService, nextStep, pickService } from "@/lib/booking-form";
 import type { StoSchedule } from "@/lib/sto/schedule";
 import { localTime } from "@/lib/sto/slots";
 
@@ -106,5 +106,27 @@ describe("fittingServices", () => {
   it("порядок списка сохраняется", () => {
     const res = fit({ startsAt: at("10:00"), busy: busyFrom11 });
     expect(res.list).toEqual([services[1], services[2]]);
+  });
+});
+
+describe("matchesService", () => {
+  it("подстрока без учёта регистра", () => {
+    expect(matchesService("АКПП снять-поставить (сложно)", "акпп")).toBe(true);
+    expect(matchesService("Замена антифриза", "АНТИФРИЗ")).toBe(true);
+    expect(matchesService("Замена антифриза", "масло")).toBe(false);
+  });
+
+  it("ё и е — одна буква с обеих сторон", () => {
+    expect(matchesService("Развал-схождение всех колёс", "колес")).toBe(true);
+    expect(matchesService("Развал-схождение всех колес", "колёс")).toBe(true);
+  });
+
+  it("пустой и пробельный запрос совпадает со всем", () => {
+    expect(matchesService("Замена антифриза", "")).toBe(true);
+    expect(matchesService("Замена антифриза", "   ")).toBe(true);
+  });
+
+  it("края запроса не мешают: пробелы обрезаются", () => {
+    expect(matchesService("Втулки стабилизатора (легко)", "  втулки ")).toBe(true);
   });
 });

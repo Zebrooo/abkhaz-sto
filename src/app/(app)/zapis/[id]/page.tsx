@@ -9,6 +9,8 @@ import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { StatusBadge } from "@/components/Status";
 import { countClientVisits, countPending, dayBookings, getBooking } from "@/lib/bookings";
+import { ensureBookingVin } from "@/lib/vin-history";
+import { BookingVin } from "@/components/BookingVin";
 import { Timeline } from "@/components/Timeline";
 import { clientKey } from "@/lib/clients";
 import { count, formatPhone, formatRub, initials, minutesLabel, relativeAt, rub, timeRange } from "@/lib/format";
@@ -67,8 +69,11 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const ctx = await requireSection("bookings");
   if (!ctx) return null;
   const shop = ctx.shop;
-  const b = await getBooking(shop.id, bookingId);
+  let b = await getBooking(shop.id, bookingId);
   if (!b) notFound();
+  // VIN добираем из истории клиента сами; не нашёлся — ниже появится блок
+  // «VIN не указан» (спека abkhaz-auto 2026-09-22-sto-booking-garage-vin).
+  b = await ensureBookingVin(shop.id, b);
 
   const day = isDay(pick(sp.d)) ? pick(sp.d) : localDay(new Date(b.starts_at));
   const backHref = `/segodnya?d=${day}`;
@@ -253,6 +258,10 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               </div>
             </div>
           ))}
+
+          {/* VIN не нашёлся ни в снимке, ни в истории — просим вписать с
+              кузова. Блок, а не гейт: работе он не мешает. */}
+          {!b.data.vehicle?.vin && <BookingVin shopId={shop.id} bookingId={b.id} returnTo={self()} />}
 
           {showInspect && (
             <div className="card">

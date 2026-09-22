@@ -176,12 +176,18 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   }).map(s => ({ hhmm: localHHMM(s.startsAt), postNo: postNo ?? s.postNo }));
 
   const chosen = slots.find(s => s.hhmm === time) ?? null;
-  // Полоса дней — две недели вперёд от сегодня: запись по телефону чаще
-  // всего «на той неделе», и пять дней заставляли лезть в календарик. Если
+  // Полоса дней — две недели вперёд: запись по телефону чаще всего «на той
+  // неделе», и пять дней заставляли лезть в календарик. Полоса листается
+  // стрелками по неделе (?ds= — её начало, живёт в адресе, как весь экран);
+  // назад дальше сегодня не листаем — записывать в прошлое не на что. Если
   // пришли на день за краем полосы, она начинается с него, иначе выбранного
-  // дня в ней не видно.
-  const first = day >= today && day <= addDays(today, 13) ? today : day;
+  // дня в ней не видно. Выбор дня сбрасывает ds: полоса снова от сегодня.
+  const dsRaw = pick(sp.ds);
+  const paged = isDay(dsRaw) && dsRaw > today ? dsRaw : "";
+  const first = paged || (day >= today && day <= addDays(today, 13) ? today : day);
   const days = Array.from({ length: 14 }, (_, i) => addDays(first, i));
+  const stripPrev = addDays(first, -7) > today ? addDays(first, -7) : today;
+  const stripNext = addDays(first, 7);
   const when = chosen
     ? `${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo} · ${minutesLabel(svc.durationMin)}`
     : `${dayTitle(day)} · окно не выбрано · ${minutesLabel(svc.durationMin)}`;
@@ -194,15 +200,16 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   const fromBooking = /^\d+$/.test(pick(sp.fromBooking)) ? pick(sp.fromBooking) : "";
   const fromReport = !!(fromInspection && fromDefect && fromBooking);
 
-  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null; all?: boolean; m?: string | null };
+  type Over = { step?: number; d?: string; s?: number; post?: number | null; t?: string | null; all?: boolean; m?: string | null; ds?: string | null };
   const href = (over: Over) => {
-    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, all: showAll, m: month, ...over };
+    const v = { step, d: day, s: svc.listingId, post: postNo, t: time, all: showAll, m: month, ds: paged, ...over };
     const q = new URLSearchParams({ d: v.d, s: String(v.s) });
     if (v.step) q.set("step", String(v.step));
     if (v.post) q.set("post", String(v.post));
     if (v.t) q.set("t", v.t);
     if (v.all) q.set("all", "1");
     if (v.m) q.set("m", v.m);
+    if (v.ds) q.set("ds", v.ds);
     if (fromReport) { q.set("fromInspection", fromInspection); q.set("defect", fromDefect); q.set("fromBooking", fromBooking); }
     // Набранное и подставленное едет с собой по всем переходам: выбор дня не
     // должен стирать клиента, машину и дорогу назад.
@@ -278,7 +285,21 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
             <div className="nb-right">
               <div className="nb-when">
                 <div>
-                  <div className="nb-l"><span className="nb-p">День</span><span className="nb-w">День и пост</span></div>
+                  <div className="nb-l nb-l-days">
+                    <span className="nb-p">День</span><span className="nb-w">День и пост</span>
+                    {/* Листание по неделе. «Раньше» пропадает у сегодня, а не
+                        гаснет: неактивная стрелка выглядела бы как сломанная. */}
+                    <span className="daynav">
+                      {first > today && (
+                        <Link className="daynav-b" href={href({ ds: stripPrev === today ? null : stripPrev })} aria-label="Неделя раньше">
+                          <Icon name="chevron" size={16} />
+                        </Link>
+                      )}
+                      <Link className="daynav-b daynav-next" href={href({ ds: stripNext })} aria-label="Неделя позже">
+                        <Icon name="chevron" size={16} />
+                      </Link>
+                    </span>
+                  </div>
                   <div className="daypick">
                     {days.map(d => {
                       // Выходной сервиса гаснет, но остаётся кликабельным —
@@ -286,10 +307,9 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                       const off = dayWindow(schedule, d).off;
                       const cls = [off ? "is-off" : "", d === today ? "is-today" : ""].filter(Boolean).join(" ");
                       return (
-                        <Link key={d} href={href({ d, t: null })} aria-pressed={d === day}
+                        <Link key={d} href={href({ d, t: null, ds: null })} aria-pressed={d === day}
                           className={cls || undefined} title={`${dayEyebrow(d)}${off ? " · выходной" : ""}`}>
-                          <span className="dow nb-p">{dayOfWeekShort(d)}</span>
-                          <span className="dow nb-w">{d === today ? "Сегодня" : dayOfWeekShort(d)}</span>
+                          <span className="dow">{dayOfWeekShort(d)}</span>
                           <span className="num">{dayNumber(d)}</span>
                         </Link>
                       );
@@ -303,7 +323,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     label={day === today ? "Другой день" : dayTitle(day)}
                     openHref={href({ m: monthOf(day) })}
                     closeHref={href({ m: null })}
-                    dayHref={d => href({ d, t: null, m: null })}
+                    dayHref={d => href({ d, t: null, m: null, ds: null })}
                     monthHref={m => href({ m })}
                     isOff={d => dayWindow(schedule, d).off}
                     inline

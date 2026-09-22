@@ -1180,6 +1180,17 @@ svg { display: block; }
    слева, день и клиент справа, итог с ценой в подвале. */
 .nb-lab, .nb-w, .nb-total, .nb-total-p, .nb-cancel { display: none; }
 .nb-l { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+/* Подпись «День» со стрелками листания полосы — как у месяцев календарика. */
+.nb-l-days { display: flex; align-items: center; }
+.daynav { margin-left: auto; display: inline-flex; gap: 2px; }
+.daynav-b {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  margin: -6px 0; border-radius: 9px; color: var(--muted); transition: background .15s, color .15s;
+}
+.daynav-b:hover { background: var(--bg-2); color: var(--ink); }
+.daynav-b:active { background: var(--bg-2); }
+.daynav-b > svg { transform: rotate(180deg); }
+.daynav-next > svg { transform: none; }
 .nb-l-slots { display: flex; align-items: baseline; gap: 8px; }
 .nb-l-s { color: var(--muted-2); }
 .nb-svc { display: flex; flex-direction: column; gap: 8px; }
@@ -1227,24 +1238,13 @@ svg { display: block; }
   .nb-svc .pick[aria-pressed="true"], .nb-svc .pick[aria-pressed="true"]:hover { background: var(--warm); }
   .nb-svc .pick-t { font-size: 14px; }
   .nb-svc .pick-on { width: 24px; height: 24px; }
-  /* День — чипом в строку, «Ср, 16»: запятую ставит псевдоэлемент, чтобы
-     полоса дней осталась одной разметкой на телефон и веб. */
-  .nb .daypick { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; gap: 8px; }
-  .nb .daypick > * {
-    width: auto; min-height: 36px; padding: 0 16px; flex-direction: row; gap: 5px;
-    border-radius: var(--radius-pill); background: #fff; border: 1px solid var(--line-2);
-  }
-  .nb .daypick > *:hover { background: var(--bg-2); }
-  .nb .daypick > [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .nb .daypick > [aria-pressed="true"]:hover { background: var(--accent-dark); }
-  .nb .daypick .dow { font-size: 13px; font-weight: 600; text-transform: capitalize; letter-spacing: 0; color: inherit; }
-  .nb .daypick .dow::after { content: ","; }
-  /* Круг из телефонной полосы на вебе не нужен: чип «Ср, 16» — одна строка. */
-  .nb .daypick .num { width: auto; height: auto; font-size: 13px; font-weight: 600; letter-spacing: 0; }
-  /* Выходной гаснет целиком: color: inherit у .dow иначе оставлял бы «вс» тёмным. */
-  .nb .daypick > .is-off { color: var(--muted-2); }
-  .nb .daypick > .is-today .num, .nb .daypick > [aria-pressed="true"] .num { background: none; box-shadow: none; color: inherit; }
-  .nb .daypick > [aria-pressed="true"] .dow { color: inherit; }
+  /* Полоса — та же «календарная», что на телефоне, только скролл здесь ни к
+     чему: 14 дней ложатся сеткой в две недели по семь, и каждая колонка —
+     один день недели, как в настоящем календаре. */
+  .nb .daypick { display: grid; grid-template-columns: repeat(7, minmax(46px, 1fr)); overflow: visible; margin: 0; padding: 0; gap: 2px; }
+  .nb .daypick > * { width: auto; }
+  .nb .daypick > *:hover .num { background: var(--bg-2); }
+  .nb .daypick > [aria-pressed="true"]:hover .num { background: var(--accent-dark); }
   .nb .chips { margin-top: 10px; }
   .nb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   /* Комментарий стоит в сетке рядом с «Машиной» — и высотой равен ей:

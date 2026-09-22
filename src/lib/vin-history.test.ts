@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { vinFromHistory } from "./vin-history";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  bookingsOfClient: vi.fn(),
+  setBookingVin: vi.fn(),
+}));
+vi.mock("@/lib/bookings", () => ({ bookingsOfClient: mocks.bookingsOfClient, setBookingVin: mocks.setBookingVin }));
+vi.mock("@/lib/clients", () => ({ clientKey: () => "p:+79400000001" }));
+
+import { ensureBookingVin, vinFromHistory } from "./vin-history";
 import type { StoBookingRow } from "@/lib/sto/types";
 
 const row = (over: Partial<{ plate: string | null; vin: string | null }> = {}) => ({
@@ -29,5 +37,38 @@ describe("vinFromHistory", () => {
 
   it("пустая история — null", () => {
     expect(vinFromHistory([], row())).toBeNull();
+  });
+});
+
+describe("ensureBookingVin — ленивое дописывание при чтении", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("история дала VIN — сохраняем и отдаём обновлённую запись", async () => {
+    const b = { ...row({ plate: "В777ОР" }), id: 100 } as StoBookingRow;
+    mocks.bookingsOfClient.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 90 }]);
+    const updated = { ...b, data: { ...b.data, vehicle: { ...b.data.vehicle!, vin: "VIN123456" } } };
+    mocks.setBookingVin.mockResolvedValue(updated);
+    expect(await ensureBookingVin(7, b)).toBe(updated);
+    expect(mocks.setBookingVin).toHaveBeenCalledWith(7, 100, "VIN123456");
+  });
+
+  it("свою же запись из истории вычёркиваем — сама с собой она не сверяется", async () => {
+    const b = { ...row({ plate: "В777ОР" }), id: 100 } as StoBookingRow;
+    mocks.bookingsOfClient.mockResolvedValue([{ ...row({ plate: "В777ОР", vin: "VIN123456" }), id: 100 }]);
+    expect(await ensureBookingVin(7, b)).toBe(b);
+    expect(mocks.setBookingVin).not.toHaveBeenCalled();
+  });
+
+  it("истории нет — запись как была, апдейтов нет", async () => {
+    const b = { ...row(), id: 100 } as StoBookingRow;
+    mocks.bookingsOfClient.mockResolvedValue([]);
+    expect(await ensureBookingVin(7, b)).toBe(b);
+    expect(mocks.setBookingVin).not.toHaveBeenCalled();
+  });
+
+  it("VIN уже есть — в базу не ходим вовсе", async () => {
+    const b = { ...row({ vin: "OWN000001" }), id: 100 } as StoBookingRow;
+    expect(await ensureBookingVin(7, b)).toBe(b);
+    expect(mocks.bookingsOfClient).not.toHaveBeenCalled();
   });
 });

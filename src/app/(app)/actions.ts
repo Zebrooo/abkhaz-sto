@@ -9,7 +9,7 @@ import { blockIfViewing, roleIn } from "@/lib/context";
 import { readRoleView } from "@/lib/role-cookie";
 import { narrowRole } from "@/lib/role-view";
 import { can, HOME_PATH, type Section } from "@/lib/access";
-import { createManualBooking, rescheduleBooking, transitionBooking } from "@/lib/bookings";
+import { createManualBooking, rescheduleBooking, setBookingVin, transitionBooking } from "@/lib/bookings";
 import { listServices, toBookingService, updateService } from "@/lib/services";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import {
@@ -100,6 +100,27 @@ function revalidateSchedule() {
   revalidatePath("/menu");
   revalidatePath("/mastera");
   revalidatePath("/svodka");
+}
+
+/**
+ * VIN в запись рукой администратора (блок «VIN не указан», components/
+ * BookingVin.tsx; спека abkhaz-auto 2026-09-22-sto-booking-garage-vin).
+ * Пустой VIN — отказ здесь: vinProblem пустоту пропускает (поле у ручной
+ * записи необязательное), а этот блок существует ровно чтобы VIN появился.
+ */
+export async function saveBookingVinAction(fd: FormData) {
+  const { shop } = await ctx(fd, "bookings");
+  const ret = returnTo(fd, "/uvedomleniya");
+  const bookingId = Number(str(fd, "bookingId"));
+  if (!Number.isInteger(bookingId) || bookingId <= 0) back(ret, { err: "Запись не найдена" });
+  const vin = str(fd, "vin").trim().toUpperCase();
+  if (!vin) back(ret, { err: "Впишите VIN с кузова или из ПТС" });
+  const bad = vinProblem(vin);
+  if (bad) back(ret, { err: bad });
+  const updated = await setBookingVin(shop.id, bookingId, vin);
+  revalidateBookings();
+  revalidatePath(`/zapis/${bookingId}`);
+  back(ret, updated ? { ok: "VIN сохранён" } : { err: "Запись не найдена" });
 }
 
 export async function transitionAction(fd: FormData) {

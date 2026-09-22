@@ -6,6 +6,8 @@
 // склеивает машины в карточках) — VIN точно этой машины; без номера — только
 // когда у клиента в истории РОВНО ОДИН различный VIN: у человека с двумя
 // машинами угадывать нельзя.
+import { bookingsOfClient, setBookingVin } from "@/lib/bookings";
+import { clientKey } from "@/lib/clients";
 import type { StoBookingRow } from "@/lib/sto/types";
 import { normalizePlate } from "@/lib/vehicles";
 
@@ -18,4 +20,18 @@ export function vinFromHistory(rows: readonly StoBookingRow[], booking: StoBooki
   }
   const vins = [...new Set(rows.map(r => r.data.vehicle?.vin).filter((v): v is string => !!v))];
   return vins.length === 1 ? vins[0] : null;
+}
+
+/**
+ * Ленивое дописывание при чтении карточки: VIN нашёлся в истории — сохраняем
+ * и отдаём обновлённую запись, админский шаг не показывается вовсе. Тот же
+ * домовый приём, что закрепление user_id витрины в lib/shop.ts: чтение
+ * чинит данные, которые само же и вычислило.
+ */
+export async function ensureBookingVin(shopId: number, b: StoBookingRow): Promise<StoBookingRow> {
+  if (b.data.vehicle?.vin) return b;
+  const rows = await bookingsOfClient(shopId, clientKey(b));
+  const vin = vinFromHistory(rows.filter(r => r.id !== b.id), b);
+  if (!vin) return b;
+  return (await setBookingVin(shopId, b.id, vin)) ?? b;
 }

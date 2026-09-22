@@ -1,0 +1,21 @@
+// VIN записи — из истории клиента (спека abkhaz-auto
+// 2026-09-22-sto-booking-garage-vin, раздел 2.1): прежде чем просить
+// администратора вписать VIN с кузова, смотрим прошлые записи этого клиента.
+//
+// Правило осторожное: по совпадению госномера (той же нормализацией, что
+// склеивает машины в карточках) — VIN точно этой машины; без номера — только
+// когда у клиента в истории РОВНО ОДИН различный VIN: у человека с двумя
+// машинами угадывать нельзя.
+import type { StoBookingRow } from "@/lib/sto/types";
+import { normalizePlate } from "@/lib/vehicles";
+
+export function vinFromHistory(rows: readonly StoBookingRow[], booking: StoBookingRow): string | null {
+  if (booking.data.vehicle?.vin) return null;
+  const plate = normalizePlate(booking.data.vehicle?.plate);
+  if (plate) {
+    const hit = rows.find(r => r.data.vehicle?.vin && normalizePlate(r.data.vehicle?.plate) === plate);
+    return hit?.data.vehicle?.vin ?? null;
+  }
+  const vins = [...new Set(rows.map(r => r.data.vehicle?.vin).filter((v): v is string => !!v))];
+  return vins.length === 1 ? vins[0] : null;
+}

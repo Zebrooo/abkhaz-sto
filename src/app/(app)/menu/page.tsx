@@ -15,6 +15,7 @@ import { inspectHref, masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
 import { STO_ROLE_LABEL, type StoRole } from "@/lib/access";
 import { setRoleViewAction } from "@/app/(app)/view-actions";
+import { leaveAdminShopAction } from "@/app/(app)/admin-actions";
 import { periodRange } from "@/lib/reports";
 import { shopStorefrontUrl } from "@/lib/site";
 import { getServerUser } from "@/lib/supabase/server";
@@ -179,6 +180,24 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
                 </form>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Покинуть чужую витрину — админу сайта, вошедшему через /admin-vhod.
+            Своей карточкой над выходом: это выход из СЕРВИСА, а не из
+            приложения, и путать их нельзя. */}
+        {shop.adminEntry && (
+          <div className="card card-flat">
+            <form action={leaveAdminShopAction}>
+              <button className="row mrow row-exit" type="submit">
+                <span className="sq sq-accent"><Icon name="arrowRight" size={18} /></span>
+                <div className="row-main">
+                  <div className="row-t">Покинуть сервис</div>
+                  <div className="row-s">вы здесь как админ сайта</div>
+                </div>
+                <span className="chev"><Icon name="chevron" size={16} /></span>
+              </button>
+            </form>
           </div>
         )}
 

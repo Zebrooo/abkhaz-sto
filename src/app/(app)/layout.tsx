@@ -2,6 +2,7 @@ import { logoutAction } from "@/app/auth-actions";
 import { serviceContext } from "@/lib/context";
 import { STO_ROLE_LABEL } from "@/lib/access";
 import { ViewBar } from "@/components/ViewBar";
+import { AdminBar } from "@/components/AdminBar";
 import { countPending } from "@/lib/bookings";
 import { inspectHref } from "@/lib/master-day";
 import { TabBar } from "@/components/TabBar";
@@ -87,6 +88,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           мастера, решит, что половина приложения пропала. Полоса висит над
           всеми экранами и уводит обратно одной кнопкой. */}
       {ctx.viewing && <ViewBar roleLabel={STO_ROLE_LABEL[role].toLowerCase()} />}
+      {/* Полоса админа сайта — тем же правилом видимости, что примерка:
+          в чужой витрине забыть, где стоишь, ещё дороже, чем в чужой роли. */}
+      {shop.adminEntry && <AdminBar shopName={shop.name} />}
       <div className="app-body">
         <SideNav role={role} siteUrl={shopStorefrontUrl(shop.id)} unread={pending} inspectHref={inspect} />
         <main className="main">{children}</main>

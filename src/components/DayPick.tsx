@@ -45,8 +45,10 @@ export function DayPick({
   const today = todayLocal();
   return (
     <div className={`dp${open ? " is-open" : ""}${inline ? " dp-inline" : ""}`}>
+      {/* Календарь, не часы: кнопка выбирает ДЕНЬ, а часы на ней путали её
+          с выбором времени — окна времени стоят на тех же экранах рядом. */}
       <Link className="dp-btn" href={open ? closeHref : openHref} aria-expanded={open}>
-        <Icon name="clock" size={15} />
+        <Icon name="calendar" size={15} />
         <span>{label ?? dayTitle(day)}</span>
         <Icon name="chevron" size={14} />
       </Link>

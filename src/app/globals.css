@@ -1229,7 +1229,10 @@ svg { display: block; }
   .nb .daypick .dow::after { content: ","; }
   .nb .daypick .num { font-size: 13px; font-weight: 600; letter-spacing: 0; }
   .nb .chips { margin-top: 10px; }
-  .nb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* minmax(0,…) и min-width: 0 — иначе строка «Госномер + VIN» своей
+     внутренней шириной распирает колонку, и поля режет краем карточки. */
+  .nb-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .nb-fields > * { min-width: 0; }
   /* Комментарий стоит в сетке рядом с «Машиной» — и высотой равен ей:
      min-height мало, две строки textarea задают высоту сами. */
   .nb-fields textarea { min-height: 44px; height: 44px; }

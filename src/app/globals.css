@@ -1180,6 +1180,17 @@ svg { display: block; }
    слева, день и клиент справа, итог с ценой в подвале. */
 .nb-lab, .nb-w, .nb-total, .nb-total-p, .nb-cancel { display: none; }
 .nb-l { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+/* Подпись «День» со стрелками листания полосы — как у месяцев календарика. */
+.nb-l-days { display: flex; align-items: center; }
+.daynav { margin-left: auto; display: inline-flex; gap: 2px; }
+.daynav-b {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  margin: -6px 0; border-radius: 9px; color: var(--muted); transition: background .15s, color .15s;
+}
+.daynav-b:hover { background: var(--bg-2); color: var(--ink); }
+.daynav-b:active { background: var(--bg-2); }
+.daynav-b > svg { transform: rotate(180deg); }
+.daynav-next > svg { transform: none; }
 .nb-l-slots { display: flex; align-items: baseline; gap: 8px; }
 .nb-l-s { color: var(--muted-2); }
 .nb-svc { display: flex; flex-direction: column; gap: 8px; }

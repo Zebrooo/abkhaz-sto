@@ -47,8 +47,43 @@ export type MyShopMembership = {
   active: boolean;
 };
 
-export function fetchMyShops(actorUserId: string): Promise<ApiResult<MyShopMembership[]>> {
-  return siteGet<MyShopMembership[]>("members/mine", { actorUserId });
+/**
+ * Кэш членств на процесс: fetchMyShops зовётся на КАЖДЫЙ рендер каждого
+ * экрана (shop.ts → serviceContext), и без кэша это HTTP к сайту на всякий
+ * клик. 30 секунд безопасны: роль здесь — подсказка интерфейсу, а не граница
+ * доступа (AGENTS.md) — что человеку разрешено на самом деле, сайт проверяет
+ * по actorUserId в каждом запросе, поэтому увольнение перестаёт работать
+ * сразу, а из меню пропадает следующим запросом после протухания. Правки
+ * доступов из ЭТОГО процесса видны мгновенно — их сбрасывает
+ * invalidateMyShops (staff-actions.ts).
+ *
+ * Ошибки сайта не кэшируем: молчание сайта не должно на 30 секунд отрезать
+ * сотрудника от витрины, следующий рендер спросит снова.
+ */
+const MY_SHOPS_TTL_MS = 30_000;
+/** Потолок записей — чтобы кэш не рос без границы; старейшая вытесняется. */
+const MY_SHOPS_MAX = 500;
+const myShops = new Map<string, { at: number; shops: MyShopMembership[] }>();
+
+export async function fetchMyShops(actorUserId: string): Promise<ApiResult<MyShopMembership[]>> {
+  const hit = myShops.get(actorUserId);
+  if (hit && Date.now() - hit.at < MY_SHOPS_TTL_MS) return { ok: true, data: hit.shops };
+  const res = await siteGet<MyShopMembership[]>("members/mine", { actorUserId });
+  if (res.ok) {
+    // delete + set держит порядок Map порядком записи: первый ключ — старейший.
+    myShops.delete(actorUserId);
+    if (myShops.size >= MY_SHOPS_MAX) {
+      const oldest = myShops.keys().next().value;
+      if (oldest !== undefined) myShops.delete(oldest);
+    }
+    myShops.set(actorUserId, { at: Date.now(), shops: res.data });
+  }
+  return res;
+}
+
+/** Сброс кэша после правки доступов: свой процесс видит её сразу же. */
+export function invalidateMyShops(userId: string): void {
+  myShops.delete(userId);
 }
 
 /** GET /api/sto/members?shopId&actorUserId → StoMember[]; владелец первой строкой. */

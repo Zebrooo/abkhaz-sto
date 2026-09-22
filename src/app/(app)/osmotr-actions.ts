@@ -230,7 +230,10 @@ export async function addDefectAction(fd: FormData) {
     const listing = services.find(s => s.title === work) ?? null;
     const known = work === NEGOTIABLE_WORK || listing || customWorks(presets.ok ? presets.data : []).some(w => w.work === work);
     if (!known) back(bare(ret), { ...keep, err: "Работа — только из списка" });
-    res = await addDefect({ ...base, title, severity, work, listingId: listing?.listingId ?? null });
+    // Работа не из прайса (каталог узла, «цену согласует админ») — поля
+    // listingId НЕТ, а не null: сайт разбирает JSON буквально, и null уже
+    // ломал сохранение дефекта («listingId — целый id услуги из прайса»).
+    res = await addDefect({ ...base, title, severity, work, ...(listing ? { listingId: listing.listingId } : {}) });
   }
   revalidateInspection(bookingId);
   if (!res.ok) back(bare(ret), { ...keep, err: res.error });

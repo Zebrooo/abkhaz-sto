@@ -21,8 +21,12 @@ import {
 } from "@/lib/api/inspections";
 import type { ApiResult } from "@/lib/api/site-api";
 import { fetchReportPdf, pdfReady, sendReport, setEstimateItem } from "@/lib/api/reports";
+import { createWalkInBooking } from "@/lib/bookings";
 import { blockIfViewing, serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
+import { currentPost } from "@/lib/post-hold";
+import { readPostHold } from "@/lib/post-cookie";
+import { vinProblem } from "@/lib/vehicle-input";
 import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } from "@/lib/inspection";
 import { isNodeKey } from "@/lib/inspection-nodes";
 import { VIEW_ONLY_MESSAGE } from "@/lib/role-view";
@@ -76,6 +80,35 @@ function revalidateInspection(bookingId: number) {
   revalidatePath(`/zapis/${bookingId}`);
   revalidatePath(`/zapis/${bookingId}/osmotr`);
   revalidatePath(`/zapis/${bookingId}/otchet`);
+}
+
+/**
+ * Осмотр без записи: машина заехала с улицы, и мастер не должен ради неё
+ * собирать ручную запись из трёх шагов (услуга, окно, клиент). Спрашиваем
+ * владельца и машину, запись «Осмотр» создаётся «сейчас» на свободный пост —
+ * и сразу открывается осмотр, который первым делом спросит пробег, как у
+ * любой записи. Набранное при отказе едет назад в адресе — опечатка в VIN не
+ * стирает всё остальное (тот же приём, что у формы записи).
+ */
+export async function createWalkInAction(fd: FormData) {
+  const c = await ctx();
+  const name = str(fd, "name");
+  const phone = str(fd, "phone");
+  const vehicle = str(fd, "vehicle");
+  const plate = str(fd, "plate");
+  const vin = str(fd, "vin");
+  const keep = { n: name, ph: phone, v: vehicle, pl: plate, vin };
+  if (!name) back("/osmotr/novyi", { ...keep, err: "Впишите владельца — по имени запись потом ищется" });
+  const vinErr = vinProblem(vin);
+  if (vinErr) back("/osmotr/novyi", { ...keep, err: vinErr });
+  const hold = await readPostHold(c, todayLocal());
+  const res = await createWalkInBooking({
+    shopId: c.shop.id, schedule: c.shop.schedule, client: { name, phone: phone || null },
+    vehicle, plate, vin, preferredPost: currentPost(hold), actorUserId: c.userId,
+  });
+  if (!res.ok) back("/osmotr/novyi", { ...keep, err: res.error });
+  revalidatePath("/segodnya");
+  back(`/zapis/${res.id}/osmotr`, { ok: "Запись создана — впишите пробег и начинайте осмотр" });
 }
 
 /**

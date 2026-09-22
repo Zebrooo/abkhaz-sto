@@ -10,7 +10,7 @@ import { clientKey, clientKeyOf } from "@/lib/clients";
 import { vehicleKey, type VehiclePastRow } from "@/lib/vehicles";
 import type { StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
-import { isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
+import { firstFreePost, isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
 import { addDays } from "@/lib/format";
 import type { StoSchedule } from "@/lib/sto/schedule";
 import { normalizeVin, plateInput } from "@/lib/vehicle-input";
@@ -303,6 +303,58 @@ export async function rescheduleBooking(input: {
 }
 
 /** Ручная запись клиента с улицы из приложения: без учётки, имя и телефон снимком. */
+/**
+ * Запись «с улицы» под осмотр: машина уже заехала на пост без записи, и
+ * человек за стойкой не должен выбирать услугу и окно — реальность первична.
+ * Поэтому расписание и «время прошло» НЕ проверяются (в отличие от
+ * createManualBooking): запись ставится «сейчас», услуга — «Осмотр» с
+ * договорной ценой (смету соберёт сам осмотр). Пост — свой (если свободен),
+ * иначе первый свободный: пересечение записей на посту не пустит база (23P01).
+ */
+export async function createWalkInBooking(input: {
+  shopId: number;
+  schedule: StoSchedule | null;
+  client: { name: string; phone: string | null };
+  vehicle: string;
+  plate?: string | null;
+  vin?: string | null;
+  /** Пост, где человек стоит; null — не отмечался. */
+  preferredPost: number | null;
+  actorUserId: string;
+}): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  const now = new Date();
+  const service: StoBookingService = { title: "Осмотр", price: null, currency: "RUB", durationMin: 60 };
+  const endsAt = new Date(now.getTime() + service.durationMin * 60_000);
+  const posts = input.schedule?.posts ?? 1;
+  const busy = await busyIntervals(input.shopId, new Date(now.getTime() - 24 * 3_600_000), new Date(now.getTime() + 24 * 3_600_000));
+  const clash = (p: number) => busy.some(b => b.postNo === p && b.startsAt < endsAt && b.endsAt > now);
+  const postNo = input.preferredPost && input.preferredPost <= posts && !clash(input.preferredPost)
+    ? input.preferredPost
+    : firstFreePost(posts, busy, now, endsAt);
+  if (postNo === null) return { ok: false, error: "Все посты заняты записями — освободите пост или перенесите запись" };
+
+  const plate = plateInput(input.plate);
+  const vin = normalizeVin(input.vin);
+  const brand = input.vehicle.trim().slice(0, 80);
+  const data: StoBookingData = {
+    client: { name: input.client.name, phone: input.client.phone },
+    ...(brand || plate || vin ? { vehicle: { brand, model: null, year: null, plate, vin } } : {}),
+  };
+  const { data: row, error } = await createSupabaseAdmin().from("sto_bookings").insert({
+    shop_id: input.shopId, client_id: null, vehicle_id: null, listing_id: null, service,
+    starts_at: now.toISOString(), ends_at: endsAt.toISOString(), post_no: postNo,
+    // Машина уже на посту — подтверждать нечего.
+    status: "confirmed", source: "app", data,
+  }).select("id").single<{ id: number }>();
+  if (error || !row) {
+    return { ok: false, error: error?.code === "23P01" ? "Пост только что заняли — попробуйте ещё раз" : "Не удалось сохранить: " + (error?.message ?? "") };
+  }
+  // Как у createManualBooking: событие сайт обработает, когда дойдёт.
+  void notifySite({ bookingId: row.id, shopId: input.shopId, event: "created", actorUserId: input.actorUserId })
+    .catch(e => console.warn("[сто] событие создания записи не ушло на сайт:", e));
+  return { ok: true, id: row.id };
+}
+
 export async function createManualBooking(input: {
   shopId: number; schedule: StoSchedule; day: string; hhmm: string; service: StoBookingService; listingId: number | null;
   client: { name: string; phone: string | null }; vehicle: string; comment: string; actorUserId: string;

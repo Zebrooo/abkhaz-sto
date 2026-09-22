@@ -126,6 +126,8 @@ export const MENU: Record<StoRole, readonly MenuKey[]> = {
 export function navKeyOf(path: string): NavKey {
   if (path === "/") return "smena";
   if (/^\/zapis\/\d+\/(osmotr|otchet)/.test(path)) return "inspect";
+  // «Осмотр без записи» — тоже вкладка «Осмотр»: с неё туда и приходят.
+  if (path.startsWith("/osmotr")) return "inspect";
   if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "today";
   const first = "/" + path.split("/")[1];
   const found = (Object.keys(ROUTE) as Exclude<NavKey, "inspect">[]).find(k => ROUTE[k] === first);

@@ -569,16 +569,28 @@ svg { display: block; }
 .slot[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .slot:active { transform: scale(.95); }
 
-.daypick { display: flex; gap: 6px; overflow-x: auto; margin: 0 -18px; padding: 0 18px 2px; scrollbar-width: none; }
+/* Полоса дней — «календарная», нарочно НЕ такая, как окна времени ниже:
+   там серые плитки, здесь день недели над числом в круге. Одинаковые серые
+   прямоугольники дат и времени на одном экране путались. */
+.daypick { display: flex; gap: 2px; overflow-x: auto; margin: 0 -18px; padding: 0 14px 2px; scrollbar-width: none; }
 .daypick::-webkit-scrollbar { display: none; }
 .daypick > * {
-  flex: none; width: 56px; min-height: 62px; border-radius: var(--radius-lg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background: var(--bg-2); color: var(--ink); transition: background .15s, color .15s, transform .12s;
+  flex: none; width: 46px; padding: 5px 0 7px; border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  color: var(--ink); transition: transform .12s;
 }
-.daypick > [aria-pressed="true"] { background: var(--accent); color: #fff; }
-.daypick .dow { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
-.daypick .num { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.daypick > *:active { transform: scale(.94); }
+.daypick .dow { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.daypick .num {
+  width: 33px; height: 33px; border-radius: var(--radius-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14.5px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.daypick > .is-today .num { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.daypick > .is-off .dow, .daypick > .is-off .num { color: var(--muted-2); }
+.daypick > [aria-pressed="true"] .dow { color: var(--accent); }
+.daypick > [aria-pressed="true"] .num { background: var(--accent); color: #fff; box-shadow: none; }
 
 .act-list { display: flex; flex-direction: column; gap: 8px; }
 .act {
@@ -1223,11 +1235,16 @@ svg { display: block; }
     border-radius: var(--radius-pill); background: #fff; border: 1px solid var(--line-2);
   }
   .nb .daypick > *:hover { background: var(--bg-2); }
-  .nb .daypick > [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .nb .daypick > [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
   .nb .daypick > [aria-pressed="true"]:hover { background: var(--accent-dark); }
-  .nb .daypick .dow { font-size: 13px; font-weight: 600; text-transform: capitalize; letter-spacing: 0; opacity: 1; }
+  .nb .daypick .dow { font-size: 13px; font-weight: 600; text-transform: capitalize; letter-spacing: 0; color: inherit; }
   .nb .daypick .dow::after { content: ","; }
-  .nb .daypick .num { font-size: 13px; font-weight: 600; letter-spacing: 0; }
+  /* Круг из телефонной полосы на вебе не нужен: чип «Ср, 16» — одна строка. */
+  .nb .daypick .num { width: auto; height: auto; font-size: 13px; font-weight: 600; letter-spacing: 0; }
+  /* Выходной гаснет целиком: color: inherit у .dow иначе оставлял бы «вс» тёмным. */
+  .nb .daypick > .is-off { color: var(--muted-2); }
+  .nb .daypick > .is-today .num, .nb .daypick > [aria-pressed="true"] .num { background: none; box-shadow: none; color: inherit; }
+  .nb .daypick > [aria-pressed="true"] .dow { color: inherit; }
   .nb .chips { margin-top: 10px; }
   .nb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   /* Комментарий стоит в сетке рядом с «Машиной» — и высотой равен ей:

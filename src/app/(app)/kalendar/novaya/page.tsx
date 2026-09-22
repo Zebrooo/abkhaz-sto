@@ -9,7 +9,7 @@ import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
 import { DayPick } from "@/components/DayPick";
 import { ScreenHead } from "@/components/ScreenHead";
-import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
+import { addDays, count, dayEyebrow, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
 import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
@@ -176,10 +176,12 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   }).map(s => ({ hhmm: localHHMM(s.startsAt), postNo: postNo ?? s.postNo }));
 
   const chosen = slots.find(s => s.hhmm === time) ?? null;
-  // Полоса дней — пять вперёд от сегодня; если пришли на день за её краем,
-  // полоса начинается с него, иначе выбранного дня в ней не видно.
-  const first = day >= today && day <= addDays(today, 4) ? today : day;
-  const days = Array.from({ length: 5 }, (_, i) => addDays(first, i));
+  // Полоса дней — две недели вперёд от сегодня: запись по телефону чаще
+  // всего «на той неделе», и пять дней заставляли лезть в календарик. Если
+  // пришли на день за краем полосы, она начинается с него, иначе выбранного
+  // дня в ней не видно.
+  const first = day >= today && day <= addDays(today, 13) ? today : day;
+  const days = Array.from({ length: 14 }, (_, i) => addDays(first, i));
   const when = chosen
     ? `${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo} · ${minutesLabel(svc.durationMin)}`
     : `${dayTitle(day)} · окно не выбрано · ${minutesLabel(svc.durationMin)}`;
@@ -278,13 +280,20 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                 <div>
                   <div className="nb-l"><span className="nb-p">День</span><span className="nb-w">День и пост</span></div>
                   <div className="daypick">
-                    {days.map(d => (
-                      <Link key={d} href={href({ d, t: null })} aria-pressed={d === day}>
-                        <span className="dow nb-p">{dayOfWeekShort(d)}</span>
-                        <span className="dow nb-w">{d === today ? "Сегодня" : dayOfWeekShort(d)}</span>
-                        <span className="num">{dayNumber(d)}</span>
-                      </Link>
-                    ))}
+                    {days.map(d => {
+                      // Выходной сервиса гаснет, но остаётся кликабельным —
+                      // как клетка в календарике: записать можно и в выходной.
+                      const off = dayWindow(schedule, d).off;
+                      const cls = [off ? "is-off" : "", d === today ? "is-today" : ""].filter(Boolean).join(" ");
+                      return (
+                        <Link key={d} href={href({ d, t: null })} aria-pressed={d === day}
+                          className={cls || undefined} title={`${dayEyebrow(d)}${off ? " · выходной" : ""}`}>
+                          <span className="dow nb-p">{dayOfWeekShort(d)}</span>
+                          <span className="dow nb-w">{d === today ? "Сегодня" : dayOfWeekShort(d)}</span>
+                          <span className="num">{dayNumber(d)}</span>
+                        </Link>
+                      );
+                    })}
                   </div>
                   {/* Чипы — ближайшие дни, а записывают и на октябрь: тут
                       календарик на любой день вперёд. */}

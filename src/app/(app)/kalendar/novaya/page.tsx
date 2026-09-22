@@ -309,8 +309,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                       return (
                         <Link key={d} href={href({ d, t: null, ds: null })} aria-pressed={d === day}
                           className={cls || undefined} title={`${dayEyebrow(d)}${off ? " · выходной" : ""}`}>
-                          <span className="dow nb-p">{dayOfWeekShort(d)}</span>
-                          <span className="dow nb-w">{d === today ? "Сегодня" : dayOfWeekShort(d)}</span>
+                          <span className="dow">{dayOfWeekShort(d)}</span>
                           <span className="num">{dayNumber(d)}</span>
                         </Link>
                       );

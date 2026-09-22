@@ -1194,6 +1194,9 @@ svg { display: block; }
 .nb-l-slots { display: flex; align-items: baseline; gap: 8px; }
 .nb-l-s { color: var(--muted-2); }
 .nb-svc { display: flex; flex-direction: column; gap: 8px; }
+/* Пункты услуг в своей обёртке (ServicePick): на вебе прокручивается она,
+   а поиск стоит над ней. Тот же столбик с тем же зазором, что у колонки. */
+.svc-list { display: flex; flex-direction: column; gap: 8px; }
 .nb-fields { display: flex; flex-direction: column; gap: 12px; }
 /* Точки шага стоят справа от названия шага — как в шапке шторки. */
 .sect .sheet-dots { margin-left: auto; }
@@ -1223,10 +1226,24 @@ svg { display: block; }
      и пост стоят под одной подписью «День и пост». */
   .nb-p, .nb-next, .nb-back, .nb-l-post, .nb .summary { display: none; }
   .nb-w { display: inline; }
-  .nb-box { max-width: 840px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
-  .nb-cols { display: flex; align-items: stretch; }
+  /* Окно записи целиком в экран, без прокрутки страницы: услуг бывает под
+     сотню, и подвал с «Записать» иначе оказывается за десять экранов ниже.
+     Высоту зажимает каркас .app, а не calc от шапки: между шапкой и телом
+     бывают полосы примерки роли и админ-входа переменной высоты — flex
+     раздаёт остаток сам. Дальше вниз всё уже готово: .app-body и .main
+     держат min-height: 0, форма ужимается, колонки прокручиваются каждая
+     внутри себя, подвал с итогом всегда на виду. */
+  .app:has(.nb) { height: 100dvh; }
+  .nb-box { max-width: 840px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .nb-cols { display: flex; align-items: stretch; flex: 1; min-height: 0; }
   .nb-svc { flex: none; width: 330px; border-right: 1px solid var(--line); padding: 16px; gap: 6px; }
-  .nb-right { flex: 1; min-width: 0; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+  /* Прокручиваемая флекс-колонка ужимает детей раньше, чем начинает
+     прокручивать: услуги наезжали друг на друга. */
+  .nb-svc > *, .nb-right > *, .svc-list > * { flex: none; }
+  /* Прокручивается список услуг, а подпись, поиск и «показать все» стоят
+     по краям колонки на виду. */
+  .nb-svc .svc-list { flex: 1; min-height: 0; overflow-y: auto; gap: 6px; }
+  .nb-right { flex: 1; min-width: 0; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
   .nb-when { display: flex; flex-direction: column; gap: 16px; }
   .nb-lab {
     display: block; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em;

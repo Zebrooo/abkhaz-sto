@@ -44,21 +44,25 @@ export function ServicePick({ items }: { items: ServicePickItem[] }) {
           />
         </div>
       )}
-      {shown.map(i => (
-        <Link key={i.listingId} className="pick" href={i.href} aria-pressed={i.selected}>
-          <div className="pick-main">
-            <div className="pick-t">{i.title}</div>
-            <div className="pick-s">{i.sub}</div>
-          </div>
-          {i.selected && <span className="pick-on"><Icon name="check" size={15} /></span>}
-        </Link>
-      ))}
-      {shown.length === 0 && (
-        <p className="hint">
-          По запросу «{q.trim()}» ничего не нашлось —{" "}
-          <button type="button" onClick={() => setQ("")}>сбросить</button>
-        </p>
-      )}
+      {/* Своя обёртка вокруг пунктов: на вебе колонка услуг зажата в экран,
+          и прокручивается именно список — поиск остаётся над ним. */}
+      <div className="svc-list">
+        {shown.map(i => (
+          <Link key={i.listingId} className="pick" href={i.href} aria-pressed={i.selected}>
+            <div className="pick-main">
+              <div className="pick-t">{i.title}</div>
+              <div className="pick-s">{i.sub}</div>
+            </div>
+            {i.selected && <span className="pick-on"><Icon name="check" size={15} /></span>}
+          </Link>
+        ))}
+        {shown.length === 0 && (
+          <p className="hint">
+            По запросу «{q.trim()}» ничего не нашлось —{" "}
+            <button type="button" onClick={() => setQ("")}>сбросить</button>
+          </p>
+        )}
+      </div>
     </>
   );
 }

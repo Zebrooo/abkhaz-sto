@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSection } from "@/lib/context";
-import { countPending, dayBookings, listBookings } from "@/lib/bookings";
+import { countPending, dayBookings, listBookingDots } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { Flash } from "@/components/Flash";
 import { Icon } from "@/components/Icon";
@@ -75,8 +75,9 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
     month
       // Границы — по СЕТКЕ, а не по месяцу: в ней видны и последние дни
       // прошлого месяца, и первые полторы недели следующего, и по ним можно
-      // ткнуть. Без точек они читались бы как свободные.
-      ? listBookings(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
+      // ткнуть. Без точек они читались бы как свободные. Выборка лёгкая:
+      // точке нужны только день и статус, а не строки месяца целиком.
+      ? listBookingDots(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
       : Promise.resolve([]),
     countPending(shop.id),
   ]);

@@ -3,9 +3,22 @@
 // а карточка «кто к нам ездит» собирается из снимков записи. Ключ строки —
 // учётка клиента, иначе телефон, иначе имя: так две записи одного человека
 // склеиваются, а два «Ивана» без телефона не сливаются в одного.
-import type { StoBookingRow } from "@/lib/sto/types";
+import type { StoBookingData, StoBookingRow } from "@/lib/sto/types";
 import { normalizePhone } from "@/lib/phone";
 import { foldLookalike } from "@/lib/vehicle-input";
+
+/**
+ * Кусок строки записи со снимками клиента и машины — то, что читают ключи
+ * склейки. Лёгкие выборки (lib/bookings.ts) отдают её вместо целой строки:
+ * data целиком по тысяче строк тянуть незачем. Полная StoBookingRow сюда
+ * подходит как есть — в StoBookingData все поля необязательные.
+ */
+export type ClientSnapshotRow = Pick<StoBookingRow, "id" | "client_id"> & {
+  data: Pick<StoBookingData, "client" | "vehicle">;
+};
+
+/** Строка, которой хватает сводам клиентов и машин (summarizeClients, vehicleCard). */
+export type ClientHistoryRow = ClientSnapshotRow & Pick<StoBookingRow, "service" | "starts_at" | "status">;
 
 export type ClientSummary = {
   /** Ключ для адреса /klienty/<key>. */
@@ -30,17 +43,17 @@ export type ClientSummary = {
 
 export type ClientCard = ClientSummary & { history: StoBookingRow[] };
 
-function carLine(b: StoBookingRow): string | null {
+function carLine(b: ClientHistoryRow): string | null {
   const v = b.data.vehicle;
   if (!v) return null;
   return [v.brand, v.model, v.year ? String(v.year) : null].filter(Boolean).join(" ") || null;
 }
 
-function nameOf(b: StoBookingRow): string {
+function nameOf(b: ClientHistoryRow): string {
   return b.data.client?.name?.trim() || (b.client_id ? "Клиент с сайта" : "Клиент");
 }
 
-function phoneOf(b: StoBookingRow): string | null {
+function phoneOf(b: ClientHistoryRow): string | null {
   return normalizePhone(b.data.client?.phone) ?? null;
 }
 
@@ -63,7 +76,7 @@ export function clientKey(b: Pick<StoBookingRow, "client_id" | "data">): string 
 }
 
 /** Свод клиентов по записям, свежие визиты сверху. */
-export function summarizeClients(rows: readonly StoBookingRow[]): ClientSummary[] {
+export function summarizeClients(rows: readonly ClientHistoryRow[]): ClientSummary[] {
   const map = new Map<string, ClientSummary>();
   for (const b of rows) {
     const key = clientKey(b);

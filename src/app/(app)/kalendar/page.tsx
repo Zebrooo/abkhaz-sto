@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { requireSection } from "@/lib/context";
-import { countPending, getBooking, listBookings } from "@/lib/bookings";
+import { countPending, getBooking, listBookingDots, listBookings } from "@/lib/bookings";
 import { BookingRow } from "@/components/BookingRow";
 import { CalendarDrag, type DragDay } from "@/components/CalendarDrag";
 import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
@@ -82,8 +82,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
     month
       // Границы — по СЕТКЕ, а не по месяцу: в ней видны и последние дни
       // прошлого месяца, и первые полторы недели следующего, и по ним можно
-      // ткнуть. Без точек они читались бы как свободные.
-      ? listBookings(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
+      // ткнуть. Без точек они читались бы как свободные. Выборка лёгкая:
+      // точке нужны только день и статус, а не строки месяца целиком.
+      ? listBookingDots(shop.id, localTime(gridFrom, "00:00"), localTime(addDays(gridTo, 1), "00:00"))
       : Promise.resolve([]),
     countPending(shop.id),
     Number.isInteger(moveId) && moveId > 0 ? getBooking(shop.id, moveId) : Promise.resolve(null),

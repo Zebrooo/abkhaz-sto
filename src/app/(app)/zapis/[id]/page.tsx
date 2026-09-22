@@ -73,32 +73,34 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const ctx = await requireSection("bookings");
   if (!ctx) return null;
   const shop = ctx.shop;
-  let b = await getBooking(shop.id, bookingId);
-  if (!b) notFound();
-  // VIN добираем из истории клиента сами; не нашёлся — ниже появится блок
-  // «VIN не указан» (спека abkhaz-auto 2026-09-22-sto-booking-garage-vin).
-  b = await ensureBookingVin(shop.id, b);
+  const fetched = await getBooking(shop.id, bookingId);
+  if (!fetched) notFound();
 
-  const day = isDay(pick(sp.d)) ? pick(sp.d) : localDay(new Date(b.starts_at));
+  const day = isDay(pick(sp.d)) ? pick(sp.d) : localDay(new Date(fetched.starts_at));
   const backHref = `/segodnya?d=${day}`;
-  // Свой адрес: день таскаем с собой, иначе «назад» уведёт в сегодняшний день.
-  const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
-  const key = clientKey(b);
+  // Ключ клиента от VIN не зависит (учётка → телефон → имя, lib/clients.ts),
+  // поэтому считается до добора VIN — и добор встаёт в общую пачку ниже.
+  const key = clientKey(fetched);
   const showInspect = can(ctx.role, "inspect");
   const act = pick(sp.do);
-  // Всё независимое — одной пачкой: колокол, счётчик визитов клиента, сетка
-  // дня за ящиком и осмотр при приёмке друг друга не ждут.
-  const [pending, visits, dayRows, insp, priceList] = await Promise.all([
+  // Всё независимое — одной пачкой: добор VIN из истории, колокол, счётчик
+  // визитов клиента, сетка дня за ящиком и осмотр при приёмке друг друга не ждут.
+  const [b, pending, visits, dayRows, insp, priceList] = await Promise.all([
+    // VIN добираем из истории клиента сами; не нашёлся — ниже появится блок
+    // «VIN не указан» (спека abkhaz-auto 2026-09-22-sto-booking-garage-vin).
+    ensureBookingVin(shop.id, fetched),
     countPending(shop.id),
     // «N записей» — точечным счётчиком по ключу клиента: таблицы клиентов
     // нет, они собираются из снимков — то же правило, что на экране клиентов.
     countClientVisits(shop.id, key),
     dayBookings(shop.id, day),
     // not_found — осмотр ещё не начат, это обычное состояние, а не ошибка.
-    showInspect ? fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: b.id }) : Promise.resolve(null),
+    showInspect ? fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: fetched.id }) : Promise.resolve(null),
     // Прайс нужен только открытой шторке «Добавить услугу».
     act === "extra" ? listServices(shop.id) : Promise.resolve([]),
   ]);
+  // Свой адрес: день таскаем с собой, иначе «назад» уведёт в сегодняшний день.
+  const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
 
   // Отмена и «не приехал» — разговор с клиентом, и ведёт его стойка: мастеру
   // эти кнопки не показываем (access.ts, closeBooking). «Выполнено» и

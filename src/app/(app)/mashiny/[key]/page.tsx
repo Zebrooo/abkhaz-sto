@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { countPending, recentBookings } from "@/lib/bookings";
+import { clientHistoryRows, countPending } from "@/lib/bookings";
 import { requireSection } from "@/lib/context";
 import { fetchGarage } from "@/lib/api/garage";
 import { Icon } from "@/components/Icon";
@@ -27,11 +27,12 @@ export default async function VehiclePage({ params }: { params: Promise<{ key: s
   const { key } = await params;
   const ctx = (await requireSection("clients"))!;
   const { shop } = ctx;
-  const rows = await recentBookings(shop.id);
+  // Узкая выборка (bookings.ts) и колокол — одной пачкой: они независимы.
+  // Гараж остаётся второй стадией — ему нужен владелец из собранной карточки.
+  const [rows, pending] = await Promise.all([clientHistoryRows(shop.id), countPending(shop.id)]);
   // Ключ без номера кодирует имя машины — из адреса он приходит раскодированным.
   const card = vehicleCard(rows, key) ?? vehicleCard(rows, encodeURIComponent(key));
   if (!card) notFound();
-  const pending = await countPending(shop.id);
   const visits = count(card.visits, "запись", "записи", "записей");
 
   // Гараж спрашиваем у свежего владельца: он на этой машине ездит сейчас.

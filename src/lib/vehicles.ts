@@ -15,7 +15,7 @@
 // заводить карточку на каждую запись.
 import type { StoBookingRow, StoBookingVehicleSnapshot } from "@/lib/sto/types";
 import { isLive } from "@/lib/stats";
-import { clientKey } from "@/lib/clients";
+import { clientKey, type ClientHistoryRow } from "@/lib/clients";
 import { normalizePhone } from "@/lib/phone";
 import { foldLookalike, normalizeVin, plateInput } from "@/lib/vehicle-input";
 
@@ -45,7 +45,12 @@ export type VehicleSummary = {
   owners: VehicleOwner[];
 };
 
-export type VehicleCard = VehicleSummary & { history: StoBookingRow[] };
+/**
+ * История карточки — лёгкие строки (ClientHistoryRow): экран машины читает из
+ * них только дату, услугу и статус, а полная выборка ради этого тянула data
+ * целиком по тысяче строк.
+ */
+export type VehicleCard = VehicleSummary & { history: ClientHistoryRow[] };
 
 /**
  * Номер к сравнимому виду: без пробелов и дефисов, в верхнем регистре и с
@@ -123,9 +128,9 @@ function ownerOf(b: Pick<StoBookingRow, "client_id" | "starts_at" | "data">): Ve
  * Поэтому группы не «ключ → строки», а объединение множеств: новая запись
  * склеивает группы, в которых нашёлся хоть один её признак.
  */
-type VehicleGroup = { ids: Set<string>; rows: StoBookingRow[] };
+type VehicleGroup = { ids: Set<string>; rows: ClientHistoryRow[] };
 
-function groupVehicles(rows: readonly StoBookingRow[]): VehicleGroup[] {
+function groupVehicles(rows: readonly ClientHistoryRow[]): VehicleGroup[] {
   const groups: VehicleGroup[] = [];
   const byId = new Map<string, VehicleGroup>();
   // СВЕЖИЕ ПЕРВЫМИ, и не ради скорости. Когда один номер побывал на двух
@@ -182,7 +187,7 @@ function groupKey(g: VehicleGroup): string | null {
 }
 
 /** Свод машин по записям, свежие визиты сверху. */
-export function summarizeVehicles(rows: readonly StoBookingRow[]): VehicleSummary[] {
+export function summarizeVehicles(rows: readonly ClientHistoryRow[]): VehicleSummary[] {
   return groupVehicles(rows).map(summarizeGroup).filter((v): v is VehicleSummary => v !== null)
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
@@ -232,7 +237,7 @@ function summarizeGroup(g: VehicleGroup): VehicleSummary | null {
  * признаков группы, а не только среди канонических: старая ссылка по номеру
  * обязана открывать ту же карточку после того, как у машины появился VIN.
  */
-export function vehicleCard(rows: readonly StoBookingRow[], key: string): VehicleCard | null {
+export function vehicleCard(rows: readonly ClientHistoryRow[], key: string): VehicleCard | null {
   const groups = groupVehicles(rows);
   // Сначала группа, для которой этот ключ КАНОНИЧЕСКИЙ, и только потом любая,
   // где он встречается как признак: один номер может остаться в двух группах
@@ -245,7 +250,7 @@ export function vehicleCard(rows: readonly StoBookingRow[], key: string): Vehicl
 }
 
 /** Машины одного клиента — свежие сверху; ими же заполняется форма записи. */
-export function clientVehicles(rows: readonly StoBookingRow[], key: string): VehicleSummary[] {
+export function clientVehicles(rows: readonly ClientHistoryRow[], key: string): VehicleSummary[] {
   return summarizeVehicles(rows.filter(b => clientKey(b) === key));
 }
 
@@ -261,7 +266,7 @@ export type ClientCar = { key: string; name: string; plate: string | null; vin: 
  * Номер и VIN тут уже нормализованные: в форму подставляется то, чем машина
  * опознаётся, а не то, как её однажды набрали с опечаткой.
  */
-export function carsByClient(rows: readonly StoBookingRow[]): Map<string, ClientCar[]> {
+export function carsByClient(rows: readonly ClientHistoryRow[]): Map<string, ClientCar[]> {
   const out = new Map<string, ClientCar[]>();
   for (const v of summarizeVehicles(rows)) {
     for (const o of v.owners) {

@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createSupabaseAdmin, getServerUser } from "@/lib/supabase/server";
+import { readAdminShop } from "@/lib/admin-shop-cookie";
 import { fetchMyShops, type MyShopMembership } from "@/lib/api/members";
 import { listOr } from "@/lib/api/site-api";
 import { ownerFilter } from "@/lib/shop-owner";
@@ -38,6 +39,8 @@ export type ServiceShop = {
   owned: boolean;
   /** Строка сотрудника, если пришёл не как владелец. */
   membership: MyShopMembership | null;
+  /** Витрина открыта админом сайта через /admin-vhod: он тут владелец на время визита. */
+  adminEntry: boolean;
 };
 
 type ShopRow = {
@@ -53,7 +56,7 @@ function toShop(r: ShopRow, owned: boolean, membership: MyShopMembership | null)
     address: r.address ?? "", regionSlug: r.region_slug,
     schedule: normalizeStoSchedule(r.sto_schedule), scheduleRaw: r.sto_schedule,
     prepay: normalizeStoPrepay(r.sto_prepay),
-    owned, membership,
+    owned, membership, adminEntry: false,
   };
 }
 
@@ -65,7 +68,7 @@ export const myServiceShops = cache(async (): Promise<ServiceShop[]> => {
   // Телефон учётки и список членств независимы — одной пачкой; витрины по
   // телефону спрашиваем после: ownerFilter ждёт номер.
   const [profileRes, memberships] = await Promise.all([
-    admin.from("profiles").select("phone").eq("id", user.id).maybeSingle(),
+    admin.from("profiles").select("phone, is_admin").eq("id", user.id).maybeSingle(),
     fetchMyShops(user.id).then(listOr),
   ]);
   const or = ownerFilter(user.id, typeof profileRes.data?.phone === "string" ? profileRes.data.phone : null);
@@ -80,6 +83,18 @@ export const myServiceShops = cache(async (): Promise<ServiceShop[]> => {
     await admin.from("shops").update({ user_id: user.id }).in("id", orphans).is("user_id", null);
   }
   const owned = ownedRows.map(r => toShop(r, true, null));
+
+  // Витрина, куда вошёл админ сайта (/admin-vhod): первая и хозяйская, но
+  // ПОСЛЕ ветки усыновления и отдельным запросом — витрина не его, и её
+  // user_id закреплять нельзя. is_admin проверяем каждый запрос: кука
+  // переживает отзыв прав, а права — нет.
+  const adminShopId = profileRes.data?.is_admin === true ? await readAdminShop(user.id) : null;
+  if (adminShopId != null && !owned.some(s => s.id === adminShopId)) {
+    const { data: adminRow } = await admin.from("shops").select(COLUMNS)
+      .eq("rubric", "service").eq("status", "approved").eq("id", adminShopId)
+      .maybeSingle<ShopRow>();
+    if (adminRow) owned.unshift({ ...toShop(adminRow, true, null), adminEntry: true });
+  }
 
   // Сотрудник — только в чужих витринах: своя и так первая, и хозяином.
   // Выключенный (уволенный) не получает витрину вовсе: записи приложение

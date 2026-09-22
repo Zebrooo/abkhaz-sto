@@ -3,6 +3,7 @@
 // проверяются тестами (stats.test.ts).
 import type { StoBookingRow } from "@/lib/sto/types";
 import type { StoSchedule } from "@/lib/sto/schedule";
+import { bookingRevenue } from "@/lib/booking-extras";
 import { minutesLabel } from "@/lib/format";
 import { toMinutes } from "@/lib/sto/schedule";
 import { dayOfWeek } from "@/lib/sto/slots";
@@ -50,7 +51,9 @@ export function dayStats(input: { rows: readonly StoBookingRow[]; schedule: StoS
   const { rows, schedule, day } = input;
   const posts = Math.max(1, input.posts);
   const live = rows.filter(isLive);
-  const revenue = live.reduce((s, b) => s + (b.service.price ?? 0), 0);
+  // Вместе с услугами, добавленными по ходу работы (data.extras): они такие
+  // же деньги дня, как основная услуга.
+  const revenue = live.reduce((s, b) => s + bookingRevenue(b), 0);
   const win = dayWindow(schedule, day);
   const step = schedule?.stepMin ?? 30;
   const totalSlots = Math.floor(win.workMin / step) * posts;

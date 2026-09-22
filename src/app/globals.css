@@ -123,6 +123,8 @@ svg { display: block; }
   font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap;
 }
 .rspec.is-accent { background: var(--warm); color: var(--accent); }
+/* «задержка +30 мин» у записи, которую продлевали «задерживаюсь». */
+.rspec.is-late { background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--accent); }
 
 .aui-badge {
   display: inline-block; padding: 3px 7px; background: var(--accent); color: #fff;
@@ -483,6 +485,16 @@ svg { display: block; }
 .bd-svc-t { font-size: 16px; font-weight: 700; letter-spacing: -.015em; }
 .bd-svc-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .bd-svc-p { font-size: 20px; font-weight: 800; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+/* Услуги, добавленные по ходу работы, — строками тише основной; «Итого»
+   ниже них снова полным весом .bd-svc. */
+.bd-extra { margin-top: 10px; padding-top: 10px; }
+.bd-extra-t { font-size: 14px; font-weight: 600; }
+.bd-extra-p { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Чипы «+15 мин … +60 мин» в шторке «Нужно больше времени». */
+.delay-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+.delay-chips form { display: contents; }
+/* Ссылка «добавить услугу» под кнопками текущей работы мастера. */
+.mw-now-extra { margin-top: 10px; }
 
 .steps { display: flex; flex-direction: column; }
 .step { display: flex; gap: 12px; }

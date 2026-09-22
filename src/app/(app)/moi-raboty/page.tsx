@@ -211,6 +211,13 @@ export default async function MyWorkPage({ searchParams }: { searchParams: SP })
                   <button className="aui-btn aui-btn--outline aui-btn--md" type="submit">Готово</button>
                 </form>
               )}
+              {/* «Задерживаюсь» — шторка в карточке записи: там видно, кого сдвинет. */}
+              <Link className="aui-btn aui-btn--outline aui-btn--md" href={`/zapis/${current.id}?d=${day}&do=delay`}>Задерживаюсь</Link>
+            </div>
+            <div className="mw-now-extra">
+              <Link className="person-link" href={`/zapis/${current.id}?d=${day}&do=extra`}>
+                Нашёл ещё работу — добавить услугу <Icon name="arrowRight" size={15} />
+              </Link>
             </div>
           </div>
         ) : (

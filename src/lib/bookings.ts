@@ -8,8 +8,9 @@ import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { notifySite } from "@/lib/site-events";
 import { clientKey, clientKeyOf } from "@/lib/clients";
 import { vehicleKey, type VehiclePastRow } from "@/lib/vehicles";
-import type { StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
+import type { StoBookingExtra, StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
+import { planDelay } from "@/lib/delay";
 import { firstFreePost, isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
 import { addDays } from "@/lib/format";
 import type { StoSchedule } from "@/lib/sto/schedule";
@@ -300,6 +301,86 @@ export async function rescheduleBooking(input: {
   if (!updated || updated.length === 0) return { ok: false, error: "Запись уже изменили — обновите экран" };
   const told = await notifySite({ bookingId, shopId, event: "rescheduled", actorUserId, details: { startsAt: startsAt.toISOString() } });
   return { ok: true, told };
+}
+
+/** Сколько услуг можно навесить на одну запись сверх основной. */
+const MAX_EXTRAS = 30;
+
+/**
+ * Услуга, добавленная по ходу работы: мастер нашёл на подъёмнике ещё работу,
+ * и она должна попасть в запись и в деньги. Снимок цены — в data.extras;
+ * время записи НЕ трогаем (решение владельца): для него «Нужно больше
+ * времени». Сайту не сообщаем — клиент стоит рядом с мастером.
+ */
+export async function addBookingExtra(input: {
+  shopId: number; bookingId: number; extra: Omit<StoBookingExtra, "at">;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { shopId, bookingId } = input;
+  const current = await getBooking(shopId, bookingId);
+  if (!current) return { ok: false, error: "Запись не найдена" };
+  if (!canReschedule(current.status)) return { ok: false, error: "Дополнить можно только живую запись" };
+  const extras = [...(current.data.extras ?? []), { ...input.extra, at: new Date().toISOString() }];
+  if (extras.length > MAX_EXTRAS) return { ok: false, error: `Услуг в записи — не больше ${MAX_EXTRAS + 1}` };
+  const { data: updated, error } = await createSupabaseAdmin().from("sto_bookings")
+    .update({ data: { ...current.data, extras } })
+    .eq("id", bookingId).eq("shop_id", shopId).eq("status", current.status)
+    .select("id").returns<{ id: number }[]>();
+  if (error) return { ok: false, error: "Не удалось сохранить: " + error.message };
+  if (!updated || updated.length === 0) return { ok: false, error: "Запись уже изменили — обновите экран" };
+  return { ok: true };
+}
+
+/**
+ * «Мастер задерживается»: продлить запись на minutes и сдвинуть цепочку
+ * идущих следом записей поста (план — lib/delay.ts). Сдвигаем С КОНЦА:
+ * каждая едет в место, которое следующая уже освободила, и ограничение
+ * пересечений в базе (23P01) не срабатывает на промежуточном состоянии.
+ * Свою запись продлеваем последней — к этому моменту место за ней свободно.
+ * Клиентам сдвинутых записей сайт шлёт уведомление о смещении (rescheduled
+ * с details.delayMin — текст с извинениями собирает booking-notice сайта).
+ */
+export async function delayBooking(input: {
+  shopId: number; bookingId: number; minutes: number; actorUserId: string;
+}): Promise<{ ok: true; told: boolean; shifted: number } | { ok: false; error: string }> {
+  const { shopId, bookingId, minutes, actorUserId } = input;
+  const current = await getBooking(shopId, bookingId);
+  if (!current) return { ok: false, error: "Запись не найдена" };
+  // Окно плана: от начала записи до двух суток после её конца — длиннее
+  // цепочка сдвига не бывает (услуга ≤ 8 часов, задержка ≤ часа).
+  const rows = await listBookings(shopId, new Date(current.starts_at), new Date(new Date(current.ends_at).getTime() + 48 * 3_600_000));
+  const plan = planDelay({ rows, bookingId, minutes });
+  if (!plan.ok) return plan;
+
+  const admin = createSupabaseAdmin();
+  const at = new Date().toISOString();
+  for (const s of [...plan.shifts].reverse()) {
+    const history = [...(s.row.data.history ?? []), { at, from: s.row.starts_at, to: s.newStart.toISOString(), by: "shop" as const }];
+    const { data: updated, error } = await admin.from("sto_bookings")
+      .update({ starts_at: s.newStart.toISOString(), ends_at: s.newEnd.toISOString(), data: { ...s.row.data, history } })
+      .eq("id", s.row.id).eq("shop_id", shopId).eq("status", s.row.status)
+      .select("id").returns<{ id: number }[]>();
+    if (error || !updated || updated.length === 0) {
+      return { ok: false, error: "Сдвинуть записи следом не получилось — календарь только что изменили, обновите его и попробуйте ещё раз" };
+    }
+  }
+  const delays = [...(current.data.delays ?? []), { at, minutes }];
+  const { data: updated, error } = await admin.from("sto_bookings")
+    .update({ ends_at: plan.endsAt.toISOString(), data: { ...current.data, delays } })
+    .eq("id", bookingId).eq("shop_id", shopId).eq("status", current.status)
+    .select("id").returns<{ id: number }[]>();
+  if (error || !updated || updated.length === 0) {
+    // Соседи уже сдвинуты — это не потеря, просто зазор; но правду говорим.
+    return { ok: false, error: "Записи следом сдвинуты, а продлить эту не вышло — запись только что изменили, обновите экран" };
+  }
+  let told = true;
+  for (const s of plan.shifts) {
+    const ok = await notifySite({
+      bookingId: s.row.id, shopId, event: "rescheduled", actorUserId,
+      details: { startsAt: s.newStart.toISOString(), delayMin: s.shiftMin },
+    });
+    told = told && ok;
+  }
+  return { ok: true, told, shifted: plan.shifts.length };
 }
 
 /** Ручная запись клиента с улицы из приложения: без учётки, имя и телефон снимком. */

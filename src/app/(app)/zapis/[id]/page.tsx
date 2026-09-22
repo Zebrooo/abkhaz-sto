@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { transitionAction } from "@/app/(app)/actions";
+import { addExtraAction, delayAction, transitionAction } from "@/app/(app)/actions";
+import { ExtraPick } from "@/components/ExtraPick";
+import { bookingPrice, delayedMin } from "@/lib/booking-extras";
+import { DELAY_CHOICES } from "@/lib/delay";
+import { listServices } from "@/lib/services";
 import { clientName, vehicleLine } from "@/components/BookingRow";
 import { MasterPick } from "@/components/MasterPick";
 import { Flash } from "@/components/Flash";
@@ -19,7 +23,7 @@ import { can } from "@/lib/access";
 import { fetchInspection } from "@/lib/api/inspections";
 import { requireSection } from "@/lib/context";
 import { countBySeverity, inspectionState, untouchedNodeKeys } from "@/lib/inspection";
-import { localDay } from "@/lib/sto/slots";
+import { localDay, localHHMM } from "@/lib/sto/slots";
 import { vehicleKey } from "@/lib/vehicles";
 import { canReschedule, shopTransitions, type StoTransition } from "@/lib/sto/transitions";
 import type { StoBookingRow, StoBookingStatus, StoPrepayStatus } from "@/lib/sto/types";
@@ -81,9 +85,10 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const self = (q = "") => `/zapis/${b.id}?d=${day}${q}`;
   const key = clientKey(b);
   const showInspect = can(ctx.role, "inspect");
+  const act = pick(sp.do);
   // Всё независимое — одной пачкой: колокол, счётчик визитов клиента, сетка
   // дня за ящиком и осмотр при приёмке друг друга не ждут.
-  const [pending, visits, dayRows, insp] = await Promise.all([
+  const [pending, visits, dayRows, insp, priceList] = await Promise.all([
     countPending(shop.id),
     // «N записей» — точечным счётчиком по ключу клиента: таблицы клиентов
     // нет, они собираются из снимков — то же правило, что на экране клиентов.
@@ -91,6 +96,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
     dayBookings(shop.id, day),
     // not_found — осмотр ещё не начат, это обычное состояние, а не ошибка.
     showInspect ? fetchInspection({ shopId: shop.id, actorUserId: ctx.userId, bookingId: b.id }) : Promise.resolve(null),
+    // Прайс нужен только открытой шторке «Добавить услугу».
+    act === "extra" ? listServices(shop.id) : Promise.resolve([]),
   ]);
 
   // Отмена и «не приехал» — разговор с клиентом, и ведёт его стойка: мастеру
@@ -147,8 +154,12 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   // и соседнюю можно открыть, не возвращаясь назад. На телефоне её нет.
   const posts = shop.schedule?.posts ?? Math.max(1, ...dayRows.map(r => r.post_no));
 
-  const act = pick(sp.do);
   const reason = /^[0-3]$/.test(pick(sp.r)) ? Number(pick(sp.r)) : -1;
+
+  // Живую запись можно дополнить услугой и продлить — по ходу работы.
+  const extras = b.data.extras ?? [];
+  const delayed = delayedMin(b);
+  const total = bookingPrice(b);
 
   // Осмотр при приёмке: счётчики из осмотра, если он есть.
   const inspection = insp?.ok ? insp.data : null;
@@ -189,6 +200,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <MasterPick bookingId={b.id} postNo={b.post_no} day={day} open={act === "master"} selfHref={self()} />
               <span className="rspec">{minutesLabel(durationMin)}</span>
               <span className="rspec">{source}</span>
+              {delayed > 0 && <span className="rspec is-late">задержка +{delayed} мин</span>}
             </div>
             <div className="bd-svc">
               <div>
@@ -197,6 +209,21 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               </div>
               <div className="bd-svc-p">{formatRub(b.service.price)}</div>
             </div>
+            {extras.map(e => (
+              <div key={e.at} className="bd-svc bd-extra">
+                <div>
+                  <div className="bd-extra-t">{e.title}</div>
+                  <div className="bd-svc-s">добавлена по ходу работы · {relativeAt(e.at)}</div>
+                </div>
+                <div className="bd-extra-p">{formatRub(e.price)}</div>
+              </div>
+            ))}
+            {extras.length > 0 && (
+              <div className="bd-svc">
+                <div className="bd-svc-t">Итого</div>
+                <div className="bd-svc-p">{formatRub(total)}</div>
+              </div>
+            )}
           </div>
 
           <div className="card">
@@ -320,6 +347,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
           footer={<Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href={self()}>Закрыть</Link>}
         >
           <div className="act-list">
+            {canMove && <Link className="act" href={self("&do=extra")}>Добавить услугу к записи</Link>}
+            {canMove && <Link className="act" href={self("&do=delay")}>Нужно больше времени</Link>}
             {canMove && <Link className="act" href={`/kalendar?d=${day}&move=${b.id}`}>Перенести на другое окно</Link>}
             {trans.includes("no_show") && (
               <form action={transitionAction}>
@@ -328,6 +357,60 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               </form>
             )}
             {trans.includes("cancel") && <Link className="act act-danger" href={self("&do=cancel")}>Отменить запись</Link>}
+          </div>
+        </Sheet>
+      )}
+
+      {act === "extra" && canMove && (
+        <Sheet
+          closeHref={self()}
+          backHref={self("&do=1")}
+          title="Добавить услугу"
+          sub={`№ ${b.id} · ${b.service.title}`}
+          footer={<Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href={self()}>Закрыть</Link>}
+        >
+          <div className="sheet-note">
+            Мастер нашёл ещё работу — услуга добавится к записи и в деньги по цене прайса.
+            Время записи не изменится: если работа дольше, есть «Нужно больше времени».
+          </div>
+          {/* Кнопки услуг отправляют эту форму своим listingId. */}
+          <form action={addExtraAction} className="sheet-stack">
+            <input type="hidden" name="shopId" value={b.shop_id} />
+            <input type="hidden" name="bookingId" value={b.id} />
+            <input type="hidden" name="return" value={self()} />
+            <ExtraPick items={priceList.map(s => ({
+              listingId: s.listingId,
+              title: s.title,
+              sub: `${formatRub(s.price)} · ${minutesLabel(s.durationMin)}`,
+            }))} />
+          </form>
+          {priceList.length === 0 && <p className="hint">В прайсе нет услуг — они заводятся в кабинете витрины на сайте.</p>}
+        </Sheet>
+      )}
+
+      {act === "delay" && canMove && (
+        <Sheet
+          closeHref={self()}
+          backHref={self("&do=1")}
+          title="Нужно больше времени"
+          sub={`№ ${b.id} · сейчас до ${localHHMM(new Date(b.ends_at))}`}
+          footer={<Link className="aui-btn aui-btn--secondary aui-btn--lg aui-btn--block" href={self()}>Закрыть</Link>}
+        >
+          <div className="sheet-note">
+            Запись станет длиннее, а записи следом на этом посту сдвинутся.
+            Их клиенты получат уведомление: запись смещена, приносим извинения,
+            время можно перенести.
+          </div>
+          <div className="delay-chips">
+            {DELAY_CHOICES.map(m => (
+              <form key={m} action={delayAction}>
+                <input type="hidden" name="shopId" value={b.shop_id} />
+                <input type="hidden" name="bookingId" value={b.id} />
+                <input type="hidden" name="minutes" value={m} />
+                <input type="hidden" name="return" value={self()} />
+                <button className="aui-btn aui-btn--secondary aui-btn--lg" type="submit">+{m} мин</button>
+              </form>
+            ))}
           </div>
         </Sheet>
       )}

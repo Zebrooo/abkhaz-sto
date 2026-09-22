@@ -48,6 +48,20 @@ export type StoBookingVehicleSnapshot = {
   vin?: string | null;
 };
 
+/**
+ * Услуга, добавленная к записи по ходу работы (мастер нашёл ещё работу на
+ * подъёмнике). Снимок цены на момент добавления, как service: прайс потом
+ * поменяется, а договорились по старой. Миграции не требует — лежит в data.
+ */
+export type StoBookingExtra = {
+  title: string;
+  price: number | null;
+  currency: Currency;
+  /** Объявление прайса, из которого добавили; null — услуги уже нет в прайсе. */
+  listingId: number | null;
+  at: string;
+};
+
 export type StoBookingData = {
   client?: StoBookingClientSnapshot;
   vehicle?: StoBookingVehicleSnapshot;
@@ -58,6 +72,10 @@ export type StoBookingData = {
   confirmBy?: string;
   /** Переносы: кто, когда и с какого времени на какое. */
   history?: { at: string; from: string; to: string; by: "client" | "shop" }[];
+  /** Услуги, добавленные по ходу работы, — сверх service. */
+  extras?: StoBookingExtra[];
+  /** «Мастер задерживается»: когда и на сколько минут продлевали запись. */
+  delays?: { at: string; minutes: number }[];
 };
 
 /** Строка sto_bookings как её отдаёт база (snake_case, как в таблице). */

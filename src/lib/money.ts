@@ -98,12 +98,17 @@ export function jobsLabel(n: number): string {
  */
 export function byServiceFromRows(rows: readonly StoBookingRow[]): MoneyLine[] {
   const map = new Map<string, MoneyLine>();
+  const add = (title: string, price: number | null) => {
+    const line = map.get(title) ?? { title, count: 0, revenue: 0 };
+    line.count += 1;
+    line.revenue += price ?? 0;
+    map.set(title, line);
+  };
   for (const b of rows) {
     if (!isLive(b)) continue;
-    const line = map.get(b.service.title) ?? { title: b.service.title, count: 0, revenue: 0 };
-    line.count += 1;
-    line.revenue += b.service.price ?? 0;
-    map.set(b.service.title, line);
+    add(b.service.title, b.service.price);
+    // Добавленное по ходу работы — своими строками: это тоже работы дня.
+    for (const e of b.data.extras ?? []) add(e.title, e.price);
   }
   return [...map.values()].sort((a, b) => b.revenue - a.revenue || b.count - a.count);
 }

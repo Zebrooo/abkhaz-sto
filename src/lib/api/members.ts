@@ -50,12 +50,17 @@ export type MyShopMembership = {
 /**
  * Кэш членств на процесс: fetchMyShops зовётся на КАЖДЫЙ рендер каждого
  * экрана (shop.ts → serviceContext), и без кэша это HTTP к сайту на всякий
- * клик. 30 секунд безопасны: роль здесь — подсказка интерфейсу, а не граница
- * доступа (AGENTS.md) — что человеку разрешено на самом деле, сайт проверяет
- * по actorUserId в каждом запросе, поэтому увольнение перестаёт работать
- * сразу, а из меню пропадает следующим запросом после протухания. Правки
- * доступов из ЭТОГО процесса видны мгновенно — их сбрасывает
- * invalidateMyShops (staff-actions.ts).
+ * клик.
+ *
+ * ЧЕСТНО ПРО ГРАНИЦУ: для запросов через site-api граница — сайт по
+ * actorUserId, но записи и клиентов приложение читает из общей базы НАПРЯМУЮ
+ * под сервисным ключом, и там границей служит именно членство (shop.ts:
+ * «выключенный не получает витрину вовсе»). Поэтому увольнение из ЭТОГО
+ * процесса обязано доезжать мгновенно — invalidateMyShops (staff-actions.ts)
+ * сбрасывает запись и поднимает эпоху, так что даже запрос, ушедший к сайту
+ * ДО сброса, свой устаревший ответ в кэш не запишет. Правка с другой стороны
+ * (админка сайта, соседний контейнер в момент деплоя) доезжает за ≤30
+ * секунд — принятый размен: там же увольняют через этот экран.
  *
  * Ошибки сайта не кэшируем: молчание сайта не должно на 30 секунд отрезать
  * сотрудника от витрины, следующий рендер спросит снова.
@@ -64,19 +69,24 @@ const MY_SHOPS_TTL_MS = 30_000;
 /** Потолок записей — чтобы кэш не рос без границы; старейшая вытесняется. */
 const MY_SHOPS_MAX = 500;
 const myShops = new Map<string, { at: number; shops: MyShopMembership[] }>();
+/** Эпоха сбросов по userId: ответ, начатый до invalidateMyShops, в кэш не попадает. */
+const myShopsEpoch = new Map<string, number>();
 
 export async function fetchMyShops(actorUserId: string): Promise<ApiResult<MyShopMembership[]>> {
   const hit = myShops.get(actorUserId);
-  if (hit && Date.now() - hit.at < MY_SHOPS_TTL_MS) return { ok: true, data: hit.shops };
+  // Копия наружу: общий массив по ссылке дал бы будущему sort()/push() у
+  // вызывающего отравить кэш всем запросам процесса.
+  if (hit && Date.now() - hit.at < MY_SHOPS_TTL_MS) return { ok: true, data: [...hit.shops] };
+  const epoch = myShopsEpoch.get(actorUserId) ?? 0;
   const res = await siteGet<MyShopMembership[]>("members/mine", { actorUserId });
-  if (res.ok) {
+  if (res.ok && (myShopsEpoch.get(actorUserId) ?? 0) === epoch) {
     // delete + set держит порядок Map порядком записи: первый ключ — старейший.
     myShops.delete(actorUserId);
     if (myShops.size >= MY_SHOPS_MAX) {
       const oldest = myShops.keys().next().value;
       if (oldest !== undefined) myShops.delete(oldest);
     }
-    myShops.set(actorUserId, { at: Date.now(), shops: res.data });
+    myShops.set(actorUserId, { at: Date.now(), shops: [...res.data] });
   }
   return res;
 }
@@ -84,6 +94,7 @@ export async function fetchMyShops(actorUserId: string): Promise<ApiResult<MySho
 /** Сброс кэша после правки доступов: свой процесс видит её сразу же. */
 export function invalidateMyShops(userId: string): void {
   myShops.delete(userId);
+  myShopsEpoch.set(userId, (myShopsEpoch.get(userId) ?? 0) + 1);
 }
 
 /** GET /api/sto/members?shopId&actorUserId → StoMember[]; владелец первой строкой. */

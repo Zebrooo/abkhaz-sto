@@ -39,6 +39,26 @@ describe("кэш членств (fetchMyShops)", () => {
     expect(mocks.siteGet).toHaveBeenCalledTimes(2);
   });
 
+  it("сброс во время полёта: устаревший ответ в кэш не садится (увольнение — граница чтений базы)", async () => {
+    let release!: (v: unknown) => void;
+    mocks.siteGet.mockReturnValueOnce(new Promise(r => { release = r; }));
+    const inflight = fetchMyShops("u-race");
+    // Пока запрос летел, доступы поменяли — его ответ уже устарел.
+    invalidateMyShops("u-race");
+    release({ ok: true, data: [membership] });
+    await inflight;
+    await fetchMyShops("u-race");
+    expect(mocks.siteGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("кэш отдаёт копию: sort() у вызывающего не отравляет кэш процесса", async () => {
+    const first = await fetchMyShops("u-copy");
+    if (first.ok) first.data.length = 0;
+    const second = await fetchMyShops("u-copy");
+    expect(second).toEqual({ ok: true, data: [membership] });
+    expect(mocks.siteGet).toHaveBeenCalledTimes(1);
+  });
+
   it("ошибка сайта не кэшируется: следующий рендер спрашивает снова", async () => {
     mocks.siteGet.mockResolvedValue({ ok: false, code: "unavailable", error: "Сайт сейчас недоступен" });
     expect((await fetchMyShops("u-err")).ok).toBe(false);

@@ -10,7 +10,9 @@ import { Icon } from "@/components/Icon";
 import { DayPick } from "@/components/DayPick";
 import { ScreenHead } from "@/components/ScreenHead";
 import { addDays, count, dayEyebrow, dayNumber, dayOfWeekShort, dayTitle, formatRub, minutesLabel, plural, todayLocal } from "@/lib/format";
-import { freeSlots, localHHMM, localTime } from "@/lib/sto/slots";
+import { localHHMM, localTime } from "@/lib/sto/slots";
+import { assessSlot, daySlotOptions, SLOT_WARNING_LABEL, type SlotWarning } from "@/lib/slot-warnings";
+import { Sheet } from "@/components/Sheet";
 import { fittingServices, nextStep, pickService } from "@/lib/booking-form";
 import { summarizeClients } from "@/lib/clients";
 import { carsByClient, clientVehicles, vehicleCard } from "@/lib/vehicles";
@@ -166,17 +168,20 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   };
   const { list: fitting, hidden } = fittingServices({ services, schedule, startsAt, postNo, busy, now, keepId: svc.listingId });
   const pickable = showAll ? services : fitting;
-  // Выбран конкретный пост — считаем его «сервисом на один пост»: freeSlots
-  // отдаёт первый свободный из всех, а нужен именно этот.
-  const slots = freeSlots({
-    schedule: postNo ? { ...schedule, posts: 1 } : schedule,
-    day,
-    durationMin: svc.durationMin,
-    busy: postNo ? busy.filter(b => b.postNo === postNo).map(b => ({ ...b, postNo: 1 })) : busy,
-    now,
-  }).map(s => ({ hhmm: localHHMM(s.startsAt), postNo: postNo ?? s.postNo }));
+  // ВСЕ узлы сетки, а не только свободные: занятые, прошедшие и «впритык»
+  // видны серыми и выбираются — записать вопреки им можно, подтвердив попап.
+  // Свободным чип считается БЕЗ часа форы: за стойкой «через полчаса» —
+  // обычное время, а не прошедшее.
+  const slots = daySlotOptions({ schedule, day, durationMin: svc.durationMin, busy, postNo: postNo ?? undefined, now });
 
   const chosen = slots.find(s => s.hhmm === time) ?? null;
+  const chosenWarnings = chosen?.warnings ?? [];
+  // Сервер отказал предупреждением (?warn=) — рисуем шторку «записать всё
+  // равно?». Детали пересечений считаем на месте: в адресе им не место.
+  const warns = pick(sp.warn).split(",").filter((w): w is SlotWarning => w === "past" || w === "closed" || w === "taken" || w === "buffer");
+  const clash = warns.length > 0 && chosen && startsAt
+    ? assessSlot({ schedule, startsAt, durationMin: svc.durationMin, busy, postNo: postNo ?? undefined, now }).conflicts
+    : [];
   // Полоса дней — две недели вперёд: запись по телефону чаще всего «на той
   // неделе», и пять дней заставляли лезть в календарик. Полоса листается
   // стрелками по неделе (?ds= — её начало, живёт в адресе, как весь экран);
@@ -184,13 +189,13 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
   // пришли на день за краем полосы, она начинается с него, иначе выбранного
   // дня в ней не видно. Выбор дня сбрасывает ds: полоса снова от сегодня.
   const dsRaw = pick(sp.ds);
-  const paged = isDay(dsRaw) && dsRaw > today ? dsRaw : "";
+  const paged = isDay(dsRaw) ? dsRaw : "";
   const first = paged || (day >= today && day <= addDays(today, 13) ? today : day);
   const days = Array.from({ length: 14 }, (_, i) => addDays(first, i));
-  const stripPrev = addDays(first, -7) > today ? addDays(first, -7) : today;
+  const stripPrev = addDays(first, -7);
   const stripNext = addDays(first, 7);
   const when = chosen
-    ? `${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo} · ${minutesLabel(svc.durationMin)}`
+    ? `${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo} · ${minutesLabel(svc.durationMin)}${chosenWarnings.length > 0 ? " · ⚠ " + chosenWarnings.map(w => SLOT_WARNING_LABEL[w].toLowerCase()).join(", ") : ""}`
     : `${dayTitle(day)} · окно не выбрано · ${minutesLabel(svc.durationMin)}`;
 
   // Запись из отчёта («Записать на эту работу»): пункт сметы и запись, из
@@ -216,7 +221,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
     // должен стирать клиента, машину и дорогу назад.
     for (const [k, val] of Object.entries({
       client: wantClient, car: wantCar, back: backRaw,
-      n: pick(sp.n), ph: pick(sp.ph), v: pick(sp.v), pl: pick(sp.pl), vin: pick(sp.vin),
+      n: pick(sp.n), ph: pick(sp.ph), v: pick(sp.v), pl: pick(sp.pl), vin: pick(sp.vin), c: pick(sp.c),
     })) if (val) q.set(k, val);
     return `/kalendar/novaya?${q.toString()}`;
   };
@@ -286,14 +291,12 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                 <div>
                   <div className="nb-l nb-l-days">
                     <span className="nb-p">День</span><span className="nb-w">День и пост</span>
-                    {/* Листание по неделе. «Раньше» пропадает у сегодня, а не
-                        гаснет: неактивная стрелка выглядела бы как сломанная. */}
+                    {/* Назад листается и в прошлое: запись задним числом —
+                        законная, с попапом-подтверждением. */}
                     <span className="daynav">
-                      {first > today && (
-                        <Link className="daynav-b" href={href({ ds: stripPrev === today ? null : stripPrev })} aria-label="Неделя раньше">
-                          <Icon name="chevron" size={16} />
-                        </Link>
-                      )}
+                      <Link className="daynav-b" href={href({ ds: stripPrev === today ? null : stripPrev })} aria-label="Неделя раньше">
+                        <Icon name="chevron" size={16} />
+                      </Link>
                       <Link className="daynav-b daynav-next" href={href({ ds: stripNext })} aria-label="Неделя позже">
                         <Icon name="chevron" size={16} />
                       </Link>
@@ -339,7 +342,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                 </div>
                 <div>
                   <div className="nb-l nb-l-slots">
-                    <span>Свободные окна</span>
+                    <span>Окна дня</span>
                     <span className="nb-l-s">
                       {postNo ? `пост ${postNo}` : "по всем постам"}
                       <span className="nb-w"> · шаг {schedule.stepMin} мин</span>
@@ -350,11 +353,17 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                     <p className="hint">Окно {time} для услуги «{svc.title}» ({minutesLabel(svc.durationMin)}) не подходит — выберите другое.</p>
                   )}
                   {slots.length === 0 ? (
-                    <p className="hint">Свободных окон в этот день нет.</p>
+                    <p className="hint">В этот день у сервиса нет часов приёма — записать можно переносом из сетки.</p>
                   ) : (
                     <div className="slots">
                       {slots.map(s => (
-                        <Link key={s.hhmm} className="slot" href={href({ t: s.hhmm })} aria-pressed={s.hhmm === time} title={`пост ${s.postNo}`}>
+                        <Link
+                          key={s.hhmm}
+                          className={`slot${s.warnings.length > 0 ? " warn" : ""}`}
+                          href={href({ t: s.hhmm })}
+                          aria-pressed={s.hhmm === time}
+                          title={s.warnings.length > 0 ? s.warnings.map(w => SLOT_WARNING_LABEL[w]).join("; ") : `пост ${s.postNo}`}
+                        >
                           {s.hhmm}
                         </Link>
                       ))}
@@ -372,7 +381,7 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
                   {/* Имя, телефон и машина живут в ClientPick: строка имени
                       ищет по тем, кто уже был, и заполняет остальные два поля. */}
                   <ClientPick clients={known} initial={initial} />
-                  <label className="fld"><span>Комментарий</span><textarea name="comment" maxLength={500} placeholder="что просил клиент" /></label>
+                  <label className="fld"><span>Комментарий</span><textarea name="comment" maxLength={500} placeholder="что просил клиент" defaultValue={pick(sp.c)} /></label>
                 </div>
               </div>
             </div>
@@ -393,6 +402,26 @@ export default async function NewBookingPage({ searchParams }: { searchParams: S
             <Link className="aui-btn aui-btn--primary aui-btn--lg nb-next" href={href({ step: nextStep(step, chosen !== null) })}>Далее</Link>
             <button className="aui-btn aui-btn--primary aui-btn--lg nb-submit" type="submit">Записать</button>
           </div>
+
+          {warns.length > 0 && chosen && (
+            <Sheet closeHref={href({})} title="Записать всё равно?" sub={`${dayTitle(day)}, ${chosen.hhmm} · пост ${chosen.postNo}`} footer={
+              <>
+                <Link className="aui-btn aui-btn--outline aui-btn--md" href={href({})}>Выбрать другое время</Link>
+                <button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" name="force" value="1">Записать всё равно</button>
+              </>
+            }>
+              {/* Причины — списком, наложения — с чужими записями поимённо:
+                  человек подтверждает конкретное, а не абстрактное «нельзя». */}
+              <ul className="warn-list">
+                {warns.map(w => <li key={w}>{SLOT_WARNING_LABEL[w]}</li>)}
+              </ul>
+              {clash.length > 0 && (
+                <p className="hint">
+                  Пересечение: {clash.map(c => `${localHHMM(c.startsAt)}–${localHHMM(c.endsAt)} (пост ${c.postNo})`).join(", ")}
+                </p>
+              )}
+            </Sheet>
+          )}
         </form>
       </div>
     </>

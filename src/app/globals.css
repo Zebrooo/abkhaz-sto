@@ -580,6 +580,13 @@ svg { display: block; }
 }
 .slot[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .slot:active { transform: scale(.95); }
+/* Окно с предупреждением: выбрать можно, но чип честно серый и штрихованный. */
+.slot.warn { color: var(--muted); border: 1px dashed var(--line-2); background: var(--bg-2); }
+.slot.warn[aria-pressed="true"] { background: var(--accent); color: #fff; border-style: solid; }
+/* Причины в шторке «записать всё равно?». */
+.warn-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+/* Скрим бывает и кнопкой (подтверждение при перетаскивании). */
+button.scrim { border: 0; padding: 0; cursor: pointer; }
 
 /* Полоса дней — «календарная», нарочно НЕ такая, как окна времени ниже:
    там серые плитки, здесь день недели над числом в круге. Одинаковые серые
@@ -1246,7 +1253,10 @@ svg { display: block; }
      держат min-height: 0, форма ужимается, колонки прокручиваются каждая
      внутри себя, подвал с итогом всегда на виду. */
   .app:has(.nb) { height: 100dvh; }
-  .nb-box { max-width: 840px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  /* Сама страница тоже обязана ужаться: без min-height и overflow контент
+     распирал её, документ рос, и подвал с «Записать» уезжал под экран. */
+  .nb { min-height: 0; overflow: hidden; }
+  .nb-box { max-width: 840px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .nb-cols { display: flex; align-items: stretch; flex: 1; min-height: 0; }
   .nb-svc { flex: none; width: 330px; border-right: 1px solid var(--line); padding: 16px; gap: 6px; }
   /* Прокручиваемая флекс-колонка ужимает детей раньше, чем начинает

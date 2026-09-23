@@ -17,7 +17,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type { StoInterval } from "@/lib/sto/schedule";
-import { dayDropAt, hhmmOf, type DayDropResult, type DragBlock } from "@/lib/drag";
+import { dayDropAt, hhmmOf, minutesOf, type DayDropResult, type DragBlock } from "@/lib/drag";
+import { localDay } from "@/lib/sto/slots";
 import { rescheduleAction } from "@/app/(app)/actions";
 import { Icon } from "@/components/Icon";
 
@@ -72,6 +73,8 @@ function warning(res: DayDropResult, label: string, blocks: readonly DragBlock[]
       return `${label}: в ${hhmmOf(res.fromMin)} сервис не принимает`;
     case "busy":
       return `Занято: ${label}, ${hhmmOf(res.fromMin)} — все посты заняты${clash ? `, «${clash.title}» ${hhmmOf(clash.fromMin)}–${hhmmOf(clash.toMin)}` : ""}`;
+    case "past":
+      return `${label}, ${hhmmOf(res.fromMin)} — время уже прошло`;
     default:
       return `Перенести на ${label}, ${hhmmOf(res.fromMin)} — пост ${res.postNo}`;
   }
@@ -93,7 +96,9 @@ export function CalendarDrag({ shopId, day, posts, bufferMin, days, movable, ret
   const cardRef = useRef<HTMLElement | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [over, setOver] = useState<DayDropResult | null>(null);
-  const [move, setMove] = useState<{ bookingId: number; day: string; hhmm: string } | null>(null);
+  const [move, setMove] = useState<{ bookingId: number; day: string; hhmm: string; force: boolean } | null>(null);
+  /** Бросок с предупреждением ждёт подтверждения — «перенести всё равно?». */
+  const [ask, setAsk] = useState<{ bookingId: number; day: string; hhmm: string; text: string } | null>(null);
 
   useEffect(() => {
     if (move) formRef.current?.requestSubmit();
@@ -142,10 +147,13 @@ export function CalendarDrag({ shopId, day, posts, bufferMin, days, movable, ret
       setOver(null);
       return;
     }
+    const nowDay = localDay(new Date());
+    const nowMin = minutesOf(new Date());
     const res = dayDropAt({
       day: dd.day, intervals: dd.intervals, posts, bufferMin,
       fromMin: block.fromMin, durationMin: Math.max(1, block.toMin - block.fromMin),
       blocks: dd.blocks, movingId: block.id,
+      pastBefore: dd.day < nowDay ? Number.POSITIVE_INFINITY : dd.day === nowDay ? nowMin : undefined,
     });
     paint(dd.day, res.reason !== null);
     setOver(res);
@@ -156,8 +164,15 @@ export function CalendarDrag({ shopId, day, posts, bufferMin, days, movable, ret
     const res = drag.moved ? over : null;
     const id = drag.id;
     stop();
-    if (!res || res.reason) return;
-    setMove({ bookingId: id, day: res.day, hhmm: hhmmOf(res.fromMin) });
+    if (!res) return;
+    if (res.reason) {
+      // Бросок «нельзя» больше не умирает молча: показываем, почему, и даём
+      // подтвердить. Пост не шлём — при force его выберет сервер.
+      const dd = days.find(d => d.day === res.day);
+      setAsk({ bookingId: id, day: res.day, hhmm: hhmmOf(res.fromMin), text: dd ? warning(res, dd.label, dd.blocks) : "Перенести вопреки правилам?" });
+      return;
+    }
+    setMove({ bookingId: id, day: res.day, hhmm: hhmmOf(res.fromMin), force: false });
   }
 
   function onCancel(e: ReactPointerEvent<HTMLElement>) {
@@ -174,11 +189,31 @@ export function CalendarDrag({ shopId, day, posts, bufferMin, days, movable, ret
           {over && overDay ? warning(over, overDay.label, overDay.blocks) : "Тяните запись на другой день недели"}
         </div>
       )}
+      {ask && (
+        <>
+          <button className="scrim" onClick={() => setAsk(null)} aria-label="Отмена" />
+          <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="cd-ask-t">
+            <div className="sheet-grip"><span /></div>
+            <div className="sheet-head">
+              <div className="h-mid"><div className="h-title" id="cd-ask-t">Перенести всё равно?</div></div>
+            </div>
+            <div className="sheet-body"><p>{ask.text}</p></div>
+            <div className="sheet-foot">
+              <button className="aui-btn aui-btn--outline aui-btn--md" type="button" onClick={() => setAsk(null)}>Отмена</button>
+              <button className="aui-btn aui-btn--primary aui-btn--lg" type="button"
+                onClick={() => { setMove({ bookingId: ask.bookingId, day: ask.day, hhmm: ask.hhmm, force: true }); setAsk(null); }}>
+                Перенести всё равно
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       <form ref={formRef} action={rescheduleAction} style={{ display: "none" }}>
         <input type="hidden" name="shopId" value={shopId} />
         <input type="hidden" name="bookingId" value={move?.bookingId ?? ""} />
         <input type="hidden" name="day" value={move?.day ?? ""} />
         <input type="hidden" name="hhmm" value={move?.hhmm ?? ""} />
+        {move?.force && <input type="hidden" name="force" value="1" />}
         <input type="hidden" name="return" value={returnTo} />
       </form>
     </DragCtx.Provider>

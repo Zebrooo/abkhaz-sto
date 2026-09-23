@@ -18,7 +18,7 @@ import { toMinutes } from "@/lib/sto/schedule";
 import { DEFAULT_LEAD_MIN, dayOfWeek, localTime } from "@/lib/sto/slots";
 import { canReschedule } from "@/lib/sto/transitions";
 import { DEFAULT_GAP_RULES, dayWindow, freeGaps, isLive } from "@/lib/stats";
-import { busyBlocks, dropAt, dropWarning, hhmmOf, minutesOf, type DropResult } from "@/lib/drag";
+import { busyBlocks, dropAt, dropWarning, hhmmOf, minutesOf, overlapDepth, type DropResult } from "@/lib/drag";
 import { formatRub, minutesLabel } from "@/lib/format";
 import { Icon } from "@/components/Icon";
 import { rescheduleAction } from "@/app/(app)/actions";
@@ -110,15 +110,19 @@ export function Timeline({ rows, schedule, posts, day, now, shopId, returnTo }: 
      гасим, иначе бросок заодно открывает запись. */
   const dragged = useRef(false);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [move, setMove] = useState<{ bookingId: number; hhmm: string; postNo: number } | null>(null);
+  const [move, setMove] = useState<{ bookingId: number; hhmm: string; postNo: number; force: boolean } | null>(null);
+  /** Бросок с предупреждением ждёт подтверждения — «перенести всё равно?». */
+  const [ask, setAsk] = useState<{ bookingId: number; hhmm: string; postNo: number; text: string } | null>(null);
 
   // Занятость поста — по тем же записям, что считает сервер (busyBlocks).
   const blocks = busyBlocks(rows);
+  const depth = overlapDepth(blocks);
   const res: DropResult | null = drag
     ? dropAt({
         intervals, stepMin: rules.stepMin, bufferMin: rules.bufferMin,
         durationMin: drag.durationMin, postNo: drag.postNo, minute: drag.minute,
         blocks, movingId: drag.id,
+        pastBefore: nowMin ?? (dayPassed ? Number.POSITIVE_INFINITY : undefined),
       })
     : null;
   const ghost = drag?.moved ? res : null;
@@ -176,11 +180,17 @@ export function Timeline({ rows, schedule, posts, day, now, shopId, returnTo }: 
     if (!drag || e.pointerId !== drag.pointerId) return;
     const done = drag.moved ? res : null;
     setDrag(null);
-    if (!done || done.reason) return;
+    if (!done) return;
     // Бросили туда же, откуда взяли, — переносить нечего.
     const row = rows.find(r => r.id === drag.id);
     if (row && done.postNo === row.post_no && done.fromMin === minutesOf(row.starts_at)) return;
-    setMove({ bookingId: drag.id, hhmm: hhmmOf(done.fromMin), postNo: done.postNo });
+    if (done.reason) {
+      // Бросок «нельзя» больше не умирает молча: показываем, почему, и даём
+      // подтвердить — перенос вопреки правилам делается осознанно.
+      setAsk({ bookingId: drag.id, hhmm: hhmmOf(done.fromMin), postNo: done.postNo, text: dropWarning(done, blocks, rules.bufferMin) });
+      return;
+    }
+    setMove({ bookingId: drag.id, hhmm: hhmmOf(done.fromMin), postNo: done.postNo, force: false });
   }
 
   function onCancel(e: ReactPointerEvent<HTMLElement>) {
@@ -246,7 +256,13 @@ export function Timeline({ rows, schedule, posts, day, now, shopId, returnTo }: 
                        увело бы курсор с сетки на адресную строку. */
                     draggable={false}
                     /* Пол 18px — одна строка текста: 15-минутные записи подряд не должны наезжать друг на друга. */
-                    style={{ top: at(top - win.fromMin), height: `max(18px, calc(${at(bottom - top)} - 4px))` }}
+                    style={{
+                      top: at(top - win.fromMin), height: `max(18px, calc(${at(bottom - top)} - 4px))`,
+                      // Лесенка наложений: вложенный блок сдвинут вправо и
+                      // выше по z — обе записи видны и кликабельны.
+                      marginLeft: `${(depth.get(b.id) ?? 0) * 14}px`,
+                      zIndex: 2 + (depth.get(b.id) ?? 0),
+                    }}
                     onPointerDown={e => start(b, e, false)}
                     onPointerMove={onMove}
                     onPointerUp={onUp}
@@ -311,12 +327,32 @@ export function Timeline({ rows, schedule, posts, day, now, shopId, returnTo }: 
           {dropWarning(ghost, blocks, rules.bufferMin)}
         </div>
       )}
+      {ask && (
+        <>
+          <button className="scrim" onClick={() => setAsk(null)} aria-label="Отмена" />
+          <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="tl-ask-t">
+            <div className="sheet-grip"><span /></div>
+            <div className="sheet-head">
+              <div className="h-mid"><div className="h-title" id="tl-ask-t">Перенести всё равно?</div></div>
+            </div>
+            <div className="sheet-body"><p>{ask.text}</p></div>
+            <div className="sheet-foot">
+              <button className="aui-btn aui-btn--outline aui-btn--md" type="button" onClick={() => setAsk(null)}>Отмена</button>
+              <button className="aui-btn aui-btn--primary aui-btn--lg" type="button"
+                onClick={() => { setMove({ bookingId: ask.bookingId, hhmm: ask.hhmm, postNo: ask.postNo, force: true }); setAsk(null); }}>
+                Перенести всё равно
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       <form ref={formRef} action={rescheduleAction} style={{ display: "none" } as CSSProperties}>
         <input type="hidden" name="shopId" value={shopId} />
         <input type="hidden" name="bookingId" value={move?.bookingId ?? ""} />
         <input type="hidden" name="day" value={day} />
         <input type="hidden" name="hhmm" value={move?.hhmm ?? ""} />
         <input type="hidden" name="postNo" value={move?.postNo ?? ""} />
+        {move?.force && <input type="hidden" name="force" value="1" />}
         <input type="hidden" name="return" value={returnTo} />
       </form>
     </>

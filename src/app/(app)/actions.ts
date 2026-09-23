@@ -14,8 +14,9 @@ import { listServices, toBookingService, updateService } from "@/lib/services";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import {
   validateStoPrepay, validateStoSchedule, STO_DAYS, MAX_STO_INTERVALS_PER_DAY,
-  type StoDay, type StoInterval,
+  type StoDay, type StoInterval, type StoSchedule,
 } from "@/lib/sto/schedule";
+import { workHoursLabel } from "@/lib/work-hours";
 import type { StoTransition } from "@/lib/sto/transitions";
 import { normalizePhone } from "@/lib/phone";
 import { plateProblem, vinProblem } from "@/lib/vehicle-input";
@@ -316,6 +317,18 @@ export async function createManualAction(fd: FormData) {
   back(`/zapis/${res.id}`, { d: day, ok: `Записан: ${svc.title}, ${hhmm}` });
 }
 
+/**
+ * Подпись «часы работы» на витрине сайта — из расписания CRM, при каждом его
+ * сохранении (lib/work-hours.ts): страница магазина показывает shops.work_hours,
+ * и без этого текст расходился с настоящим режимом («ежедневно», когда
+ * понедельник — выходной). Пустая подпись — расписания фактически нет — ручной
+ * текст витрины не перетирает.
+ */
+function workHoursPatch(schedule: StoSchedule): { work_hours?: string } {
+  const label = workHoursLabel(schedule);
+  return label ? { work_hours: label } : {};
+}
+
 /** Часы приёма одного дня: один интервал правится своей шторкой и сохраняется сразу. */
 export async function saveIntervalAction(fd: FormData) {
   const { shop } = await ctx(fd, "schedule");
@@ -343,7 +356,7 @@ export async function saveIntervalAction(fd: FormData) {
     daysOff: shop.schedule?.daysOff ?? [],
   });
   if (!v.ok) back("/raspisanie", { err: v.error });
-  const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule }).eq("id", shop.id);
+  const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule, ...workHoursPatch(v.schedule) }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });
   revalidateSchedule();
   back("/raspisanie", { ok: remove ? "Интервал убран" : "Часы приёма сохранены" });
@@ -364,7 +377,7 @@ export async function saveScheduleAction(fd: FormData) {
     freeCancelHours: str(fd, "freeCancelHours") === "" ? undefined : Number(str(fd, "freeCancelHours")),
   });
   if (!p.ok) back("/raspisanie", { err: p.error });
-  const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule, sto_prepay: p.prepay }).eq("id", shop.id);
+  const { error } = await createSupabaseAdmin().from("shops").update({ sto_schedule: v.schedule, sto_prepay: p.prepay, ...workHoursPatch(v.schedule) }).eq("id", shop.id);
   if (error) back("/raspisanie", { err: "Не удалось сохранить: " + error.message });
   revalidateSchedule();
   back("/raspisanie", { ok: "Расписание сохранено" });

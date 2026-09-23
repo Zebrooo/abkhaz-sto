@@ -10,8 +10,11 @@ import { PendingBlock, PostsNowBlock, ShiftSummary } from "@/components/Shift";
 import { Timeline } from "@/components/Timeline";
 import { addDays, count, dayLabel, dayOfWeekLabel, dayTitle, todayLocal } from "@/lib/format";
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
-import { localDay, localTime } from "@/lib/sto/slots";
+import { localDay, localHHMM, localTime } from "@/lib/sto/slots";
 import { monthGrid, monthOf, safeMonth } from "@/lib/month";
+import { canReschedule } from "@/lib/sto/transitions";
+import { assessSlot } from "@/lib/slot-warnings";
+import { moveWarnFromQuery, MoveConfirmSheet } from "@/components/MoveConfirm";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -224,6 +227,29 @@ export default async function TodayPage({ searchParams }: { searchParams: SP }) 
         <PendingBlock rows={rows} day={day} returnTo={returnTo} />
         <PostsNowBlock rows={rows} schedule={shop.schedule} day={day} posts={posts} now={now} />
       </aside>
+
+      {(() => {
+        // Гонка переноса из сетки: пока человек целился, окно изменилось, и
+        // сервер отказал предупреждением (?warn=) — шторка «перенести всё
+        // равно?» здесь же, на экране, откуда тащили.
+        const mw = moveWarnFromQuery(sp);
+        const moving = mw ? rows.find(r => r.id === mw.bookingId) : undefined;
+        if (!mw || !shop.schedule || !moving) return null;
+        const durationMin = Math.max(1, Math.round((new Date(moving.ends_at).getTime() - new Date(moving.starts_at).getTime()) / 60_000));
+        const busy = rows
+          .filter(r => canReschedule(r.status) && r.id !== moving.id)
+          .map(r => ({ postNo: r.post_no, startsAt: new Date(r.starts_at), endsAt: new Date(r.ends_at) }));
+        const res = assessSlot({ schedule: shop.schedule, startsAt: localTime(day, mw.hhmm), durationMin, busy, postNo: mw.postNo, now });
+        return (
+          <MoveConfirmSheet
+            shopId={shop.id} bookingId={mw.bookingId} day={day} hhmm={mw.hhmm} postNo={mw.postNo}
+            warns={mw.warns}
+            conflicts={res.conflicts.map(c => ({ at: `${localHHMM(c.startsAt)}–${localHHMM(c.endsAt)}`, postNo: c.postNo }))}
+            closeHref={href(day, filter)}
+            returnTo={returnTo}
+          />
+        );
+      })()}
     </>
   );
 }

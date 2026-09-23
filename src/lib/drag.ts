@@ -11,8 +11,9 @@
 //  - буфер сервиса (schedule.bufferMin) держит пост после записи и нужен
 //    перед следующей — с обеих сторон, как в postTaken;
 //  - окно целиком лежит внутри интервала приёма: «через обед» нельзя;
-//  - прошедшее время НЕ отсекаем: перенос задним числом сервис делает
-//    руками, и rescheduleBooking его разрешает (isSlotFree без now).
+//  - прошедшее время — предупреждение (past), а не запрет: перенос задним
+//    числом сервис подтверждает попапом, и rescheduleBooking его пускает
+//    с force.
 import type { StoBookingRow } from "@/lib/sto/types";
 import type { StoInterval } from "@/lib/sto/schedule";
 import { toMinutes } from "@/lib/sto/schedule";
@@ -41,8 +42,8 @@ export function busyBlocks(rows: readonly StoBookingRow[]): DragBlock[] {
   return rows.filter(b => canReschedule(b.status)).map(toDragBlock);
 }
 
-/** closed — вне часов приёма (перерыв, выходной, край смены); overlap — время наложилось на запись; buffer — между записями не осталось буфера. */
-export type DropReason = "closed" | "overlap" | "buffer";
+/** closed — вне часов приёма (перерыв, выходной, край смены); overlap — время наложилось на запись; buffer — между записями не осталось буфера; past — время уже прошло. */
+export type DropReason = "closed" | "overlap" | "buffer" | "past";
 
 export type DropResult = {
   postNo: number;
@@ -83,6 +84,8 @@ export function dropAt(input: {
   minute: number;
   blocks: readonly DragBlock[];
   movingId: number;
+  /** Минута дня, раньше которой время уже прошло; не задана — прошлое не считаем. */
+  pastBefore?: number;
 }): DropResult {
   const { postNo, minute, durationMin, blocks, movingId } = input;
   const step = Number.isInteger(input.stepMin) && input.stepMin > 0 ? input.stepMin : 30;
@@ -107,7 +110,8 @@ export function dropAt(input: {
   const others = blocks.filter(b => b.id !== movingId && b.postNo === postNo);
   const hard = others.filter(b => fromMin < b.toMin && b.fromMin < toMin);
   const soft = others.filter(b => fromMin < b.toMin + pad && b.fromMin < toMin + pad);
-  const reason: DropReason | null = hard.length > 0 ? "overlap" : soft.length > 0 ? "buffer" : closed ? "closed" : null;
+  const past = input.pastBefore != null && fromMin < input.pastBefore;
+  const reason: DropReason | null = hard.length > 0 ? "overlap" : soft.length > 0 ? "buffer" : closed ? "closed" : past ? "past" : null;
   return { postNo, fromMin, toMin, reason, conflicts: soft.map(b => b.id) };
 }
 
@@ -122,13 +126,15 @@ export function dropWarning(res: DropResult, blocks: readonly DragBlock[], buffe
       return `Впритык к ${where}: между записями нужен перерыв ${bufferMin} мин`;
     case "closed":
       return "Вне часов приёма — сюда записать нельзя";
+    case "past":
+      return "Это время уже прошло — перенести задним числом?";
     default:
       return `Перенести на ${hhmmOf(res.fromMin)}–${hhmmOf(res.toMin)}, пост ${res.postNo}`;
   }
 }
 
-/** off — сервис в этот день не работает; closed — время вне часов приёма; busy — все посты заняты. */
-export type DayDropReason = "off" | "closed" | "busy";
+/** off — сервис в этот день не работает; closed — время вне часов приёма; busy — все посты заняты; past — день или время уже прошли. */
+export type DayDropReason = "off" | "closed" | "busy" | "past";
 
 export type DayDropResult = {
   day: string;
@@ -154,6 +160,8 @@ export function dayDropAt(input: {
   durationMin: number;
   blocks: readonly DragBlock[];
   movingId: number;
+  /** Минута дня-цели, раньше которой время прошло; Infinity — день прошёл целиком. */
+  pastBefore?: number;
 }): DayDropResult {
   const { day, fromMin, durationMin, blocks, movingId } = input;
   const pad = Number.isFinite(input.bufferMin) && input.bufferMin > 0 ? input.bufferMin : 0;
@@ -165,10 +173,29 @@ export function dayDropAt(input: {
     return { day, fromMin, toMin, postNo: null, reason: "closed", conflicts: [] };
   }
   const others = blocks.filter(b => b.id !== movingId);
+  const past = input.pastBefore != null && fromMin < input.pastBefore;
   for (let p = 1; p <= posts; p++) {
     const taken = others.some(b => b.postNo === p && fromMin < b.toMin + pad && b.fromMin < toMin + pad);
-    if (!taken) return { day, fromMin, toMin, postNo: p, reason: null, conflicts: [] };
+    if (!taken) return { day, fromMin, toMin, postNo: p, reason: past ? "past" : null, conflicts: [] };
   }
   const conflicts = others.filter(b => fromMin < b.toMin + pad && b.fromMin < toMin + pad).map(b => b.id);
   return { day, fromMin, toMin, postNo: null, reason: "busy", conflicts };
+}
+
+/**
+ * Лесенка наложений: насколько блок сдвинуть вправо, чтобы записи,
+ * положенные друг на друга (осознанное наложение), были видны и кликабельны.
+ * Глубина — сколько записей того же поста «накрывают» начало блока, начавшись
+ * не позже него; при одинаковом старте глубже та, что с большим id, — порядок
+ * стабилен между рендерами.
+ */
+export function overlapDepth(blocks: readonly DragBlock[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const b of blocks) {
+    const depth = blocks.filter(o => o.id !== b.id && o.postNo === b.postNo
+      && o.toMin > b.fromMin
+      && (o.fromMin < b.fromMin || (o.fromMin === b.fromMin && o.id < b.id))).length;
+    map.set(b.id, depth);
+  }
+  return map;
 }

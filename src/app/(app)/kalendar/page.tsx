@@ -14,7 +14,9 @@ import { addDays, count, dayNumber, dayOfWeekShort, dayTitle, rangeLabel, rub, t
 import { dayStats, dayWindow, isLive } from "@/lib/stats";
 import { monthGrid, monthOf, safeMonth } from "@/lib/month";
 import { busyBlocks, toDragBlock } from "@/lib/drag";
-import { dayOfWeek, freeSlots, localDay, localHHMM, localTime } from "@/lib/sto/slots";
+import { dayOfWeek, localDay, localHHMM, localTime, type BusyInterval } from "@/lib/sto/slots";
+import { assessSlot, daySlotOptions, SLOT_WARNING_LABEL, type SlotOption } from "@/lib/slot-warnings";
+import { moveWarnFromQuery, MoveConfirmSheet } from "@/components/MoveConfirm";
 import { canReschedule } from "@/lib/sto/transitions";
 import { rescheduleAction } from "@/app/(app)/actions";
 
@@ -116,20 +118,22 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   };
   const visible = filter === "all" ? live : live.filter(b => b.status === filter);
 
-  let moveSlots: { hhmm: string; postNo: number }[] = [];
+  let moveSlots: SlotOption[] = [];
+  let dayBusy: BusyInterval[] = [];
+  const movingMin = moving ? Math.max(1, Math.round((new Date(moving.ends_at).getTime() - new Date(moving.starts_at).getTime()) / 60_000)) : 0;
   if (moving && shop.schedule && canReschedule(moving.status)) {
-    const durationMin = Math.max(1, Math.round((new Date(moving.ends_at).getTime() - new Date(moving.starts_at).getTime()) / 60_000));
     // Занятость дня — из уже загруженной недели, а не повторным запросом:
     // день целиком лежит внутри weekRows, а правило отбора то же, что у
     // busyIntervals (живые записи, кроме переносимой).
     const dayFrom = localTime(day, "00:00");
     const dayTo = localTime(addDays(day, 1), "00:00");
-    const busy = weekRows
+    dayBusy = weekRows
       .filter(r => new Date(r.starts_at) < dayTo && new Date(r.ends_at) > dayFrom)
       .filter(r => canReschedule(r.status) && r.id !== moving.id)
       .map(r => ({ postNo: r.post_no, startsAt: new Date(r.starts_at), endsAt: new Date(r.ends_at) }));
-    moveSlots = freeSlots({ schedule: shop.schedule, day, durationMin, busy, now: new Date() })
-      .map(s => ({ hhmm: localHHMM(s.startsAt), postNo: s.postNo }));
+    // Все узлы сетки, а не только свободные: занятое и прошедшее выбираются
+    // тоже — с предупреждением и шторкой подтверждения.
+    moveSlots = daySlotOptions({ schedule: shop.schedule, day, durationMin: movingMin, busy: dayBusy, now: new Date() });
   }
   const returnTo = href(day, filter, moving?.id);
   // Неделя для перетаскивания: часы приёма каждого дня и занятые им записи —
@@ -251,7 +255,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
             ) : !canReschedule(moving.status) ? (
               <p className="note-s">Запись «{STATUS_SHORT[moving.status]}» — переносить нечего.</p>
             ) : moveSlots.length === 0 ? (
-              <p className="note-s">В этот день свободных окон нет.</p>
+              <p className="note-s">В этот день у сервиса нет часов приёма.</p>
             ) : (
               <form action={rescheduleAction} className="slots">
                 <input type="hidden" name="shopId" value={shop.id} />
@@ -259,7 +263,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
                 <input type="hidden" name="day" value={day} />
                 <input type="hidden" name="return" value={returnTo} />
                 {moveSlots.map(s => (
-                  <button key={s.hhmm} className="slot" type="submit" name="hhmm" value={s.hhmm} title={`пост ${s.postNo}`}>{s.hhmm}</button>
+                  <button key={s.hhmm} className={`slot${s.warnings.length > 0 ? " warn" : ""}`} type="submit" name="hhmm" value={s.hhmm}
+                    title={s.warnings.length > 0 ? s.warnings.map(w => SLOT_WARNING_LABEL[w]).join("; ") : `пост ${s.postNo}`}>
+                    {s.hhmm}
+                  </button>
                 ))}
               </form>
             )}
@@ -297,6 +304,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
         <PendingBlock rows={dayRows} day={day} returnTo={returnTo} />
         <PostsNowBlock rows={dayRows} schedule={shop.schedule} day={day} posts={posts} now={now} />
       </aside>
+
+      {(() => {
+        // Перенос отказан предупреждением (?warn=) — шторка «перенести всё
+        // равно?»; пересечения пересчитываем на месте, в адресе их нет.
+        const mw = moveWarnFromQuery(sp);
+        if (!mw || !shop.schedule || !moving || moving.id !== mw.bookingId) return null;
+        const res = assessSlot({ schedule: shop.schedule, startsAt: localTime(day, mw.hhmm), durationMin: movingMin, busy: dayBusy, postNo: mw.postNo, now });
+        return (
+          <MoveConfirmSheet
+            shopId={shop.id} bookingId={mw.bookingId} day={day} hhmm={mw.hhmm} postNo={mw.postNo}
+            warns={mw.warns}
+            conflicts={res.conflicts.map(c => ({ at: `${localHHMM(c.startsAt)}–${localHHMM(c.endsAt)}`, postNo: c.postNo }))}
+            closeHref={href(day, filter, moving.id)}
+            returnTo={returnTo}
+          />
+        );
+      })()}
     </CalendarDrag>
   );
 }

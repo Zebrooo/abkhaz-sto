@@ -11,7 +11,8 @@ import { vehicleKey, type VehiclePastRow } from "@/lib/vehicles";
 import type { StoBookingExtra, StoBookingRow, StoBookingService, StoBookingClientSnapshot, StoBookingData, StoBookingVehicleSnapshot } from "@/lib/sto/types";
 import { canReschedule, shopTransitionPatch, type StoTransition } from "@/lib/sto/transitions";
 import { planDelay } from "@/lib/delay";
-import { firstFreePost, isSlotFree, localTime, type BusyInterval } from "@/lib/sto/slots";
+import { firstFreePost, localTime, type BusyInterval } from "@/lib/sto/slots";
+import { assessSlot, SLOT_WARNING_LABEL, type SlotWarning } from "@/lib/slot-warnings";
 import { addDays } from "@/lib/format";
 import type { StoSchedule } from "@/lib/sto/schedule";
 import { normalizeVin, plateInput } from "@/lib/vehicle-input";
@@ -360,23 +361,34 @@ export async function setBookingVin(shopId: number, bookingId: number, vin: stri
  */
 export async function rescheduleBooking(input: {
   shopId: number; bookingId: number; schedule: StoSchedule; day: string; hhmm: string; actorUserId: string; postNo?: number;
-}): Promise<ActionResult> {
+  /** Человек подтвердил попап «перенести всё равно» — предупреждения не останавливают. */
+  force?: boolean;
+}): Promise<ActionResult | { ok: false; error: string; warn: SlotWarning[] }> {
   const { shopId, bookingId, schedule, day, hhmm, actorUserId } = input;
   const current = await getBooking(shopId, bookingId);
   if (!current) return { ok: false, error: "Запись не найдена" };
   if (!canReschedule(current.status)) return { ok: false, error: "Перенести можно только живую запись" };
+  // Пост за пределами расписания — не предупреждение, а бессмыслица: force
+  // не создаёт постов, поэтому отказ остаётся жёстким.
+  if (input.postNo != null && (!Number.isInteger(input.postNo) || input.postNo < 1 || input.postNo > schedule.posts)) {
+    return { ok: false, error: "Такого поста у сервиса нет" };
+  }
   const startsAt = localTime(day, hhmm);
   const durationMin = Math.max(1, Math.round((new Date(current.ends_at).getTime() - new Date(current.starts_at).getTime()) / 60_000));
   const busy = await busyIntervals(shopId, new Date(startsAt.getTime() - 24 * 3_600_000), new Date(startsAt.getTime() + 24 * 3_600_000), bookingId);
-  const free = isSlotFree({ schedule, startsAt, durationMin, busy, postNo: input.postNo });
-  if (!free.ok) {
-    const why = { closed: "В это время сервис не работает", past: "Это время уже прошло", no_post: "Такого поста у сервиса нет", taken: "Окно уже занято" } as const;
-    return { ok: false, error: why[free.reason] };
+  const slot = assessSlot({ schedule, startsAt, durationMin, busy, postNo: input.postNo, now: new Date() });
+  if (!input.force && slot.warnings.length > 0) {
+    return { ok: false, error: SLOT_WARNING_LABEL[slot.warnings[0]], warn: slot.warnings };
   }
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   const history = [...(current.data.history ?? []), { at: new Date().toISOString(), from: current.starts_at, to: startsAt.toISOString(), by: "shop" as const }];
   const { data: updated, error } = await createSupabaseAdmin().from("sto_bookings")
-    .update({ starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), post_no: free.postNo, data: { ...current.data, history } })
+    .update({
+      starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), post_no: slot.postNo, data: { ...current.data, history },
+      // Перенос в чистое окно возвращает запись под защиту базы, перенос в
+      // наложение (по подтверждению) — выводит из неё.
+      overlap_ok: input.force === true && (slot.warnings.includes("taken") || slot.warnings.includes("buffer")),
+    })
     .eq("id", bookingId).eq("shop_id", shopId).eq("status", current.status)
     .select("id").returns<{ id: number }[]>();
   if (error) {
@@ -526,14 +538,20 @@ export async function createManualBooking(input: {
   plate?: string | null; vin?: string | null;
   /** Пост выбран человеком; без него — первый свободный. */
   postNo?: number;
-}): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  /** Человек подтвердил попап «записать всё равно» — предупреждения не останавливают. */
+  force?: boolean;
+}): Promise<{ ok: true; id: number } | { ok: false; error: string; warn?: SlotWarning[] }> {
   const { shopId, schedule, day, hhmm, service, listingId, client, actorUserId } = input;
+  // Пост за пределами расписания — не предупреждение, а бессмыслица: force
+  // не создаёт постов, поэтому отказ остаётся жёстким.
+  if (input.postNo != null && (!Number.isInteger(input.postNo) || input.postNo < 1 || input.postNo > schedule.posts)) {
+    return { ok: false, error: "Такого поста у сервиса нет" };
+  }
   const startsAt = localTime(day, hhmm);
   const busy = await busyIntervals(shopId, new Date(startsAt.getTime() - 24 * 3_600_000), new Date(startsAt.getTime() + 24 * 3_600_000));
-  const free = isSlotFree({ schedule, startsAt, durationMin: service.durationMin, busy, postNo: input.postNo });
-  if (!free.ok) {
-    const why = { closed: "В это время сервис не работает", past: "Это время уже прошло", no_post: "Такого поста у сервиса нет", taken: "Окно уже занято" } as const;
-    return { ok: false, error: why[free.reason] };
+  const slot = assessSlot({ schedule, startsAt, durationMin: service.durationMin, busy, postNo: input.postNo, now: new Date() });
+  if (!input.force && slot.warnings.length > 0) {
+    return { ok: false, error: SLOT_WARNING_LABEL[slot.warnings[0]], warn: slot.warnings };
   }
   const endsAt = new Date(startsAt.getTime() + service.durationMin * 60_000);
   // Марка, модель и год так и остаются одной строкой в brand: разбирать её
@@ -550,9 +568,13 @@ export async function createManualBooking(input: {
   };
   const { data: row, error } = await createSupabaseAdmin().from("sto_bookings").insert({
     shop_id: shopId, client_id: null, vehicle_id: null, listing_id: listingId, service,
-    starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), post_no: free.postNo,
+    starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), post_no: slot.postNo,
     // Сервис записал сам — подтверждать нечего.
     status: "confirmed", source: "app", data,
+    // Подтверждённое наложение выходит из констрейнта базы (overlap_ok);
+    // запись без наложения остаётся под ним даже при force — иначе чистое
+    // окно потеряло бы защиту от гонки с сайтом.
+    overlap_ok: input.force === true && (slot.warnings.includes("taken") || slot.warnings.includes("buffer")),
   }).select("id").single<{ id: number }>();
   if (error || !row) {
     return { ok: false, error: error?.code === "23P01" ? "Окно только что заняли — выберите другое" : "Не удалось сохранить: " + (error?.message ?? "") };

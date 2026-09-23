@@ -33,6 +33,9 @@ function back(path: string, q: Record<string, string | undefined | null>): never
   const sp = new URLSearchParams(i === -1 ? "" : path.slice(i + 1));
   sp.delete("ok");
   sp.delete("err");
+  // Параметры предупреждения одноразовые, как ok/err: следующий переход не
+  // должен снова открыть шторку «записать всё равно».
+  for (const k of ["warn", "wb", "wt", "wp"]) sp.delete(k);
   for (const [k, v] of Object.entries(q)) {
     if (v === null) sp.delete(k);
     else if (v) sp.set(k, v);
@@ -208,9 +211,18 @@ export async function rescheduleAction(fd: FormData) {
   // Из списка окон поля нет, и пост по-прежнему выбирает сервер.
   const postRaw = Number(str(fd, "postNo"));
   const postNo = Number.isInteger(postRaw) && postRaw > 0 ? postRaw : undefined;
-  const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), postNo, actorUserId: user.id });
+  const force = str(fd, "force") === "1";
+  const res = await rescheduleBooking({ shopId: shop.id, bookingId: Number(str(fd, "bookingId")), schedule: shop.schedule, day, hhmm: str(fd, "hhmm"), postNo, actorUserId: user.id, force });
   revalidateBookings();
-  if (!res.ok) back(ret, { err: res.error });
+  if (!res.ok) {
+    // Предупреждение — не ошибка: контекст переноса едет в адресе, экран
+    // возврата соберёт из него шторку «перенести всё равно?» со своей
+    // маленькой формой, и она уйдёт повторно с force=1.
+    if ("warn" in res && res.warn.length > 0) {
+      back(ret, { warn: res.warn.join(","), wb: String(Number(str(fd, "bookingId"))), wt: str(fd, "hhmm"), wp: postNo ? String(postNo) : null, d: day });
+    }
+    back(ret, { err: res.error });
+  }
   // Возвращаем туда, откуда переносили: перетащили запись в недельной сетке —
   // остаёмся в неделе. Раньше любой перенос выбрасывал в день.
   back(ret, {
@@ -253,6 +265,9 @@ export async function createManualAction(fd: FormData) {
   const typed = {
     n: name || undefined, ph: phoneRaw || undefined, v: vehicle || undefined,
     pl: plateRaw || undefined, vin: vinRaw || undefined,
+    // Комментарий тоже: с попапом «записать всё равно» возврат — не редкий
+    // отказ, а обычный шаг, и терять набранное на нём нельзя.
+    c: str(fd, "comment") || undefined,
   };
   // Валидация формы — ДО запроса прайса: опечатка в телефоне не должна
   // стоить лишнего обращения к базе.
@@ -277,10 +292,15 @@ export async function createManualAction(fd: FormData) {
   const res = await createManualBooking({
     shopId: shop.id, schedule: shop.schedule, day, hhmm, service: toBookingService(svc), listingId: svc.listingId,
     postNo, client: { name: name.slice(0, 80), phone }, vehicle, plate: plateRaw, vin: vinRaw,
-    comment: str(fd, "comment"), actorUserId: user.id,
+    comment: str(fd, "comment"), actorUserId: user.id, force: str(fd, "force") === "1",
   });
   revalidateBookings();
-  if (!res.ok) back(ret, { ...keep, ...typed, step: "1", err: res.error });
+  if (!res.ok) {
+    // Предупреждение — не ошибка: возвращаемся с warn, экран покажет шторку
+    // «записать всё равно?», и та же форма уйдёт повторно с force=1.
+    if (res.warn) back(ret, { ...keep, ...typed, step: "2", warn: res.warn.join(",") });
+    back(ret, { ...keep, ...typed, step: "1", err: res.error });
+  }
   if (fromReport) {
     // Запись уже есть; связь с пунктом сметы — на сайте. Не связалось — запись
     // всё равно создана, и об этом честно в отчёте.

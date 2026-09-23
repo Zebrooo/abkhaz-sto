@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayDropAt, dropAt, dropWarning, hhmmOf, type DragBlock } from "@/lib/drag";
+import { dayDropAt, dropAt, dropWarning, hhmmOf, overlapDepth, type DragBlock } from "@/lib/drag";
 
 const DAY = [{ from: "09:00", to: "13:00" }, { from: "14:00", to: "18:00" }];
 const block = (id: number, postNo: number, from: string, to: string, title = "Услуга"): DragBlock => ({
@@ -125,6 +125,52 @@ describe("dropWarning", () => {
   });
 });
 
+describe("dropAt — прошедшее время", () => {
+  it("раньше pastBefore — причина past", () => {
+    expect(drop(10 * 60, { pastBefore: 12 * 60 }).reason).toBe("past");
+    expect(drop(15 * 60, { pastBefore: 12 * 60 }).reason).toBe(null);
+  });
+
+  it("наложение важнее прошедшего", () => {
+    expect(drop(10 * 60, { pastBefore: 12 * 60, blocks: [block(2, 1, "10:00", "11:00")] }).reason).toBe("overlap");
+  });
+
+  it("без pastBefore прошлое не считается — как раньше", () => {
+    expect(drop(10 * 60).reason).toBe(null);
+  });
+
+  it("past — со своим текстом", () => {
+    expect(dropWarning(drop(10 * 60, { pastBefore: 12 * 60 }), [])).toContain("уже прошло");
+  });
+});
+
+describe("overlapDepth — лесенка наложений", () => {
+  it("без наложений глубина 0", () => {
+    const bs = [block(1, 1, "09:00", "10:00"), block(2, 1, "10:00", "11:00")];
+    expect(overlapDepth(bs).get(2)).toBe(0);
+  });
+
+  it("запись внутри другой — глубина 1, третья поверх — 2", () => {
+    const bs = [block(1, 1, "09:00", "12:00"), block(2, 1, "09:30", "10:30"), block(3, 1, "09:45", "10:15")];
+    const d = overlapDepth(bs);
+    expect(d.get(1)).toBe(0);
+    expect(d.get(2)).toBe(1);
+    expect(d.get(3)).toBe(2);
+  });
+
+  it("одинаковое начало — глубже та, что с большим id", () => {
+    const bs = [block(5, 1, "09:00", "10:00"), block(4, 1, "09:00", "10:00")];
+    const d = overlapDepth(bs);
+    expect(d.get(4)).toBe(0);
+    expect(d.get(5)).toBe(1);
+  });
+
+  it("другой пост не считается", () => {
+    const bs = [block(1, 1, "09:00", "12:00"), block(2, 2, "09:30", "10:30")];
+    expect(overlapDepth(bs).get(2)).toBe(0);
+  });
+});
+
 describe("dayDropAt — бросок на другой день недели", () => {
   const day = (over: Partial<Parameters<typeof dayDropAt>[0]> = {}) => dayDropAt({
     day: "2026-09-17", intervals: DAY, posts: 2, bufferMin: 0, fromMin: 10 * 60, durationMin: 60,
@@ -153,5 +199,14 @@ describe("dayDropAt — бросок на другой день недели", (
 
   it("буфер учитывается и здесь", () => {
     expect(day({ fromMin: 11 * 60, posts: 1, bufferMin: 15, blocks: [block(2, 1, "10:00", "11:00")] }).reason).toBe("busy");
+  });
+
+  it("день целиком прошёл — past, но пост найден", () => {
+    expect(day({ pastBefore: Infinity })).toMatchObject({ postNo: 1, reason: "past" });
+  });
+
+  it("занятость важнее прошедшего", () => {
+    const res = day({ pastBefore: Infinity, blocks: [block(2, 1, "10:00", "11:00"), block(3, 2, "09:30", "10:30")] });
+    expect(res.reason).toBe("busy");
   });
 });

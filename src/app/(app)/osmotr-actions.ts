@@ -22,14 +22,13 @@ import {
 import type { ApiResult } from "@/lib/api/site-api";
 import { fetchReportPdf, pdfReady, sendReport, setEstimateItem } from "@/lib/api/reports";
 import { createWalkInBooking } from "@/lib/bookings";
-import { blockIfViewing, serviceContext } from "@/lib/context";
+import { serviceContext } from "@/lib/context";
 import { todayLocal } from "@/lib/format";
 import { currentPost } from "@/lib/post-hold";
 import { readPostHold } from "@/lib/post-cookie";
 import { vinProblem } from "@/lib/vehicle-input";
 import { customWorks, kmLabel, NEGOTIABLE_WORK, parseOdometer, photoIdsFrom } from "@/lib/inspection";
 import { isNodeKey } from "@/lib/inspection-nodes";
-import { VIEW_ONLY_MESSAGE } from "@/lib/role-view";
 import { saveAccepted } from "@/lib/post-cookie";
 import { listServices } from "@/lib/services";
 
@@ -70,7 +69,6 @@ const int = (fd: FormData, k: string) => {
 async function ctx() {
   const c = await serviceContext();
   if (!c) redirect("/vhod");
-  blockIfViewing(c);
   if (!can(c.role, "inspect")) redirect(HOME_PATH[c.role]);
   return c;
 }
@@ -268,7 +266,9 @@ export async function toggleItemAction(fd: FormData) {
 /**
  * Передать отчёт дальше. Кому — решает сайт по роли: мастер отдаёт
  * администратору, админ и хозяин — клиенту. Подпись итога подбираем по той
- * же роли, чтобы мастер не прочитал «отправлено клиенту».
+ * же роли, чтобы мастер не прочитал «отправлено клиенту». Роль — НАСТОЯЩАЯ:
+ * сайт знает человека по actorUserId, и хозяин в примерке мастера отправляет
+ * отчёт клиенту, а не администратору (lib/role-view.ts).
  */
 export async function sendReportAction(fd: FormData) {
   const c = await ctx();
@@ -279,7 +279,7 @@ export async function sendReportAction(fd: FormData) {
   const res = await sendReport({ shopId: c.shop.id, actorUserId: c.userId, inspectionId });
   revalidateInspection(bookingId);
   if (!res.ok) back(bare(ret), { d: dayOf(ret), err: res.error });
-  const done = can(c.role, "sendReport") ? "Отчёт с фото отправлен клиенту в чат" : "Отчёт у администратора — он отправит клиенту";
+  const done = can(c.realRole, "sendReport") ? "Отчёт с фото отправлен клиенту в чат" : "Отчёт у администратора — он отправит клиенту";
   back(bare(ret), { d: dayOf(ret), ok: done });
 }
 
@@ -310,7 +310,6 @@ export type ClientResult<T = undefined> = { ok: true; data: T } | { ok: false; e
 export async function createPhotoUploadAction(contentType: string): Promise<ClientResult<PhotoUpload>> {
   const c = await serviceContext();
   if (!c || !can(c.role, "inspect")) return { ok: false, error: "Нет доступа" };
-  if (c.viewing) return { ok: false, error: VIEW_ONLY_MESSAGE };
   const type = /^image\/[\w.+-]+$/.test(contentType) ? contentType : "image/jpeg";
   const res = await createPhotoUpload({ shopId: c.shop.id, actorUserId: c.userId, contentType: type });
   return res.ok ? { ok: true, data: res.data } : { ok: false, error: res.error };
@@ -329,7 +328,6 @@ export async function createPhotoUploadAction(contentType: string): Promise<Clie
 export async function attachPhotoAction(input: { bookingId: number; defectId: number; photoId: string; last?: boolean }): Promise<ClientResult> {
   const c = await serviceContext();
   if (!c || !can(c.role, "inspect")) return { ok: false, error: "Нет доступа" };
-  if (c.viewing) return { ok: false, error: VIEW_ONLY_MESSAGE };
   const [photoId] = photoIdsFrom([input.photoId]);
   if (!photoId || !Number.isInteger(input.bookingId) || !Number.isInteger(input.defectId)) return { ok: false, error: "Кадр не опознан" };
   const insp = await fetchInspection({ shopId: c.shop.id, actorUserId: c.userId, bookingId: input.bookingId });

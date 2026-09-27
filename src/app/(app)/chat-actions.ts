@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/access";
 import { sendMessage } from "@/lib/api/chat";
-import { blockIfViewing, serviceContext } from "@/lib/context";
+import { serviceContext } from "@/lib/context";
 
 /** Длиннее одного экрана клиент всё равно не прочитает; сайт режет по-своему. */
 const MAX_TEXT = 2000;
@@ -23,9 +23,6 @@ const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 export async function sendMessageAction(fd: FormData) {
   const ctx = await serviceContext();
   if (!ctx) redirect("/");
-  // Примерка роли — просмотр: сообщение клиенту из неё не уходит
-  // (lib/role-view.ts). Полоса сверху обещает ровно это.
-  blockIfViewing(ctx);
   const threadId = str(fd, "threadId");
   if (!threadId) redirect("/chat");
   const ret = `/chat/${encodeURIComponent(threadId)}`;

@@ -153,7 +153,9 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     return `/kalendar/novaya?${q.toString()}`;
   };
 
-  const sendLabel = can(ctx.role, "sendReport") ? "Отправить клиенту" : "Передать администратору";
+  // По настоящей роли, а не по примеренной: кому уйдёт отчёт, сайт решает
+  // по человеку, и кнопка обязана сказать правду (lib/role-view.ts).
+  const sendLabel = can(ctx.realRole, "sendReport") ? "Отправить клиенту" : "Передать администратору";
   // «wait» — сайт сказал «собирается»: это не отказ, и краснеть тут нечему.
   const pdfRaw = pick(sp.pdf);
   const pdfWait = pdfRaw === "wait";

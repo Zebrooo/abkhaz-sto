@@ -17,7 +17,7 @@ export function ViewBar({ roleLabel }: { roleLabel: string }) {
     <form action={clearRoleViewAction} className="view-bar">
       <input type="hidden" name="here" value={here} />
       <span className="view-bar-t">
-        Вы смотрите как {roleLabel}: кнопки и пути его. Это просмотр — ничего не сохраняется
+        Вы смотрите как {roleLabel}: кнопки и пути его, а действия — ваши, как хозяина
       </span>
       <button className="aui-btn aui-btn--ghost aui-btn--sm" type="submit">Вернуться к своей роли</button>
     </form>

@@ -559,6 +559,15 @@ svg { display: block; }
 .sheet-foot .aui-btn { min-height: 52px; border-radius: 14px; }
 .sheet-foot .aui-btn--primary { flex: 1; box-shadow: var(--shadow-accent); }
 .sheet-foot .aui-btn--primary:active { box-shadow: none; }
+/* Надписи на кнопках не переносятся (nowrap у .aui-btn), и пара «Выбрать
+   другое время» + «Записать всё равно» в 390px не влезала: главная кнопка
+   уезжала за правый край на 44px. Не влезли в строку — вторая уходит строкой
+   ниже, обе во всю ширину; влезли — стоят рядом, как раньше. На вебе окно
+   560px, там пары помещаются, и раскладка своя. */
+@media (max-width: 880px) {
+  .sheet-foot { flex-wrap: wrap; }
+  .sheet-foot .aui-btn { flex: 1 1 auto; }
+}
 
 .pick {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px; border-radius: 14px;
@@ -2170,3 +2179,24 @@ button.scrim { border: 0; padding: 0; cursor: pointer; }
 .skl-w-65 { width: 65%; }
 .skl-w-70 { width: 70%; }
 .skl-w-80 { width: 80%; }
+
+
+
+/* @section:ios-zoom */
+/* Поля на телефоне — не мельче 16px. iOS при фокусе в поле мельче 16px
+   увеличивает всю страницу (у полей 15px — в 16/15 раза) и масштаб назад не
+   возвращает, а переходы внутри приложения его сохраняют: шторки и экраны
+   дальше рисуются шире экрана — кнопка справа обрезана, колокольчик торчит
+   за край. Так же лечит сайт (abkhaz-auto, pages.css: «Мобильные поля
+   ввода ≥16px»), только без !important: пробег (.km-box, 26px) и цена
+   (.money, 20px) крупнее порога и уменьшаться не должны.
+
+   Секция стоит последней нарочно: здесь перечислены все правила, которые
+   задают полю размер мельче 16px, и у одинаковых селекторов выигрывает
+   поздний. Новое поле со своим font-size меньше 16px — строкой сюда
+   (проверяет src/app/ios-zoom.test.ts). */
+@media (max-width: 880px) {
+  input, select, textarea,
+  .fld input, .fld select, .fld textarea, .cust input[name="title"], .reason-other,
+  .search input, .day-add input, .chat-input { font-size: 16px; }
+}

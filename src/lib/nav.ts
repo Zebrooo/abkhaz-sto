@@ -5,7 +5,7 @@
 //
 // Списки — дословно из макетов («Сервис — тач», ROLES[*].tabs и menu;
 // «Сервис — веб», WROLES[*].nav): у мастера свой пост и осмотр, у админа
-// смена и записи с кнопкой «+», у хозяина деньги и мастера.
+// смена и записи с кнопкой «+», у хозяина деньги и мастера — и тоже «+».
 import type { Section, StoRole } from "@/lib/access";
 import type { IconName } from "@/components/Icon";
 
@@ -54,9 +54,12 @@ export const TABS: Record<StoRole, readonly TabDef[]> = {
     { key: "clients", label: "Клиенты", icon: "users" },
     { key: "more", label: "Ещё", icon: "menu" },
   ],
+  // «+» и хозяину (просьба владельца 27.09.2026): клиентов записывает и он
+  // сам, а на вебе «Записать клиента» у него и так стоит в верхней панели.
   owner: [
     { key: "dash", label: "Деньги", icon: "chart" },
     { key: "today", label: "Записи", icon: "list" },
+    { key: "fab", label: "", icon: "plus" },
     { key: "masters", label: "Мастера", icon: "users" },
     { key: "more", label: "Ещё", icon: "menu" },
   ],

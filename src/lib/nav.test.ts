@@ -18,10 +18,11 @@ describe("навигация по ролям", () => {
     expect(activeTab("owner", HOME_PATH.owner)).toBe("dash");
   });
 
-  it("красная кнопка новой записи — только у админа", () => {
-    expect(TABS.admin.some(t => t.key === "fab")).toBe(true);
+  it("красная кнопка новой записи — у админа и хозяина, посередине; у мастера нет", () => {
+    for (const r of ["admin", "owner"] as const) {
+      expect(TABS[r].findIndex(t => t.key === "fab"), r).toBe(Math.floor(TABS[r].length / 2));
+    }
     expect(TABS.master.some(t => t.key === "fab")).toBe(false);
-    expect(TABS.owner.some(t => t.key === "fab")).toBe(false);
   });
 
   // Осмотр внутри записи: у мастера это вкладка «Осмотр», у админа —

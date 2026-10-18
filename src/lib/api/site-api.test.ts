@@ -6,7 +6,7 @@ vi.mock("@zebrooo/service-ticket", () => ({
   SERVICE_TICKET_HEADER: "x-service-ticket",
 }));
 
-import { siteGet, sitePost } from "@/lib/api/site-api";
+import { siteGet, sitePost, sitePostForm } from "@/lib/api/site-api";
 
 /** Ответ сайта с данными — как отдаёт apiOk. */
 const okResponse = () => new Response(JSON.stringify({ data: [] }), { status: 200 });
@@ -70,5 +70,19 @@ describe("ретрай POST: не бывает никогда", () => {
     const res = await sitePost("members/invite", {});
     expect(res).toEqual({ ok: false, code: "unavailable", error: "Сайт сейчас недоступен" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("multipart (sitePostForm)", () => {
+  it("FormData уходит как есть, content-type не ставим — границу выставит fetch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { stagedId: 1, url: "u" } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const form = new FormData();
+    form.set("shopId", "7");
+    expect(await sitePostForm("goods/items/photo", form)).toEqual({ ok: true, data: { stagedId: 1, url: "u" } });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBe(form);
+    expect(init.headers).not.toHaveProperty("content-type");
+    expect(init.headers).toHaveProperty("x-service-ticket", "ticket");
   });
 });

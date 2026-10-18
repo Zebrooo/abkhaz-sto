@@ -2215,3 +2215,82 @@ button.scrim { border: 0; padding: 0; cursor: pointer; }
   .fld input, .fld select, .fld textarea, .cust input[name="title"], .reason-other,
   .search input, .day-add input, .chat-input { font-size: 16px; }
 }
+
+/* ─────────── Магазин товаров ───────────
+   Экраны Сегодня · Заказы · Товары · Клиенты по артборду «СРМ владельца».
+   Пилюли состояний — только существующие токены: красный, янтарный,
+   зелёный, чернильный и серый; новых цветов не заводим. */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px; max-width: 100%;
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 600; background: var(--bg-2); color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pill-dng { background: var(--danger-bg); color: var(--accent); border: 1px solid var(--danger-line); }
+.pill-ok { background: var(--ok-bg); color: var(--green-dark); }
+.pill-warn { background: var(--warm); color: var(--tag-urgent); }
+.pill-ink { background: var(--ink); color: #fff; }
+
+.sub-card { display: flex; align-items: center; gap: 12px; }
+.sub-card .aui-btn { flex: none; min-height: 36px; }
+.sub-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.sub-s { font-size: 12px; color: var(--muted); margin-top: 2px; text-wrap: pretty; }
+
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { display: block; min-width: 0; background: #fff; border-radius: 16px; border: .75px solid var(--m-hair); box-shadow: var(--shadow-m-card); padding: 12px 14px; }
+.kpi-l { font-size: 11.5px; color: var(--muted); }
+.kpi-v { font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-s { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.is-dng .kpi-v, .kpi.is-dng .kpi-s { color: var(--accent); }
+
+.card-lbl { padding: 12px 14px 4px; }
+.card-pad { padding: 8px 14px 14px; }
+.up-row .up-t { flex: none; width: 44px; font-size: 12.5px; color: var(--muted); }
+.up-row .pill { flex: none; }
+
+.thumb { flex: none; border-radius: 12px; background: var(--bg-2); color: var(--muted-2); display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Карточка заказа, товара, клиента — одна сетка: верх с обложкой, пилюли,
+   строка кнопок. На карточке заказа одно главное действие (артборд). */
+.gcard { display: flex; flex-direction: column; gap: 10px; }
+.gcard-top { display: flex; gap: 12px; align-items: flex-start; }
+.gcard-t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.gcard-s { font-size: 12.5px; color: var(--muted); margin-top: 2px; text-wrap: pretty; }
+.gcard-who { font-family: var(--font-mono); font-size: 12.5px; margin-top: 4px; }
+.gcard-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.gcard-actions > * { flex: 1; min-width: 0; }
+.gcard-actions form { display: contents; }
+.gcard-actions .aui-btn { width: 100%; min-height: 40px; white-space: nowrap; }
+.gcard .icon-btn { flex: none; }
+.price { font-family: var(--font-mono); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.price-s { font-size: 12px; color: var(--muted); }
+
+/* Позиции заказа и строки товаров в форме заказа по звонку */
+.oi { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.oi:last-child { border-bottom: 0; }
+.oi-t { font-size: 14px; font-weight: 600; }
+.oi-s { font-size: 12px; color: var(--muted); }
+.oi-tail { flex: none; text-align: right; }
+.qty { display: flex; align-items: center; gap: 2px; background: var(--bg-2); border-radius: var(--radius-pill); padding: 3px; }
+.qty a, .qty span { min-width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); font-weight: 700; font-variant-numeric: tabular-nums; }
+.qty a { background: #fff; box-shadow: var(--shadow-sm); font-size: 18px; }
+.qty a[aria-disabled="true"] { opacity: .35; pointer-events: none; }
+.qty-sum { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600; }
+
+/* Чипы-радио в формах (способ, оплата, дни резерва): обычный input внутри label */
+.chip-radio { position: relative; cursor: pointer; }
+.chip-radio input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.chip-radio:has(:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip-radio:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wa-card .aui-btn { margin-top: 10px; }
+.msg-txt { font-size: 13.5px; white-space: pre-wrap; margin-top: 6px; }
+
+@media (min-width: 881px) {
+  .ggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; align-items: start; }
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .kpi { border-radius: var(--radius-lg); border: 1px solid var(--line); box-shadow: var(--shadow-sm); padding: 14px 16px; }
+  .kpi-v { font-size: 26px; }
+  .sub-card { border-radius: var(--radius-lg); }
+}

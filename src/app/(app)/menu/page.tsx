@@ -20,6 +20,8 @@ import { getServerUser } from "@/lib/supabase/server";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
 import { EXIT, ExitCard, ExitSheet } from "@/app/(app)/menu/Exit";
 import { GoodsMenu } from "@/app/(app)/menu/GoodsMenu";
+import { ShopSwitchCard } from "@/app/(app)/menu/ShopSwitchCard";
+import { myServiceShops } from "@/lib/shop";
 import { can } from "@/lib/access";
 import { redirect } from "next/navigation";
 
@@ -90,7 +92,7 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
   // Цифры с сайта — только для строк, которые эта роль увидит: незачем
   // спрашивать непрочитанные у хозяина, у которого чата нет. Всё независимое
   // уходит одной пачкой — иначе экран ждёт каждый запрос по очереди.
-  const [pending, services, unread, mday, reports, user] = await Promise.all([
+  const [pending, services, unread, mday, reports, user, shops] = await Promise.all([
     countPending(shop.id),
     keys.includes("services") ? listServices(shop.id) : Promise.resolve([]),
     keys.includes("chats") ? fetchUnread(shop.id, ctx.userId) : Promise.resolve(null),
@@ -107,6 +109,8 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
     // Под какой учёткой сидит приложение — это и подпись строки выхода, и
     // ответ на «почему я вижу чужой сервис»: номер виден, не выходя.
     getServerUser(),
+    // Витрины для переключателя: кэш на запрос, второго похода в базу нет.
+    myServiceShops(),
   ]);
   const masters = mday?.masters ?? [];
   const me = formatPhone(user?.phone) || user?.email || "";
@@ -202,6 +206,8 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
             </form>
           </div>
         )}
+
+        <ShopSwitchCard shops={shops} currentId={shop.id} />
 
         <ExitCard me={me} />
 

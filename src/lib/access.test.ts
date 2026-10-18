@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can, HOME_PATH, HOME_SECTION, isStoRole, STO_ROLES, STO_ROLE_LABEL, type Section } from "@/lib/access";
+import { can, GOODS_HOME, HOME_PATH, HOME_SECTION, homePath, isStoRole, STO_ROLES, STO_ROLE_LABEL, type Section } from "@/lib/access";
 
 describe("роли сервиса", () => {
   it("мастер не видит денег, доступов и настроек", () => {
@@ -47,5 +47,27 @@ describe("роли сервиса", () => {
     }
     expect(isStoRole("director")).toBe(false);
     expect(isStoRole(null)).toBe(false);
+  });
+});
+
+describe("магазин товаров", () => {
+  // Сайт пускает в /api/sto/goods/* админа и хозяина, мастера — нет
+  // (контракт §0); интерфейс обязан рисовать ровно это.
+  it("раздел магазина открыт админу и хозяину, мастеру — нет", () => {
+    expect(can("master", "goods")).toBe(false);
+    expect(can("admin", "goods")).toBe(true);
+    expect(can("owner", "goods")).toBe(true);
+  });
+
+  it("настройки магазина (вертикаль, новый товар) — только хозяину", () => {
+    expect(can("admin", "goodsSettings")).toBe(false);
+    expect(can("owner", "goodsSettings")).toBe(true);
+  });
+
+  it("первый экран магазина один для всех ролей, сервиса — по роли", () => {
+    expect(homePath("goods", "admin")).toBe(GOODS_HOME);
+    expect(homePath("goods", "owner")).toBe("/magazin");
+    expect(homePath("service", "owner")).toBe(HOME_PATH.owner);
+    expect(homePath("service", "master")).toBe(HOME_PATH.master);
   });
 });

@@ -9,7 +9,7 @@ import "server-only";
 // сегодняшнее поведение, прав оно не расширяет.
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { can, HOME_PATH, type Section, type StoRole } from "@/lib/access";
+import { can, GOODS_HOME, HOME_PATH, type Section, type StoRole } from "@/lib/access";
 import { readRoleView } from "@/lib/role-cookie";
 import { narrowRole } from "@/lib/role-view";
 import { currentServiceShop, type ServiceShop } from "@/lib/shop";
@@ -69,6 +69,22 @@ export const serviceContext = cache(async (): Promise<ServiceContext | null> => 
 export async function requireSection(section: Section): Promise<ServiceContext | null> {
   const ctx = await serviceContext();
   if (!ctx) return null;
+  // Экраны сервиса магазину не нужны: ни записей, ни постов у него нет, а
+  // пустой календарь выглядел бы как поломка. На первый экран магазина.
+  if (ctx.shop.kind === "goods") redirect(GOODS_HOME);
   if (!can(ctx.role, section)) redirect(HOME_PATH[ctx.role]);
+  return ctx;
+}
+
+/**
+ * Гейт экрана магазина товаров — зеркало requireSection: автосервис уводим на
+ * его первый экран, роль без раздела — на «Сегодня» магазина. Нет витрины —
+ * null, как везде: layout уже нарисовал «организации нет».
+ */
+export async function requireGoods(section: Section = "goods"): Promise<ServiceContext | null> {
+  const ctx = await serviceContext();
+  if (!ctx) return null;
+  if (ctx.shop.kind !== "goods") redirect(HOME_PATH[ctx.role]);
+  if (!can(ctx.role, section)) redirect(GOODS_HOME);
   return ctx;
 }

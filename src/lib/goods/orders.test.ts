@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  actionsFor, canCancel, handoverLabel, itemsLine, matchOrder, orderPills, orderTitle, slaLabel, statusPill, upcomingTime,
+  actionsFor, canCancel, handoverLabel, handoverWhen, itemsLine, matchOrder, orderPills, orderTitle, slaLabel, statusPill, upcomingTime,
   VIEW_OF_STATUS, whatsappUrl, whenLabel,
 } from "@/lib/goods/orders";
 import { NOW, ORDER_ASSEMBLING, ORDER_ELECTRONICS, ORDER_FLOWERS, ORDER_PHONE_READY } from "@/lib/goods/fixtures";
@@ -60,6 +60,8 @@ describe("подписи", () => {
     expect(handoverLabel(ORDER_FLOWERS, NOW)).toBe("доставка · завтра 10:00–12:00");
     expect(handoverLabel(ORDER_PHONE_READY, NOW)).toBe("самовывоз · сегодня 13:30");
     expect(handoverLabel(ORDER_ELECTRONICS, NOW)).toBe("самовывоз");
+    expect(handoverWhen(ORDER_ELECTRONICS, NOW)).toBeNull();
+    expect(handoverWhen(ORDER_PHONE_READY, NOW)).toBe("сегодня 13:30");
     expect(handoverLabel({ ...ORDER_ELECTRONICS, slot: "20.10 · 12:00–14:00", method: "courier" }, NOW)).toBe("доставка · 20.10 · 12:00–14:00");
   });
 

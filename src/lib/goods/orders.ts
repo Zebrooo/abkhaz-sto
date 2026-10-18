@@ -69,18 +69,23 @@ export function whenLabel(iso: string, now: Date = new Date()): string {
 }
 
 /**
- * «доставка · завтра 10:00–12:00», «самовывоз · сегодня 13:30». Окно даты —
- * точнее момента dueAt (он лишь начало окна), поэтому сначала оно; у заказов
- * с витрины окна нет — там slot строкой из Маркета.
+ * Когда передаём: «завтра 10:00–12:00», «сегодня 13:30». Окно даты — точнее
+ * момента dueAt (он лишь начало окна), поэтому сначала оно; у заказов с
+ * витрины окна нет — там slot строкой из Маркета. null — время не задано.
  */
+export function handoverWhen(o: GoodsOrderOut, now: Date = new Date()): string | null {
+  const g = o.goods;
+  if (g.deliveryDate && g.window) return `${dayWord(g.deliveryDate, now)} ${g.window.from}–${g.window.to}`;
+  if (o.dueAt) return whenLabel(o.dueAt, now);
+  if (g.deliveryDate) return dayWord(g.deliveryDate, now);
+  return o.slot;
+}
+
+/** «доставка · завтра 10:00–12:00», «самовывоз · сегодня 13:30», без времени — просто способ. */
 export function handoverLabel(o: GoodsOrderOut, now: Date = new Date()): string {
   const method = o.method === "courier" ? "доставка" : "самовывоз";
-  const g = o.goods;
-  if (g.deliveryDate && g.window) return `${method} · ${dayWord(g.deliveryDate, now)} ${g.window.from}–${g.window.to}`;
-  if (o.dueAt) return `${method} · ${whenLabel(o.dueAt, now)}`;
-  if (g.deliveryDate) return `${method} · ${dayWord(g.deliveryDate, now)}`;
-  if (o.slot) return `${method} · ${o.slot}`;
-  return method;
+  const when = handoverWhen(o, now);
+  return when ? `${method} · ${when}` : method;
 }
 
 /** День передачи — сегодня: такой заказ подсвечиваем, его нельзя пропустить. */
@@ -210,3 +215,11 @@ export function slaLabel(hours: number): string {
   if (hours < 1) return `ответить до ${Math.round(hours * 60)} мин`;
   return `ответить до ${Number.isInteger(hours) ? hours : hours.toFixed(1)} ч`;
 }
+
+/**
+ * Какую шторку карточки открывает действие, которому мало одной кнопки:
+ * время сборки, выбор курьера, серийники при выдаче. Ключ — параметр ?do=.
+ */
+export const ACTION_SHEET: Record<Exclude<OrderAction["needs"], "none">, string> = {
+  readyBy: "accept", courier: "courier", deliver: "deliver",
+};

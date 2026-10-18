@@ -122,7 +122,9 @@ async function attempt<T>(
     const res = await fetch(url, {
       method,
       headers,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      // FormData уходит как есть: границу multipart и content-type ставит
+      // сам fetch, а JSON.stringify превратил бы файл в «{}».
+      body: init.body === undefined ? undefined : init.body instanceof FormData ? init.body : JSON.stringify(init.body),
       signal: ctrl.signal,
       // Данные сервиса меняются на каждом действии — кэшировать их нельзя.
       cache: "no-store",
@@ -191,7 +193,7 @@ async function request<T>(
 
   const headers: Record<string, string> = { accept: "application/json" };
   headers[SERVICE_TICKET_HEADER] = signed;
-  if (init.body !== undefined) headers["content-type"] = "application/json";
+  if (init.body !== undefined && !(init.body instanceof FormData)) headers["content-type"] = "application/json";
 
   const attempts = method === "GET" ? 2 : 1;
   for (let i = 0; i < attempts; i++) {
@@ -224,6 +226,16 @@ export function sitePost<T>(path: string, body: unknown): Promise<ApiResult<T>> 
 
 export function sitePatch<T>(path: string, body: unknown): Promise<ApiResult<T>> {
   return request<T>("PATCH", path, { body, timeoutMs: WRITE_TIMEOUT_MS });
+}
+
+/**
+ * Пишущий вызов с файлом (multipart): фото товара магазина уходит через
+ * контейнер приложения — кадр один и маленький, в отличие от фото осмотра,
+ * которые едут в хранилище напрямую по подписанному адресу. Повторов нет,
+ * как у любого POST.
+ */
+export function sitePostForm<T>(path: string, form: FormData): Promise<ApiResult<T>> {
+  return request<T>("POST", path, { body: form, timeoutMs: WRITE_TIMEOUT_MS });
 }
 
 /**

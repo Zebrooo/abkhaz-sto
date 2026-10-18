@@ -6,18 +6,26 @@
 // Списки — дословно из макетов («Сервис — тач», ROLES[*].tabs и menu;
 // «Сервис — веб», WROLES[*].nav): у мастера свой пост и осмотр, у админа
 // смена и записи с кнопкой «+», у хозяина деньги и мастера — и тоже «+».
-import type { Section, StoRole } from "@/lib/access";
+//
+// ДВА ВИДА ВИТРИН. У магазина товаров (lib/access.ts, ShopKind) свой набор
+// вкладок — дословно артборд «СРМ владельца»: Сегодня · Заказы · Товары ·
+// Клиенты · Ещё, один на обе роли и без «+». Вкладки рисует веб, оболочка
+// (Flutter) их не дублирует и адресует свои по индексу — правки только здесь.
+import { GOODS_HOME, type Section, type ShopKind, type StoRole } from "@/lib/access";
 import type { IconName } from "@/components/Icon";
 
 export type NavKey =
   | "mywork" | "inspect" | "chats" | "smena" | "today" | "clients" | "dash"
-  | "masters" | "more" | "services" | "schedule" | "notifs" | "access" | "report";
+  | "masters" | "more" | "services" | "schedule" | "notifs" | "access" | "report"
+  // Магазин товаров
+  | "gtoday" | "orders" | "items" | "gclients";
 
 /** Раздел, к которому относится пункт — по нему тест сверяет доступ. */
 export const NAV_SECTION: Record<NavKey, Section> = {
   mywork: "bookings", inspect: "inspect", chats: "chat", smena: "shift", today: "bookings",
   clients: "clients", dash: "money", masters: "masters", more: "bookings", services: "services",
   schedule: "schedule", notifs: "shift", access: "access", report: "inspect",
+  gtoday: "goods", orders: "goods", items: "goods", gclients: "goods",
 };
 
 /**
@@ -35,6 +43,9 @@ export const ROUTE: Record<NavKey, string> = {
   // на «Мой пост», где отчёты видны только за сегодня и только мастеру, —
   // хозяин искал готовые отчёты и не находил.
   report: "/otchety",
+  // Магазин товаров: «Клиенты» магазина — не /klienty: там свод по записям
+  // сервиса, а здесь клиенты собираются из заказов по телефону на сайте.
+  gtoday: GOODS_HOME, orders: "/zakazy", items: "/tovary", gclients: "/pokupateli",
 };
 
 export type TabDef = { key: NavKey | "fab"; label: string; icon: IconName };
@@ -65,6 +76,25 @@ export const TABS: Record<StoRole, readonly TabDef[]> = {
   ],
 };
 
+/**
+ * Вкладки магазина товаров — дословно артборд «СРМ владельца», одни на
+ * админа и хозяина: сайт пускает их в магазин одинаково (контракт goods §0).
+ * «+» нет: новый заказ по звонку — кнопка на «Заказах» и в карточке клиента,
+ * а пятая вкладка нужна «Клиентам».
+ */
+export const GOODS_TABS: readonly TabDef[] = [
+  { key: "gtoday", label: "Сегодня", icon: "shop" },
+  { key: "orders", label: "Заказы", icon: "list" },
+  { key: "items", label: "Товары", icon: "box" },
+  { key: "gclients", label: "Клиенты", icon: "users" },
+  { key: "more", label: "Ещё", icon: "menu" },
+];
+
+/** Вкладки по виду витрины и роли. */
+export function tabsFor(kind: ShopKind, role: StoRole): readonly TabDef[] {
+  return kind === "goods" ? GOODS_TABS : TABS[role];
+}
+
 export type SideDef = { key: NavKey; label: string; icon: IconName };
 
 const SIDE_ITEM: Record<NavKey, SideDef> = {
@@ -86,6 +116,10 @@ const SIDE_ITEM: Record<NavKey, SideDef> = {
   // В левом меню макета этого пункта нет — он здесь ради полноты словаря.
   smena: { key: "smena", label: "Смена", icon: "chart" },
   more: { key: "more", label: "Ещё", icon: "menu" },
+  gtoday: { key: "gtoday", label: "Сегодня", icon: "shop" },
+  orders: { key: "orders", label: "Заказы", icon: "list" },
+  items: { key: "items", label: "Товары", icon: "box" },
+  gclients: { key: "gclients", label: "Клиенты", icon: "users" },
 };
 
 /**
@@ -100,9 +134,12 @@ const SIDE_KEYS: Record<StoRole, readonly NavKey[]> = {
   owner: ["dash", "today", "mywork", "inspect", "report", "clients", "chats", "masters", "services", "schedule", "notifs", "access"],
 };
 
+/** Левое меню магазина — те же четыре раздела, что и вкладки: больше у него нет. */
+const GOODS_SIDE_KEYS: readonly NavKey[] = ["gtoday", "orders", "items", "gclients"];
+
 /** Левое меню рабочего места — в порядке макета. */
-export function sideNav(role: StoRole): readonly SideDef[] {
-  return SIDE_KEYS[role].map(k => SIDE_ITEM[k]);
+export function sideNav(kind: ShopKind, role: StoRole): readonly SideDef[] {
+  return (kind === "goods" ? GOODS_SIDE_KEYS : SIDE_KEYS[role]).map(k => SIDE_ITEM[k]);
 }
 
 /** Строки «Ещё»: что не поместилось во вкладки. «shop» — витрина на сайте. */
@@ -122,8 +159,20 @@ export const MENU: Record<StoRole, readonly MenuKey[]> = {
 };
 
 /**
+ * Строки «Ещё» магазина: витрина на сайте и подписка — всем, вертикаль
+ * (цветы / электроника / товары — набор полей заказа) — хозяину: на сайте
+ * её меняет только он (контракт goods §2).
+ */
+export type GoodsMenuKey = "shop" | "subscription" | "vertical";
+
+export function goodsMenu(role: StoRole): readonly GoodsMenuKey[] {
+  return role === "owner" ? ["shop", "subscription", "vertical"] : ["shop", "subscription"];
+}
+
+/**
  * Какому пункту принадлежит адрес. Карточка записи и календарь — «Записи»,
- * осмотр и отчёт внутри записи — «Осмотр», неизвестное — «Ещё».
+ * осмотр и отчёт внутри записи — «Осмотр», неизвестное — «Ещё». Адреса
+ * магазина (/zakazy/1042, /tovary?v=low) находятся по первому сегменту.
  */
 export function navKeyOf(path: string): NavKey {
   if (path === "/") return "smena";
@@ -131,7 +180,7 @@ export function navKeyOf(path: string): NavKey {
   // «Осмотр без записи» — тоже вкладка «Осмотр»: с неё туда и приходят.
   if (path.startsWith("/osmotr")) return "inspect";
   if (path.startsWith("/segodnya") || path.startsWith("/kalendar") || path.startsWith("/zapis")) return "today";
-  const first = "/" + path.split("/")[1];
+  const first = "/" + path.split("/")[1].split("?")[0];
   const found = (Object.keys(ROUTE) as NavKey[]).find(k => ROUTE[k] === first);
   return found ?? "more";
 }
@@ -145,21 +194,22 @@ const PARENT: Partial<Record<NavKey, NavKey>> = {
   // Готовые отчёты у всех трёх ролей лежат в «Ещё» — туда и поднимаются.
   inspect: "today", report: "more", today: "mywork", smena: "dash", dash: "more", mywork: "more",
   clients: "more", masters: "more", services: "more", schedule: "more", notifs: "more", access: "more", chats: "more",
+  gtoday: "more", orders: "more", items: "more", gclients: "more",
 };
 
-/** Вкладка, которую подсветить на этом адресе у этой роли. */
-export function activeTab(role: StoRole, path: string): NavKey {
-  const keys = TABS[role].map(t => t.key);
+/** Вкладка, которую подсветить на этом адресе у этой витрины и роли. */
+export function activeTab(kind: ShopKind, role: StoRole, path: string): NavKey {
+  const keys = tabsFor(kind, role).map(t => t.key);
   let key = navKeyOf(path);
   while (!keys.includes(key)) key = PARENT[key] ?? "more";
   return key;
 }
 
 /** Все пункты, которые роль видит где-либо, — для проверки доступа тестом. */
-export function visibleKeys(role: StoRole): NavKey[] {
+export function visibleKeys(kind: ShopKind, role: StoRole): NavKey[] {
   const keys = new Set<NavKey>();
-  for (const t of TABS[role]) if (t.key !== "fab") keys.add(t.key);
-  for (const s of SIDE_KEYS[role]) keys.add(s);
-  for (const m of MENU[role]) if (m !== "shop") keys.add(m);
+  for (const t of tabsFor(kind, role)) if (t.key !== "fab") keys.add(t.key);
+  for (const s of (kind === "goods" ? GOODS_SIDE_KEYS : SIDE_KEYS[role])) keys.add(s);
+  if (kind === "service") for (const m of MENU[role]) if (m !== "shop") keys.add(m);
   return [...keys];
 }

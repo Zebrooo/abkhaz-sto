@@ -14,3 +14,23 @@ export function siteUrl(): string {
 export function shopStorefrontUrl(shopId: number): string {
   return `${siteUrl()}/lk/magaziny/${shopId}/vitrina?tab=obyavleniya`;
 }
+
+/**
+ * «Мои магазины» на сайте — подписка, счета и ссылка на оплату от менеджера.
+ * Своего адреса у карточки магазина в кабинете нет (есть только /vitrina и
+ * /vhod), а оплату по ссылке выставляет менеджер (кусок F): кнопка
+ * «Оплатить» ведёт туда, где счёт появится.
+ */
+export function shopCabinetUrl(): string {
+  return `${siteUrl()}/lk/magaziny`;
+}
+
+/** Реклама владельца на сайте — там пополняют кошелёк кампании. */
+export function adsCabinetUrl(): string {
+  return `${siteUrl()}/lk/prodvizhenie`;
+}
+
+/** Карточка объявления (товара магазина) на сайте. */
+export function listingUrl(slug: string): string {
+  return `${siteUrl()}/ad/${slug}`;
+}

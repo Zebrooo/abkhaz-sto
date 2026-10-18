@@ -535,3 +535,410 @@ ChatMessage = { id, mine, text, at }
 
 Пока виджет записи на сайте под выключенным флагом `sto_booking`, расхождение
 пользователю не видно — но выкатывать их всё равно нужно вместе.
+
+---
+
+## Магазин товаров — `/api/sto/goods/*`
+
+Зеркало контракта куска G (`abkhaz-auto`,
+`docs/sto-api-goods-2026-10-18.md`; спека решений —
+`docs/superpowers/specs/2026-10-18-goods-crm-design.md`). Первоисточник — там:
+он сверен с кодом маршрутов. Здесь — ровно то, что приложение ждёт в `{ data }`
+и шлёт в теле; клиентский слой — `src/lib/api/goods.ts`, имена полей в нём
+совпадают с этим разделом буква в букву. Расходятся — правит тот, кто
+меняет, в обоих репозиториях парой PR.
+
+Экраны приложения: `/magazin` (Сегодня), `/zakazy` и `/zakazy/[id]` (Заказы,
+Заказ), `/zakazy/novyi` (заказ по звонку), `/tovary` (Товары), `/pokupateli`
+(Клиенты), общий «Ещё» `/menu`. Витрина — `rubric = 'goods'` и `status =
+'approved'` в `shops`, вертикаль (`shops.goods_vertical`) из базы приложение
+НЕ читает — только с сайта (`/goods/settings`, `/goods/today`).
+
+Что в контракте есть, а приложение пока не рисует: `POST /items/photo` и
+`POST /items/create` — функции клиентского слоя написаны, но «Добавить товар»
+ведёт в редактор объявления на сайте (решение владельца по артборду:
+«тот же редактор объявления Маркета»). Сканера штрих-кодов в приложении нет —
+серийный номер при выдаче вводится руками.
+
+### 0. Общее
+
+Всё как у остальных `/api/sto/*` (`docs/API.md`, «Сущности приложения»):
+
+- **Auth** — Ed25519 service-ticket в `x-service-ticket`; без тикета и на
+  любом отказе подписи — `401 unauthorized`; ключ на сайте не задан — `500`.
+- **Рубильник** — флаг `goods_crm` (отдельный от `sto_app`): выключен —
+  `404 not_found` на все маршруты раздела. Вставлен выключенным; включать —
+  Админка → Рубильники.
+- **Кто** — `shopId` и `actorUserId` в каждом вызове (GET — в query, POST — в
+  JSON-теле). Витрина обязана быть `rubric = 'goods'` и `status = 'approved'`
+  (публикация витрины НЕ обязательна — заказы по звонку ведутся и без неё);
+  иначе `403 forbidden`, как и постороннему. Витрина, найденная по телефону
+  профиля, закрепляется за учёткой, как у СТО.
+- **Роли** — `owner` (владелец по `shops.user_id` или телефону; админ сайта —
+  владелец везде) и `admin` (строка `sto_members` этой витрины; приглашений под
+  рубрику `goods` пока нет — см. спеку §11). `master` в раздел не пускается.
+  Где в таблице написано «admin», владелец тоже проходит.
+- **Ответ** — `{ "data": … }` при удаче, `{ "error": { "code", "message" } }` при
+  отказе; коды `unauthorized` 401 · `forbidden` 403 · `not_found` 404 ·
+  `validation_error` 400 · `conflict` 409 · `rate_limited` 429 · `internal` 500.
+  `message` — по-русски, приложение показывает как есть.
+- **Время** — ISO-8601 с смещением; сутки магазина — `+03:00` (Europe/Moscow
+  без перевода часов), границы «сегодня» и «месяц» сайт считает сам.
+- **Деньги** — рубли целыми числами (как `market_orders.total`), не копейки.
+- **Таймауты приложения** — чтение 3 с, запись 8 с.
+- Пустой список — `{ data: { …: [] } }`, не `404`.
+
+Числа и адреса в примерах — из артборда.
+
+### 1. Типы
+
+```ts
+type GoodsVertical = "flowers" | "electronics" | "general";
+
+type GoodsOrderStatus = "new" | "assembling" | "ready" | "shipping" | "delivered" | "cancelled";
+//  артборд:  новый     принят/собрать  готов    у курьера   закрыт        отказ
+
+type GoodsOrderView = "new" | "work" | "ready" | "delivery" | "closed";
+//  new → new · work → assembling · ready → ready · delivery → shipping ·
+//  closed → delivered + cancelled за последние 60 дней
+
+type GoodsOrderSource = "storefront" | "phone";   // с витрины (корзина Маркета) · заведён владельцем
+type GoodsPayment = "online" | "on_receipt" | "transfer" | "link";
+//  online — оплата на сайте (только у заказов с витрины);
+//  on_receipt — при получении · transfer — перевод · link — ссылка (кусок F)
+
+type GoodsOrderItemOut = {
+  listingId: number;
+  slug: string;                 // карточка на сайте /ad/<slug>
+  title: string;
+  price: number;                // ₽ за штуку, как записано в заказ
+  qty: number;
+  img: string | null;           // обложка (готовый URL) или null
+  serial: string | null;        // электроника: серийный номер, записан при выдаче
+  warrantyMonths: number | null;// электроника: гарантия, снимок на момент заказа
+};
+
+type GoodsOrderOut = {
+  id: number;
+  number: string;               // «1 042» — для людей
+  source: GoodsOrderSource;
+  status: GoodsOrderStatus;
+  createdAt: string;
+  updatedAt: string;            // последняя смена статуса
+  method: "courier" | "pickup";
+  city: string;                 // слаг региона (REGION_NAME)
+  address: string | null;       // курьер: куда
+  slot: string | null;          // окно доставки строкой («19.10 · 10:00–12:00» или слот Маркета)
+  comment: string | null;       // комментарий покупателя с витрины
+  payment: GoodsPayment;
+  paidAt: string | null;        // когда отмечена оплата (у online — момент оформления)
+  subtotal: number;             // товары, ₽
+  delivery: number;             // доставка, ₽ (0 — бесплатно или самовывоз)
+  total: number;                // subtotal + delivery
+  items: GoodsOrderItemOut[];
+  buyer: { name: string; phone: string | null; hasAccount: boolean };
+  //  hasAccount — у заказа есть учётка покупателя: ему уходят уведомления сайта
+  courier: { name: string; phone: string | null; own: boolean } | null;
+  pickup: { address: string; hours: string } | null;
+  ownDelivery: boolean;         // магазин возит сам → на «Курьеру» нужен courierId
+  dueAt: string | null;         // момент передачи: начало окна доставки или время самовывоза
+  reserveUntil: string | null;  // электроника: до какого момента держим
+  reserveExpired: boolean;      // reserveUntil в прошлом, а заказ ещё активен
+  goods: {
+    vertical: GoodsVertical;
+    recipient: { name: string; phone: string | null } | null;  // цветы: получатель
+    deliveryDate: string | null;   // YYYY-MM-DD по часам магазина
+    window: { from: string; to: string } | null;               // «10:00»–«12:00»
+    card: string | null;           // открытка
+    composition: string | null;    // состав
+    readyBy: string | null;        // «собрать к» — ISO
+    note: string | null;           // заметка владельца к заказу
+  };
+  clientOrdersCount: number;    // заказов с этого телефона в магазине, включая этот («заказывает 2-й раз»)
+  next: GoodsOrderStatus[];     // какие переходы доступны магазину из текущего статуса
+};
+
+type GoodsOrderCounts = { new: number; work: number; ready: number; delivery: number; closed: number; today: number };
+
+type GoodsStockMode = "count" | "today" | "on_order";
+//  count — считаем штуки · today — «есть сегодня» (цветы, без счёта) · on_order — «под заказ»
+
+type GoodsVisibility = "visible" | "hidden_stock" | "hidden_owner" | "hidden_moderation";
+//  visible — активно на витрине · hidden_stock — снято остатком 0 (вернётся само при qty > 0)
+//  hidden_owner — снято владельцем / сроком жизни товара (вернуть — в кабинете сайта)
+//  hidden_moderation — снято модерацией (вернёт только поддержка)
+
+type GoodsItemOut = {
+  listingId: number;
+  slug: string;
+  title: string;
+  description: string | null;   // первые 160 знаков описания — подстрока под названием
+  price: number | null;         // ₽; null — цена не указана
+  categorySlug: string;         // elektronika, kompyutery, raznoye, …
+  categoryLabel: string;
+  img: string | null;
+  visibility: GoodsVisibility;
+  stock: {                      // null — остаток не ведётся (строки goods_stock нет)
+    mode: GoodsStockMode;
+    qty: number;                // на складе (у today/on_order — не используется, 0)
+    reserved: number;           // в активных заказах (считается по заказам, не хранится)
+    available: number;          // qty − reserved, не меньше 0
+    lowThreshold: number;
+    low: boolean;               // mode = count и available ≤ lowThreshold
+  } | null;
+  updatedAt: string;
+};
+
+type GoodsItemCounts = { all: number; low: number; hidden: number };
+type GoodsCategoryCount = { slug: string; label: string; count: number };
+
+type GoodsClientDate = {
+  label: string;                // «день рождения мамы», «8 марта»
+  day: string;                  // «MM-DD»; год не хранится — дата повторяется ежегодно
+  kind: "holiday" | "upgrade_offered";
+};
+
+type GoodsClientSegment = "regular" | "holiday_soon" | "dormant" | "warranty_ending";
+//  regular — 3+ закрытых заказа · holiday_soon — дата в ближайшие 14 дней ·
+//  dormant — последний заказ больше 90 дней назад · warranty_ending — гарантия по
+//  выданному заказу кончается в ближайшие 30 дней (электроника)
+
+type GoodsClientOut = {
+  phone: string;                // E.164 — ключ клиента
+  name: string;                 // из заметки, иначе из последнего заказа
+  ordersCount: number;          // без отменённых
+  closedCount: number;          // delivered
+  totalClosed: number;          // ₽ по закрытым
+  firstAt: string;
+  lastAt: string;               // последний заказ (любой статус, кроме отменённых)
+  lastStatus: GoodsOrderStatus;
+  hasAccount: boolean;          // хоть один заказ с учёткой сайта
+  note: string;                 // '' — нет
+  dates: GoodsClientDate[];
+  segments: GoodsClientSegment[];
+  nextDate: { label: string; day: string; inDays: number } | null;  // ближайшая дата из dates
+  warrantyEndsAt: string | null;// ближайшее окончание гарантии по выданным заказам
+};
+
+type GoodsClientView = "all" | "regular" | "holidays" | "dormant" | "warranty";
+type GoodsClientCounts = { all: number; regular: number; holidays: number; dormant: number; warranty: number };
+
+type GoodsTodayOut = {
+  shop: {
+    id: number; name: string; slug: string | null; vertical: GoodsVertical;
+    regionSlug: string | null;
+    storefront: "off" | "requested" | "published" | "hidden";
+    storefrontUrl: string | null; // https://abkhaz-auto.ru/m/<slug> у опубликованной
+  };
+  subscription: { until: string | null; daysLeft: number | null; expired: boolean };
+  //  until — YYYY-MM-DD (shops.access_until); null — срок не задан (считается как бессрочно)
+  orders: { new: number; overdueNew: number; today: number; todayCourier: number; todayPickup: number };
+  //  overdueNew — новых без ответа дольше slaNewHours; today — активных с dueAt
+  //  или reserveUntil в сегодняшних сутках магазина
+  slaNewHours: number;          // market_settings.sla_new_hours — «ответить до …»
+  storefront7d: { views: number; phoneReveals: number };
+  month: { from: string; revenue: number; closed: number };
+  //  с 1-го числа по часам магазина; revenue — сумма total закрытых (delivered) заказов
+  upcoming: GoodsOrderOut[];    // до 5 активных заказов по dueAt (без dueAt — в конце, по времени создания);
+                                // clientOrdersCount у них не считается (всегда 1) — подпись «2-й раз» берите из карточки
+  ads: {
+    campaignId: number; title: string; status: string;
+    balance: number;            // кошелёк владельца, ₽
+    spent7d: number;            // расход за 7 дней, ₽
+    daysLeft: number | null;    // balance ÷ средний дневной расход; null — расхода нет и лимита нет
+  } | null;                     // null — активных кампаний у владельца нет
+};
+```
+
+### 2. Сводка и настройки
+
+| Маршрут | Роли | Вход | Ответ |
+|---|---|---|---|
+| `GET /api/sto/goods/today` | admin, owner | — | `GoodsTodayOut` |
+| `GET /api/sto/goods/settings` | admin, owner | — | `{ vertical }` |
+| `POST /api/sto/goods/settings` | owner | `vertical` — `flowers` · `electronics` · `general` | `{ vertical }` |
+
+Вертикаль задаёт набор полей, которые приложение показывает в заказе; сайт
+поля по вертикали не отсекает — только проверяет их форму.
+
+### 3. Заказы
+
+| Маршрут | Роли | Вход | Ответ |
+|---|---|---|---|
+| `GET /api/sto/goods/orders` | admin, owner | `view` — `GoodsOrderView` (по умолчанию `new`) | `{ orders: GoodsOrderOut[], counts: GoodsOrderCounts }` — не больше 200 на вид; активные — по `dueAt` (без него — новые сверху), закрытые — новые сверху |
+| `GET /api/sto/goods/orders/item` | admin, owner | `orderId` | `GoodsOrderOut`; заказ другого магазина — `404` |
+| `POST /api/sto/goods/orders/create` | admin, owner | тело §3.1 | `GoodsOrderOut` |
+| `POST /api/sto/goods/orders/transition` | admin, owner | тело §3.2 | `{ order: GoodsOrderOut, clientMessage: string \| null }` |
+| `POST /api/sto/goods/orders/reserve` | admin, owner | `orderId`, `days?` (1…14, по умолчанию 2) | `GoodsOrderOut` — `reserveUntil` = max(сейчас, прежний) + days; у закрытого заказа — `409` |
+| `POST /api/sto/goods/orders/note` | admin, owner | `orderId`, `note` (до 500; пустая — убрать) | `GoodsOrderOut` |
+
+#### 3.1. Заказ по звонку — `POST /orders/create`
+
+```ts
+{
+  shopId, actorUserId,
+  items: { listingId: number; qty: number; price?: number }[];   // 1…20 позиций, qty 1…999
+  //  listingId — активное объявление ЭТОГО магазина; price — ₽ за штуку, как назвал
+  //  владелец (не передан — цена объявления без скидок витрины)
+  buyer: { name: string; phone: string };                         // имя 1…60; телефон нормализуется в E.164
+  method: "courier" | "pickup";
+  address?: string;             // обязателен при courier (до 200)
+  city?: string;                // слаг региона; по умолчанию регион магазина
+  deliveryPrice?: number;       // ₽, 0…100 000, по умолчанию 0
+  deliveryDate?: string;        // YYYY-MM-DD по часам магазина
+  window?: { from: string; to: string };   // «HH:MM», from < to; только вместе с deliveryDate
+  pickupAt?: string;            // самовывоз ко времени — ISO
+  payment?: "on_receipt" | "transfer" | "link";   // по умолчанию on_receipt
+  recipient?: { name: string; phone?: string };    // цветы: получатель, если не покупатель
+  card?: string;                // открытка, до 300
+  composition?: string;         // состав, до 500
+  note?: string;                // заметка владельца, до 500
+  reserveDays?: number;         // 1…14; по умолчанию 2 у electronics + pickup, иначе резерва нет
+  accept?: boolean;             // true — сразу в assembling («принят»); иначе new
+}
+```
+
+Правила: сайт читает объявления по `listingId`, проверяет `shop_id` и
+`status = 'active'` (иначе `404` с названием позиции); у позиции со строкой
+остатка `mode = count` требует `available ≥ qty` (иначе `409` «осталось N»);
+`dueAt` = начало окна (`deliveryDate` + `window.from`), иначе `deliveryDate`
+00:00, иначе `pickupAt`; `reserveUntil` = сейчас + `reserveDays`; `slot` =
+«19.10 · 10:00–12:00»; `buyer.hasAccount = false`, уведомления сайта такому
+клиенту не уходят. Позиции «свободной строкой» без объявления не принимаются
+(спека §11.5).
+
+#### 3.2. Переход — `POST /orders/transition`
+
+```ts
+{
+  shopId, actorUserId, orderId,
+  status: GoodsOrderStatus;     // куда
+  readyBy?: string;             // при assembling: «собрать к» — ISO (пишется в goods.readyBy, и в dueAt, если он пуст)
+  courierId?: string;           // при shipping у магазина со своей доставкой — id из shops.couriers (иначе 400)
+  serials?: { listingId: number; serial: string }[];   // при delivered: серийники по позициям (до 40 знаков)
+  paid?: boolean;               // при delivered (или любом шаге): отметить оплату — paidAt = сейчас
+  cancelReason?: string;        // при cancelled, до 300 — уходит в goods.note
+}
+```
+
+Переходы магазина (общие с кабинетом сайта):
+
+| из | куда |
+|---|---|
+| `new` | `assembling`, `cancelled` |
+| `assembling` | `ready`, `shipping` (только курьер), `cancelled` |
+| `ready` | `shipping` (только курьер), `delivered`, `cancelled` |
+| `shipping` | `delivered`, `cancelled` |
+
+Тот же статус повторно — `200` без изменений (идемпотентно). Иное — `409
+conflict` «Так поменять статус нельзя». Переход в `delivered` списывает остаток
+у позиций с `mode = count` сам (триггер) и заводит сделки для отзыва, если у
+покупателя есть учётка.
+
+Уведомления: покупателю с учёткой — строка колокольчика и пуш на каждый шаг
+(как из кабинета сайта). `clientMessage` — готовый текст для WhatsApp клиенту
+(и с учёткой, и без): на `assembling`, `ready`, `shipping`, `delivered`; на
+остальные — `null`. Приложение открывает `https://wa.me/<цифры>?text=…` само.
+
+#### 3.3. Пример карточки (электроника, с витрины)
+
+```json
+{ "data": {
+  "id": 318, "number": "318", "source": "storefront", "status": "new",
+  "createdAt": "2026-10-18T09:05:00.000Z", "updatedAt": "2026-10-18T09:05:00.000Z",
+  "method": "pickup", "city": "gagra", "address": null, "slot": null, "comment": null,
+  "payment": "online", "paidAt": "2026-10-18T09:05:00.000Z",
+  "subtotal": 54990, "delivery": 0, "total": 54990,
+  "items": [{ "listingId": 7701, "slug": "lenovo-ideapad-3-15-abc12", "title": "Ноутбук Lenovo IdeaPad 3 15\"", "price": 54990, "qty": 1, "img": "https://…/cover.webp", "serial": null, "warrantyMonths": 12 }],
+  "buyer": { "name": "Астамур Квициния", "phone": "+79404445566", "hasAccount": true },
+  "courier": null, "pickup": { "address": "Гагра, пр. Ардзинба 10", "hours": "10:00–20:00" }, "ownDelivery": false,
+  "dueAt": null, "reserveUntil": "2026-10-20T17:00:00.000Z", "reserveExpired": false,
+  "goods": { "vertical": "electronics", "recipient": null, "deliveryDate": null, "window": null, "card": null, "composition": null, "readyBy": null, "note": null },
+  "clientOrdersCount": 1,
+  "next": ["assembling", "cancelled"]
+} }
+```
+
+### 4. Товары
+
+| Маршрут | Роли | Вход | Ответ |
+|---|---|---|---|
+| `GET /api/sto/goods/items` | admin, owner | `view?` — `all` · `low` · `hidden` (по умолчанию `all`); `category?` — слаг раздела | `{ items: GoodsItemOut[], counts: GoodsItemCounts, categories: GoodsCategoryCount[] }` — объявления магазина со статусом `active` и `archived` (удалённые и проданные не показываются), до 500, по названию; `counts` и `categories` (по алфавиту подписи) — по всем, не по виду |
+| `POST /api/sto/goods/items/stock` | admin, owner | `listingId`, `mode?`, `qty?` (0…99 999), `lowThreshold?` (0…999) — хотя бы одно | `GoodsItemOut` — строка остатка заводится (без `mode` — `count`) или правится; чужое объявление — `404`; возврат на витрину упёрся в близнеца — `409` |
+| `POST /api/sto/goods/items/price` | admin, owner | `listingId`, `price` (1…100 000 000) | `GoodsItemOut` |
+| `POST /api/sto/goods/items/photo` | owner | multipart: `shopId`, `actorUserId`, `file` (jpeg/png/webp/heic, до 8 МБ) | `{ stagedId: number; url: string }` — кадр в прихожей владельца витрины (24 часа), водяной знак наложен; больше 20 в минуту — `429` |
+| `POST /api/sto/goods/items/create` | owner | тело §4.1 | `GoodsItemOut` |
+
+Видимость: `qty = 0` при `mode = count` снимает объявление с витрины само
+(`hidden_stock`), `qty > 0` — возвращает; снятое владельцем или модерацией
+остатком не возвращается (`hidden_owner` / `hidden_moderation` остаются).
+Чип «Кончаются» = `view=low`; «скрыто» = `view=hidden` (все три причины).
+
+#### 4.1. Новый товар — `POST /items/create`
+
+```ts
+{
+  shopId, actorUserId,
+  title: string;                // 5…200
+  price: number;                // ₽, 1…100 000 000
+  categorySlug: string;         // раздел группы goods (elektronika, kompyutery, raznoye, …), разрешённый магазинам
+  description?: string;         // до 4000
+  attrs?: Record<string, unknown>;   // поля раздела (как у формы подачи); warranty_months — гарантия по умолчанию для заказов
+  stock?: { mode: GoodsStockMode; qty?: number; lowThreshold?: number };   // нет — остаток не ведётся
+  stagedIds?: number[];         // кадры из /items/photo, до 14, в порядке показа
+}
+```
+
+Объявление заводится от учётки владельца витрины (`listings.user_id =
+shops.user_id`, `shop_id` = магазин, `attrs.market_kind = 'delivery'`, регион
+магазина), проходит ту же проверку текста, что форма подачи (`400` с
+сообщением); у витрины без учётки владельца (`shops.user_id` пуст и телефон не
+совпал) — `409` «сначала войдите на сайт этим номером». Витрина не опубликована
+— товар создаётся, но на сайте не виден до публикации (`visibility` при этом
+считается по объявлению, не по витрине).
+
+### 5. Клиенты
+
+| Маршрут | Роли | Вход | Ответ |
+|---|---|---|---|
+| `GET /api/sto/goods/clients` | admin, owner | `view?` — `GoodsClientView` (по умолчанию `all`) | `{ clients: GoodsClientOut[], counts: GoodsClientCounts }` — по последнему заказу, до 1000 |
+| `POST /api/sto/goods/clients/note` | admin, owner | `phone` (E.164 после нормализации), `name?` (до 80), `note?` (до 1000), `dates?` (`GoodsClientDate[]`, до 20; `day` — `MM-DD`) | `GoodsClientOut`; телефона нет среди заказов магазина — `404` |
+
+Переданные поля перезаписываются, не переданные остаются; все три пустые —
+строка заметки удаляется, клиент в списке остаётся (он из заказов).
+
+### 6. Коды ошибок по маршрутам
+
+| Код | Когда |
+|---|---|
+| `validation_error` 400 | поля не по форме; `courierId` не передан при своей доставке; `window` без `deliveryDate` |
+| `forbidden` 403 | витрина не `goods`/не одобрена/чужая; роль не пускает |
+| `not_found` 404 | заказ или объявление другого магазина; телефон без заказов; флаг выключен |
+| `conflict` 409 | недопустимый переход; остатка не хватает; резерв у закрытого заказа; близнец при возврате на витрину; витрина без учётки владельца при создании товара |
+| `rate_limited` 429 | фото чаще 20 в минуту или больше 40 кадров в прихожей |
+| `internal` 500 | база или хранилище не ответили — повторить |
+
+### 7. Что приложению нужно знать помимо маршрутов
+
+- **Вход** — тот же, что у автосервиса: витрину владельца приложение находит по
+  владению (`lib/shop.ts`), но для рубрики `goods`; раздел СРМ товаров рисуется,
+  когда у витрины `rubric = 'goods'`. Один человек может владеть и сервисом, и
+  магазином — выбор витрины остаётся на приложении.
+- **Карточка товара на сайте** — `https://abkhaz-auto.ru/ad/<slug>`; витрина —
+  `storefrontUrl` из `/today`.
+- **WhatsApp** — `clientMessage` из перехода и `phone` клиента; сайт сообщений
+  клиентам без учётки не шлёт.
+- **Подписка** — продление и счета делает B2B-менеджер (кусок F даст ссылку
+  оплаты; в `/today` пока только срок).
+- **Пуши владельцу** о новом заказе с витрины — штатные уведомления Маркета
+  (`market_order`, href в кабинет сайта); пуш в приложение «Бизнес» идёт тем же
+  FCM-токеном учётки.
+
+### 8. Чего здесь нет (и почему)
+
+- Сотрудников магазина товаров (`/members/*` под рубрику `goods`) — отдельная
+  задача после куска H.
+- Редактирования заказа после создания (состав, адрес) — отказ и новый заказ;
+  владелец на артборде этого не просил.
+- Автоотмены по истёкшему резерву — только признак `reserveExpired`.
+- Рассылок клиентам — только список и текст для WhatsApp.

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { countPending } from "@/lib/bookings";
-import { logoutAction } from "@/app/auth-actions";
-import { requireSection } from "@/lib/context";
+import { serviceContext } from "@/lib/context";
 import { listServices } from "@/lib/services";
 import { fetchUnread } from "@/lib/api/chat";
 import { fetchReports } from "@/lib/api/reports";
@@ -9,7 +8,6 @@ import { listOr } from "@/lib/api/site-api";
 import { Flash } from "@/components/Flash";
 import { Icon, type IconName } from "@/components/Icon";
 import { ScreenHead } from "@/components/ScreenHead";
-import { Sheet } from "@/components/Sheet";
 import { count, formatPhone, todayLocal } from "@/lib/format";
 import { masterDay } from "@/lib/master-day";
 import { MENU, type MenuKey } from "@/lib/nav";
@@ -20,13 +18,13 @@ import { periodRange } from "@/lib/reports";
 import { shopStorefrontUrl } from "@/lib/site";
 import { getServerUser } from "@/lib/supabase/server";
 import { STO_DAYS, STO_DAY_LABEL, type StoDay, type StoSchedule } from "@/lib/sto/schedule";
+import { EXIT, ExitCard, ExitSheet } from "@/app/(app)/menu/Exit";
+import { GoodsMenu } from "@/app/(app)/menu/GoodsMenu";
+import { can } from "@/lib/access";
+import { redirect } from "next/navigation";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
-
-/** Шторка подтверждения выхода — открывается адресом, как остальные. */
-const EXIT = "vyhod";
-const LOGOUT_FORM = "logout";
 
 const dayLab = (d: StoDay) => STO_DAY_LABEL[d].toLowerCase();
 
@@ -77,7 +75,11 @@ type Item = { key: MenuKey; href: string; icon: IconName; title: string; sub: st
  */
 export default async function MorePage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const ctx = (await requireSection("bookings"))!;
+  // Адрес «Ещё» общий для обеих витрин (вкладка одна), а наполнение разное:
+  // магазину — свой экран, сервису — гейт по разделу, как раньше.
+  const ctx = (await serviceContext())!;
+  if (ctx.shop.kind === "goods") return <GoodsMenu ctx={ctx} sp={sp} />;
+  if (!can(ctx.role, "bookings")) redirect("/");
   const { shop, role } = ctx;
   const keys = MENU[role];
   const day = todayLocal();
@@ -201,37 +203,12 @@ export default async function MorePage({ searchParams }: { searchParams: SP }) {
           </div>
         )}
 
-        {/* Выход — отдельной карточкой, а не строкой среди разделов: он
-            уводит из приложения, а не открывает экран. Внизу, где его ищут. */}
-        <div className="card card-flat">
-          <Link className="row mrow row-exit" href={`/menu?do=${EXIT}`}>
-            <span className="sq sq-accent"><Icon name="arrowRight" size={18} /></span>
-            <div className="row-main">
-              <div className="row-t">Выйти</div>
-              <div className="row-s">{me ? `вы вошли как ${me}` : "закрыть сессию на этом устройстве"}</div>
-            </div>
-            <span className="chev"><Icon name="chevron" size={16} /></span>
-          </Link>
-        </div>
+        <ExitCard me={me} />
 
         <div className="foot-note">АбхазАвто Бизнес · 1.0 · business.abkhaz-auto.ru</div>
       </div>
 
-      {/* Спрашиваем, потому что обратно человек войдёт не кнопкой: вход — на
-          сайте по коду из звонка или SMS, и случайное нажатие стоит сервису
-          простоя у стойки. */}
-      {pick(sp.do) === EXIT && (
-        <Sheet
-          closeHref="/menu"
-          title="Выйти из приложения"
-          sub={me || undefined}
-          footer={<button className="aui-btn aui-btn--primary aui-btn--lg" type="submit" form={LOGOUT_FORM}>Выйти</button>}
-        >
-          <form id={LOGOUT_FORM} action={logoutAction} className="sheet-stack">
-            <p className="sheet-note">Записи, отчёты и отметка на посту никуда не денутся — они на сервере, а не в этом телефоне. Чтобы вернуться, нужно снова войти по номеру телефона: сессия общая с abkhaz-auto.ru, поэтому выход закрывает и сайт на этом устройстве.</p>
-          </form>
-        </Sheet>
-      )}
+      {pick(sp.do) === EXIT && <ExitSheet me={me} />}
     </>
   );
 }

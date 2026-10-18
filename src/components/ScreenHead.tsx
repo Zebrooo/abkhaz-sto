@@ -31,8 +31,9 @@ export async function ScreenHead({ title, sub, back, unread = 0 }: { title: stri
         </div>
       </div>
       {/* Лента уведомлений — раздел смены; мастеру она закрыта, и колокол
-          вёл бы его в редирект на свой пост. */}
-      {ctx && can(ctx.role, "shift") && (
+          вёл бы его в редирект на свой пост. У магазина товаров ленты нет:
+          новые заказы видны на «Сегодня» и в «Заказах». */}
+      {ctx && ctx.shop.kind === "service" && can(ctx.role, "shift") && (
         <Link className="bell" href="/uvedomleniya" aria-label={unread > 0 ? `Уведомления, новых: ${unread}` : "Уведомления"}>
           <Icon name="bell" size={19} />
           {unread > 0 && <span className="dot" />}

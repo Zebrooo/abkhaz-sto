@@ -804,6 +804,21 @@ button.scrim { border: 0; padding: 0; cursor: pointer; }
     border-radius: var(--radius-pill); background: var(--bg-2); font-size: 13.5px; font-weight: 600;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Несколько витрин у одного человека — имя раскрывается списком. Обычный
+     <details>: без клиентского кода, пункты — формы серверного действия. */
+  .shop-menu { position: relative; overflow: visible; }
+  .shop-menu summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .shop-menu summary::-webkit-details-marker { display: none; }
+  .shop-menu summary svg { flex: none; color: var(--muted); }
+  .shop-menu-list {
+    position: absolute; top: 46px; left: 0; min-width: 260px; z-index: 6;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); padding: 6px;
+    line-height: 1.3; white-space: normal;
+  }
+  .shop-menu-list button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--radius); font-weight: 600; }
+  .shop-menu-list button:hover { background: var(--bg-2); }
+  .shop-menu-list button[aria-current="true"] { color: var(--accent); }
+  .shop-menu-list small { font-size: 11.5px; font-weight: 500; color: var(--muted); }
   .topbar .search {
     flex: 1; max-width: 420px; min-height: 42px; border: 1px solid var(--line-2); border-radius: var(--radius-pill);
     background: var(--bg); box-shadow: none; padding: 0 16px;

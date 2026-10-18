@@ -1,20 +1,21 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { StoRole } from "@/lib/access";
-import { activeTab, ROUTE, TABS } from "@/lib/nav";
+import type { ShopKind, StoRole } from "@/lib/access";
+import { activeTab, ROUTE, tabsFor } from "@/lib/nav";
 import { Icon, type IconName } from "@/components/Icon";
 
 /**
- * Вкладки снизу на телефоне — по роли (lib/nav.ts): мастеру пост и осмотр,
- * админу смена с кнопкой «+», хозяину деньги, мастера и та же «+».
+ * Вкладки снизу на телефоне — по виду витрины и роли (lib/nav.ts): мастеру
+ * пост и осмотр, админу смена с кнопкой «+», хозяину деньги, мастера и та же
+ * «+»; у магазина товаров — Сегодня · Заказы · Товары · Клиенты · Ещё.
  * Клиентский код здесь только ради подсветки текущей вкладки по адресу.
  */
-export function TabBar({ role, newHref }: { role: StoRole; newHref: string }) {
-  const active = activeTab(role, usePathname() ?? "/");
+export function TabBar({ kind, role, newHref }: { kind: ShopKind; role: StoRole; newHref: string }) {
+  const active = activeTab(kind, role, usePathname() ?? "/");
   return (
     <nav className="tabbar" aria-label="Разделы">
-      {TABS[role].map(t => t.key === "fab" ? (
+      {tabsFor(kind, role).map(t => t.key === "fab" ? (
         <Link key="fab" href={newHref} aria-label="Записать клиента">
           <span className="fab"><Icon name="plus" size={26} /></span>
         </Link>

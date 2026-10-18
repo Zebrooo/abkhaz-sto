@@ -63,7 +63,7 @@ const ROW = {
   status: "approved", rubric: "service", sto_schedule: null, sto_prepay: null, couriers: null,
 };
 /** Магазин товаров того же человека — вторая витрина под тем же номером. */
-const GOODS_ROW = { ...ROW, id: 9, name: "Цветы «Лилия»", slug: "liliya", rubric: "goods", couriers: [{ id: "c1", name: "Амра", phone: null }] };
+const GOODS_ROW = { ...ROW, id: 9, name: "Цветы «Лилия»", slug: "liliya", rubric: "goods", couriers: [{ id: "amra1", name: "Амра", phone: "+79402223344" }] };
 
 // myServiceShops обёрнут в React cache — между тестами модуль перечитываем,
 // чтобы кэш одного теста не отвечал за другой.
@@ -132,7 +132,7 @@ describe("магазин товаров и выбор витрины", () => {
     const shops = await myShops();
     expect(shops.map(s => s.kind)).toEqual(["service", "goods"]);
     expect(shops[0].couriers).toEqual([]);
-    expect(shops[1].couriers).toEqual([{ id: "c1", name: "Амра", phone: null }]);
+    expect(shops[1].couriers).toEqual([{ id: "amra1", name: "Амра", phone: "+79402223344" }]);
   });
 
   it("кука выбора: текущей становится выбранная витрина, а не первая", async () => {

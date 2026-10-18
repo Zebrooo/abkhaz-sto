@@ -7,12 +7,12 @@ import { Pill, Pills } from "@/components/Pill";
 import { ScreenHead } from "@/components/ScreenHead";
 import { Sheet } from "@/components/Sheet";
 import { Thumb } from "@/components/Thumb";
-import { fetchGoodsOrder } from "@/lib/api/goods";
+import { fetchGoodsOrder, type GoodsOrderOut } from "@/lib/api/goods";
 import { requireGoods } from "@/lib/context";
 import { count, dayShort, formatPhone, initials, relativeAt, rub } from "@/lib/format";
 import {
   ACTION_SHEET, actionsFor, canCancel, handoverWhen, orderPills, PAYMENT_LABEL, phoneDigits, SOURCE_LABEL, statusPill,
-  VIEW_OF_STATUS, whatsappUrl, whenLabel,
+  VIEW_OF_STATUS, whatsappUrl, whenLabel, type OrderAction,
 } from "@/lib/goods/orders";
 import { listingUrl, shopStorefrontUrl } from "@/lib/site";
 import { localDay, localHHMM } from "@/lib/sto/slots";
@@ -22,6 +22,20 @@ const pick = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 
 const FORM = "order-form";
 const RESERVE_DAYS = [1, 2, 3, 7];
+
+/** Кнопка перехода: прямая форма или ссылка в шторку, если действию нужно больше одной кнопки. */
+function ActionButton({ a, o, self, cls }: { a: OrderAction; o: GoodsOrderOut; self: (q?: string) => string; cls: string }) {
+  if (a.needs !== "none") return <Link className={cls} href={self(`?do=${ACTION_SHEET[a.needs]}`)}>{a.label}</Link>;
+  return (
+    <form action={transitionOrderAction}>
+      <input type="hidden" name="orderId" value={o.id} />
+      <input type="hidden" name="status" value={a.status} />
+      {a.paid && <input type="hidden" name="paid" value="1" />}
+      <input type="hidden" name="return" value={self()} />
+      <button className={cls} type="submit">{a.label}</button>
+    </form>
+  );
+}
 
 /** Время сборки по умолчанию — через час: за меньшее букет не собрать, а точное время всё равно правят. */
 function defaultReadyBy(now: Date): string {
@@ -233,22 +247,19 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
 
         <p className="hint">создан {relativeAt(o.createdAt, now)} · статус менялся {relativeAt(o.updatedAt, now)}</p>
 
+        {/* Второстепенные переходы («Курьеру» рядом с «Готов», «Доставлен» рядом
+            с «Курьеру») — своей строкой: в липкой панели телефона три кнопки
+            не помещаются, а главное действие должно оставаться одной большой. */}
+        {actions.length > 1 && (
+          <div className="gcard-actions">
+            {actions.slice(1).map(a => <ActionButton key={a.status} a={a} o={o} self={self} cls="aui-btn aui-btn--outline aui-btn--md" />)}
+          </div>
+        )}
+
         {active && (
           <div className="sticky-actions">
             {canCancel(o) && <Link className="aui-btn aui-btn--outline aui-btn--lg" href={self("?do=cancel")}>Отказ</Link>}
-            {actions.map((a, i) => {
-              const cls = `aui-btn ${i === 0 ? "aui-btn--primary" : "aui-btn--outline"} aui-btn--lg`;
-              if (a.needs !== "none") return <Link key={a.status} className={cls} href={self(`?do=${ACTION_SHEET[a.needs]}`)}>{a.label}</Link>;
-              return (
-                <form key={a.status} action={transitionOrderAction}>
-                  <input type="hidden" name="orderId" value={o.id} />
-                  <input type="hidden" name="status" value={a.status} />
-                  {a.paid && <input type="hidden" name="paid" value="1" />}
-                  <input type="hidden" name="return" value={self()} />
-                  <button className={cls} type="submit">{a.label}</button>
-                </form>
-              );
-            })}
+            {actions[0] && <ActionButton a={actions[0]} o={o} self={self} cls="aui-btn aui-btn--primary aui-btn--lg" />}
           </div>
         )}
       </div>

@@ -141,7 +141,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: SP 
                     <Thumb src={it.img} alt={it.title} size={48} />
                     <div className="row-main">
                       <div className="oi-t">{it.title}</div>
-                      <div className="oi-s">{formatRub(it.price)} · <Pill spec={stockPill(it)} /></div>
+                      <div className="oi-s"><span>{formatRub(it.price)}</span><Pill spec={stockPill(it)} /></div>
                     </div>
                     <div className="qty" aria-label={`Количество: ${it.title}`}>
                       <Link href={href({ i: withQty(picked, it.listingId, -1) })} aria-label="Меньше" aria-disabled={n === 0 ? "true" : undefined}>−</Link>

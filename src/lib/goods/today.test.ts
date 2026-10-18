@@ -26,6 +26,8 @@ describe("подписи «Сегодня»", () => {
     expect(adsLine(TODAY.ads!)).toBe(`идёт · остаток ${rub(420)} · хватит на 1 день`);
     expect(adsLine({ ...TODAY.ads!, status: "paused", daysLeft: null })).toBe(`на паузе · остаток ${rub(420)}`);
     expect(monthLabel("2026-10-01")).toBe("октябрь");
+    // Сайт отдаёт начало месяца меткой времени: полночь 1 октября по Москве — это ещё 30 сентября по UTC.
+    expect(monthLabel("2026-09-30T21:00:00.000Z")).toBe("октябрь");
     expect(todaySplit(TODAY.orders)).toBe("2 доставки · 3 самовывоз");
   });
 });

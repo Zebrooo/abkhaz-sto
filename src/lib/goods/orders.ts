@@ -40,6 +40,11 @@ export const PAYMENT_LABEL: Record<GoodsPayment, string> = {
   online: "оплачено онлайн", on_receipt: "при получении", transfer: "перевод", link: "по ссылке",
 };
 
+/** Пилюля неоплаченного заказа — «оплата переводом», а не «оплата перевод». */
+const PAYMENT_DUE: Record<GoodsPayment, string> = {
+  online: "оплата онлайн", on_receipt: "оплата при получении", transfer: "оплата переводом", link: "оплата по ссылке",
+};
+
 /** Заказ ещё в работе: закрытые и отменённые — нет. */
 export function isActive(status: GoodsOrderStatus): boolean {
   return status !== "delivered" && status !== "cancelled";
@@ -107,7 +112,7 @@ export function orderPills(o: GoodsOrderOut, now: Date = new Date()): PillSpec[]
     out.push({ text: `открытка: «${card}»`, tone: "neu" });
   }
   if (o.paidAt) out.push({ text: "оплачен", tone: "ok" });
-  else out.push({ text: `оплата ${PAYMENT_LABEL[o.payment]}`, tone: "warn" });
+  else out.push({ text: PAYMENT_DUE[o.payment], tone: "warn" });
   if (o.reserveUntil && isActive(o.status)) {
     out.push(o.reserveExpired
       ? { text: "резерв истёк", tone: "dng" }

@@ -78,6 +78,7 @@ describe("подписи", () => {
       { text: "оплачен", tone: "ok" },
     ]);
     expect(orderPills(ORDER_PHONE_READY, NOW)).toContainEqual({ text: "оплата при получении", tone: "warn" });
+    expect(orderPills({ ...ORDER_PHONE_READY, payment: "transfer" }, NOW)).toContainEqual({ text: "оплата переводом", tone: "warn" });
     expect(orderPills(ORDER_ELECTRONICS, NOW)).toContainEqual({ text: "резерв до 20.10 · 20:00", tone: "warn" });
     expect(orderPills({ ...ORDER_ELECTRONICS, reserveExpired: true }, NOW)).toContainEqual({ text: "резерв истёк", tone: "dng" });
     // Закрытому резерв не нужен.

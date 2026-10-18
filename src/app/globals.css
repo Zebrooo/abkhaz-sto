@@ -2270,7 +2270,7 @@ button.scrim { border: 0; padding: 0; cursor: pointer; }
 .oi { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .oi:last-child { border-bottom: 0; }
 .oi-t { font-size: 14px; font-weight: 600; }
-.oi-s { font-size: 12px; color: var(--muted); }
+.oi-s { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .oi-tail { flex: none; text-align: right; }
 .qty { display: flex; align-items: center; gap: 2px; background: var(--bg-2); border-radius: var(--radius-pill); padding: 3px; }
 .qty a, .qty span { min-width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); font-weight: 700; font-variant-numeric: tabular-nums; }

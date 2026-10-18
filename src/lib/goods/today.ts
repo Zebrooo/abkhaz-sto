@@ -3,6 +3,7 @@
 import type { GoodsTodayOut } from "@/lib/api/goods";
 import { count, dayShort, rub } from "@/lib/format";
 import type { Tone } from "@/lib/goods/orders";
+import { localDay } from "@/lib/sto/slots";
 
 type Subscription = GoodsTodayOut["subscription"];
 
@@ -56,9 +57,14 @@ export function adsLine(ads: NonNullable<GoodsTodayOut["ads"]>): string {
 
 const MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 
-/** «октябрь» для YYYY-MM-DD начала месяца. */
+/**
+ * «октябрь» для начала месяца. Сайт отдаёт from меткой времени
+ * («2026-09-30T21:00:00.000Z» — это 1 октября 00:00 по часам магазина),
+ * поэтому день берём по часам магазина, а не из первых символов строки.
+ */
 export function monthLabel(from: string): string {
-  const m = Number(from.slice(5, 7));
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : localDay(new Date(from));
+  const m = Number(day.slice(5, 7));
   return MONTHS[m - 1] ?? from;
 }
 

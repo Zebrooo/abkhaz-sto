@@ -653,6 +653,7 @@ type GoodsOrderOut = {
     composition: string | null;    // состав
     readyBy: string | null;        // «собрать к» — ISO
     note: string | null;           // заметка владельца к заказу
+    cancelReason?: string | null;  // причина отказа (при cancelled) — отдельно от заметки
   };
   clientOrdersCount: number;    // заказов с этого телефона в магазине, включая этот («заказывает 2-й раз»)
   next: GoodsOrderStatus[];     // какие переходы доступны магазину из текущего статуса
@@ -817,7 +818,7 @@ type GoodsTodayOut = {
   courierId?: string;           // при shipping у магазина со своей доставкой — id из shops.couriers (иначе 400)
   serials?: { listingId: number; serial: string }[];   // при delivered: серийники по позициям (до 40 знаков)
   paid?: boolean;               // при delivered (или любом шаге): отметить оплату — paidAt = сейчас
-  cancelReason?: string;        // при cancelled, до 300 — уходит в goods.note
+  cancelReason?: string;        // при cancelled, до 300 — уходит в goods.cancelReason (заметка goods.note остаётся)
 }
 ```
 

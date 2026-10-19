@@ -238,6 +238,14 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           </div>
         </div>
 
+        {/* Причина отказа — своё поле сайта (goods.cancelReason): отмена не затирает заметку. */}
+        {o.status === "cancelled" && o.goods.cancelReason && (
+          <div className="card-warm note-card">
+            <div className="eyebrow">Причина отказа</div>
+            <div className="note-txt">{o.goods.cancelReason}</div>
+          </div>
+        )}
+
         <Link className="card-warm note-card" href={self("?do=note")}>
           <div className="eyebrow eyebrow-accent">Заметка к заказу</div>
           <div className={`note-txt${o.goods.note ? "" : " note-empty"}`}>

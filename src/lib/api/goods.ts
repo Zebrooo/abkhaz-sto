@@ -97,6 +97,8 @@ export type GoodsOrderGoods = {
   readyBy: string | null;
   /** Заметка владельца к заказу. */
   note: string | null;
+  /** Причина отказа (при cancelled) — отдельно от заметки, с 19.10.2026; у старых заказов поля нет. */
+  cancelReason?: string | null;
 };
 
 export type GoodsOrderOut = {
@@ -195,7 +197,7 @@ export type TransitionGoodsOrderInput = {
   serials?: { listingId: number; serial: string }[];
   /** Отметить оплату — paidAt = сейчас. */
   paid?: boolean;
-  /** При cancelled, до 300 — уходит в goods.note. */
+  /** При cancelled, до 300 — уходит в goods.cancelReason (заметка goods.note остаётся). */
   cancelReason?: string;
 };
 
